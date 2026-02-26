@@ -1,0 +1,1678 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#f2f2f7">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>FlyerOrg – AfD Thüringen</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style>
+:root {
+  --bg:#f2f2f7; --surface:#ffffff; --surface2:#f2f2f7; --surface3:#e5e5ea;
+  --sep:rgba(60,60,67,0.12); --text:#1c1c1e; --text2:#3a3a3c; --text3:#636366; --text4:#aeaeb2;
+  --blue:#009ee0; --blue-dk:#0077a8; --red-afd:#e2001a;
+  --green:#34c759; --orange:#ff9500; --red:#ff3b30;
+  --r8:8px; --r12:12px; --r16:16px;
+  --sh-sm:0 1px 3px rgba(0,0,0,0.08),0 1px 2px rgba(0,0,0,0.04);
+  --sh:0 4px 16px rgba(0,0,0,0.08),0 2px 4px rgba(0,0,0,0.04);
+  --sh-lg:0 8px 32px rgba(0,0,0,0.10),0 4px 8px rgba(0,0,0,0.06);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--text);height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+
+/* ── LOGIN SCREEN ── */
+#loginScreen{position:fixed;inset:0;background:linear-gradient(160deg,#f2f2f7 0%,#e8f4fb 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9000;padding:24px}
+#loginScreen.hidden{display:none}
+
+.login-card{background:var(--surface);border-radius:24px;padding:36px 32px 32px;width:100%;max-width:380px;box-shadow:var(--sh-lg);animation:fadeUp .4s cubic-bezier(.32,.72,0,1)}
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+
+.login-logo{display:flex;justify-content:center;margin-bottom:6px}
+.login-logo svg{height:42px;width:auto}
+.login-title{text-align:center;font-size:1.25rem;font-weight:700;letter-spacing:-.02em;margin-bottom:4px}
+.login-sub{text-align:center;font-size:.8rem;color:var(--text3);margin-bottom:28px}
+
+.login-field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.login-label{font-size:.75rem;font-weight:600;color:var(--text2)}
+.login-input{background:var(--surface2);border:1.5px solid var(--surface3);border-radius:var(--r12);padding:12px 14px;font-family:inherit;font-size:.9rem;color:var(--text);width:100%;transition:border-color .15s;-webkit-appearance:none}
+.login-input:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(0,158,224,.15)}
+
+.login-btn{width:100%;padding:13px;border-radius:var(--r12);border:none;background:var(--blue);color:#fff;font-family:inherit;font-size:.9rem;font-weight:600;cursor:pointer;transition:all .15s;margin-top:6px;letter-spacing:-.01em}
+.login-btn:hover{background:var(--blue-dk)}
+.login-btn:active{transform:scale(.98)}
+.login-btn:disabled{opacity:.6;cursor:not-allowed}
+
+.login-error{background:rgba(255,59,48,.08);border:1px solid rgba(255,59,48,.2);border-radius:var(--r8);padding:10px 12px;font-size:.8rem;color:var(--red);text-align:center;display:none;margin-top:8px}
+.login-error.show{display:block}
+
+.login-footer{text-align:center;font-size:.72rem;color:var(--text4);margin-top:20px}
+
+/* ── HEADER ── */
+header{height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px);border-bottom:1px solid var(--sep);display:flex;align-items:center;padding:0 16px;gap:0;flex-shrink:0;z-index:1000}
+.h-left{display:flex;align-items:center;gap:8px;min-width:130px}
+.h-center{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.25}
+.h-right{display:flex;align-items:center;gap:8px;min-width:130px;justify-content:flex-end}
+.h-title{font-size:.9rem;font-weight:600;letter-spacing:-.01em}
+.h-sub{font-size:.65rem;color:var(--text3)}
+.kampagne-select{font-family:inherit;font-size:.7rem;font-weight:500;color:var(--text2);background:var(--surface3);border:1px solid var(--sep);border-radius:8px;padding:3px 22px 3px 8px;cursor:pointer;-webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23636366'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 7px center;max-width:220px;text-overflow:ellipsis;transition:all .15s}
+.kampagne-select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(0,158,224,.15)}
+.afd-logo svg{height:28px;width:auto}
+.role-sw{display:flex;background:var(--surface3);border-radius:8px;padding:2px;gap:2px}
+.role-btn{font-size:.65rem;font-weight:500;padding:4px 8px;border-radius:6px;border:none;background:transparent;color:var(--text3);cursor:pointer;transition:all .15s;white-space:nowrap}
+.role-btn.active{background:var(--surface);color:var(--text);box-shadow:var(--sh-sm)}
+
+.user-pill{display:flex;align-items:center;gap:6px;background:var(--surface3);border-radius:20px;padding:4px 10px 4px 4px;cursor:pointer;transition:background .15s}
+.user-pill:hover{background:#d1d1d6}
+.user-avatar{width:24px;height:24px;border-radius:50%;background:var(--blue);color:#fff;font-size:.65rem;font-weight:700;display:flex;align-items:center;justify-content:center}
+.user-name{font-size:.72rem;font-weight:500;color:var(--text2);max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.role-badge{font-size:.58rem;font-weight:600;padding:1px 6px;border-radius:4px;text-transform:uppercase;letter-spacing:.04em}
+.rb-admin{background:rgba(255,59,48,.12);color:var(--red)}
+.rb-verwalter{background:rgba(0,158,224,.12);color:var(--blue)}
+.rb-verteiler{background:rgba(52,199,89,.12);color:var(--green)}
+.mob-btn{display:none;background:none;border:none;color:var(--blue);font-size:1.1rem;cursor:pointer;padding:4px 8px;border-radius:var(--r8)}
+
+/* ── BODY ── */
+.app-body{display:flex;flex:1;overflow:hidden}
+
+/* ── SIDEBAR ── */
+.sidebar{width:292px;background:var(--bg);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;border-right:1px solid var(--sep)}
+.sb-top{padding:10px 10px 6px;background:var(--bg);border-bottom:1px solid var(--sep)}
+.pills{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:9px}
+.pill{font-size:.7rem;font-weight:500;padding:5px 11px;border-radius:20px;border:1px solid var(--sep);background:var(--surface);color:var(--text3);cursor:pointer;transition:all .15s}
+.pill:hover{background:var(--surface3)}
+.pill.active{background:var(--blue);border-color:var(--blue);color:#fff;box-shadow:0 2px 8px rgba(0,158,224,.28)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
+.stat{background:var(--surface);border-radius:var(--r12);padding:9px 6px;text-align:center;box-shadow:var(--sh-sm)}
+.stat-n{font-size:1.2rem;font-weight:700;letter-spacing:-.03em;line-height:1}
+.stat-l{font-size:.58rem;color:var(--text3);font-weight:500;text-transform:uppercase;letter-spacing:.04em;margin-top:2px}
+.prog-wrap{padding:9px 10px 7px}
+.prog-row{display:flex;justify-content:space-between;font-size:.7rem;color:var(--text3);font-weight:500;margin-bottom:5px}
+.prog-track{height:4px;background:var(--surface3);border-radius:2px;overflow:hidden}
+.prog-fill{height:100%;background:linear-gradient(90deg,var(--blue),var(--green));border-radius:2px;transition:width .5s ease}
+.g-list{flex:1;overflow-y:auto;padding:7px;display:flex;flex-direction:column;gap:5px}
+.g-list::-webkit-scrollbar{width:0}
+.g-card{background:var(--surface);border-radius:var(--r12);padding:10px 11px;cursor:pointer;transition:all .15s;box-shadow:var(--sh-sm);border:1.5px solid transparent;position:relative;overflow:hidden}
+.g-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;border-radius:12px 0 0 12px}
+.g-card.status-offen::before{background:var(--text4)}
+.g-card.status-zugeteilt::before{background:var(--orange)}
+.g-card.status-fertig::before{background:var(--green)}
+.g-card.status-problem::before{background:var(--red)}
+.g-card:active{transform:scale(.98)}
+.g-card.sel{border-color:var(--blue);box-shadow:0 0 0 3px rgba(0,158,224,.15),var(--sh-sm)}
+.g-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.g-id{font-size:.63rem;font-weight:600;color:var(--blue);background:rgba(0,158,224,.1);padding:2px 6px;border-radius:5px;letter-spacing:.03em}
+.s-chip{font-size:.58rem;font-weight:600;padding:2px 7px;border-radius:10px;text-transform:uppercase;letter-spacing:.04em}
+.c-offen{background:#f2f2f7;color:var(--text3)}
+.c-zugeteilt{background:rgba(255,149,0,.12);color:var(--orange)}
+.c-fertig{background:rgba(52,199,89,.12);color:var(--green)}
+.c-problem{background:rgba(255,59,48,.12);color:var(--red)}
+.g-name{font-size:.85rem;font-weight:500;margin-bottom:3px}
+.g-meta{display:flex;gap:9px;font-size:.7rem;color:var(--text3)}
+.wa{font-size:.6rem;font-weight:600;color:#25d366;background:rgba(37,211,102,.1);padding:1px 5px;border-radius:4px}
+
+/* ── MAP ── */
+#map{position:absolute;top:0;left:0;right:0;bottom:0;z-index:0}
+.leaflet-container{background:#eee}
+.leaflet-control-zoom{border:none!important;box-shadow:var(--sh)!important;border-radius:var(--r12)!important;overflow:hidden}
+.leaflet-control-zoom a{background:var(--surface)!important;color:var(--text)!important;border:none!important;font-size:.95rem!important;line-height:30px!important;width:32px!important;height:32px!important}
+.leaflet-control-zoom a:hover{background:var(--surface3)!important}
+.map-legend{position:absolute;bottom:22px;left:10px;z-index:400;background:rgba(255,255,255,.92);backdrop-filter:blur(12px);border-radius:var(--r12);padding:9px 13px;box-shadow:var(--sh);font-size:.7rem}
+.leg-title{font-size:.58rem;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+.leg-row{display:flex;align-items:center;gap:7px;margin-bottom:3px;color:var(--text2)}
+.leg-row:last-child{margin-bottom:0}
+.leg-dot{width:9px;height:9px;border-radius:2px;flex-shrink:0}
+
+/* ── DETAIL ── */
+.detail-panel{width:292px;background:var(--bg);border-left:1px solid var(--sep);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;transform:translateX(292px);transition:transform .3s cubic-bezier(.32,.72,0,1)}
+.detail-panel.open{transform:translateX(0)}
+.d-header{padding:13px 14px 11px;background:var(--bg);border-bottom:1px solid var(--sep);display:flex;align-items:flex-start;gap:10px}
+.d-hinfo{flex:1}
+.d-id{font-size:.62rem;font-weight:600;color:var(--blue);background:rgba(0,158,224,.1);padding:2px 6px;border-radius:5px;display:inline-block;margin-bottom:3px;letter-spacing:.03em}
+.d-name{font-size:.95rem;font-weight:600;letter-spacing:-.01em}
+.d-close{background:var(--surface3);border:none;color:var(--text3);width:26px;height:26px;border-radius:50%;cursor:pointer;font-size:.78rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px}
+.d-close:hover{color:var(--text)}
+.d-scroll{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px}
+.d-scroll::-webkit-scrollbar{width:0}
+.d-sec{background:var(--surface);border-radius:var(--r12);overflow:hidden;box-shadow:var(--sh-sm)}
+.sec-hd{padding:9px 13px 0;font-size:.6rem;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em}
+.info-g{display:grid;grid-template-columns:1fr 1fr;gap:7px;padding:9px 11px 11px}
+.ii-label{font-size:.58rem;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px}
+.ii-val{font-size:.85rem;font-weight:600}
+.ii-full{grid-column:1/-1}
+.s-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:7px 11px 11px}
+.s-btn{padding:7px 5px;border-radius:var(--r8);border:1.5px solid var(--surface3);background:var(--surface2);font-size:.7rem;font-weight:500;color:var(--text3);cursor:pointer;transition:all .15s;text-align:center}
+.s-btn:hover{background:var(--surface3)}
+.s-btn.ao{background:#f2f2f7;border-color:var(--text4);color:var(--text2)}
+.s-btn.az{background:rgba(255,149,0,.1);border-color:var(--orange);color:var(--orange)}
+.s-btn.af{background:rgba(52,199,89,.1);border-color:var(--green);color:var(--green)}
+.s-btn.ap{background:rgba(255,59,48,.1);border-color:var(--red);color:var(--red)}
+.f-stack{display:flex;flex-direction:column;gap:7px;padding:7px 11px 11px}
+input[type=text],input[type=number],input[type=email],input[type=password],textarea{background:var(--surface2);border:1px solid var(--surface3);border-radius:var(--r8);padding:8px 10px;font-family:inherit;font-size:.83rem;color:var(--text);width:100%;transition:border-color .15s;resize:none;-webkit-appearance:none}
+input:focus,textarea:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(0,158,224,.15)}
+textarea{min-height:68px}
+.btn{padding:9px 14px;border-radius:var(--r8);border:none;font-family:inherit;font-size:.8rem;font-weight:500;cursor:pointer;transition:all .15s;width:100%;-webkit-appearance:none}
+.btn:active{transform:scale(.97)}
+.btn-p{background:var(--blue);color:#fff}.btn-p:hover{background:var(--blue-dk)}
+.btn-g{background:var(--surface2);color:var(--text2);border:1px solid var(--surface3)}.btn-g:hover{background:var(--surface3)}
+.btn-d{background:rgba(255,59,48,.1);color:var(--red);border:1px solid rgba(255,59,48,.2)}.btn-d:hover{background:rgba(255,59,48,.18)}
+.btn-f{background:var(--surface2);color:var(--blue);border:1px solid var(--surface3);display:block;text-align:center;cursor:pointer;padding:9px 14px;border-radius:var(--r8);font-size:.8rem;font-weight:500;transition:all .15s}.btn-f:hover{background:var(--surface3)}
+.hint-item{padding:7px 9px;background:var(--surface2);border-radius:var(--r8);font-size:.78rem;color:var(--text2);border-left:3px solid var(--orange)}
+
+/* Loading spinner */
+.spinner{width:20px;height:20px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;display:inline-block;vertical-align:middle;margin-right:8px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── MODAL ── */
+.modal-ov{position:fixed;inset:0;background:rgba(0,0,0,.4);backdrop-filter:blur(8px);z-index:3000;display:none;align-items:flex-end;justify-content:center}
+.modal-ov.open{display:flex}
+.modal{background:var(--surface);border-radius:20px 20px 0 0;padding:18px 18px 30px;width:100%;max-width:480px;box-shadow:var(--sh-lg);animation:slideUp .3s cubic-bezier(.32,.72,0,1)}
+@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.m-handle{width:34px;height:4px;background:var(--surface3);border-radius:2px;margin:0 auto 14px}
+.m-title{font-size:.95rem;font-weight:600;margin-bottom:13px}
+.m-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:13px}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(80px);background:rgba(28,28,30,.92);backdrop-filter:blur(12px);color:#fff;padding:9px 17px;border-radius:20px;font-size:.8rem;font-weight:500;z-index:9999;opacity:0;transition:all .3s cubic-bezier(.32,.72,0,1);white-space:nowrap;box-shadow:var(--sh-lg);pointer-events:none}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* Leaflet popup */
+.leaflet-popup-content-wrapper{background:rgba(255,255,255,.96)!important;border:none!important;border-radius:12px!important;box-shadow:0 8px 32px rgba(0,0,0,.15)!important;color:var(--text)!important;padding:2px!important}
+.leaflet-popup-content{margin:9px 13px!important}
+.leaflet-popup-tip{background:rgba(255,255,255,.96)!important}
+.popup-id{font-size:.62rem;font-weight:600;color:var(--blue);margin-bottom:2px}
+.popup-name{font-size:.88rem;font-weight:600;margin-bottom:3px}
+.popup-meta{font-size:.73rem;color:var(--text3)}
+
+/* ── DRAW TOOL (desktop/tablet only, admin/verwalter) ── */
+.draw-toolbar{position:absolute;top:12px;right:12px;z-index:500;display:none;flex-direction:column;gap:6px}
+.draw-toolbar.visible{display:flex}
+.draw-btn{width:40px;height:40px;border-radius:var(--r12);border:none;background:var(--surface);box-shadow:var(--sh);cursor:pointer;font-size:1rem;display:flex;align-items:center;justify-content:center;transition:all .15s;color:var(--text2)}
+.draw-btn:hover{background:var(--surface3)}
+.draw-btn.active{background:var(--blue);color:#fff;box-shadow:0 2px 12px rgba(0,158,224,.4)}
+.draw-btn[disabled]{opacity:.4;cursor:not-allowed}
+.draw-info{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:500;background:rgba(28,28,30,.88);backdrop-filter:blur(12px);color:#fff;padding:8px 16px;border-radius:20px;font-size:.78rem;font-weight:500;display:none;white-space:nowrap;box-shadow:var(--sh-lg)}
+.draw-info.visible{display:block}
+
+/* MOBILE */
+@media(max-width:768px){
+  .sidebar{position:absolute;left:0;top:0;bottom:0;z-index:600;transform:translateX(-292px);transition:transform .3s cubic-bezier(.32,.72,0,1);box-shadow:var(--sh-lg)}
+  .sidebar.open{transform:translateX(0)}
+  .detail-panel{position:absolute;right:0;top:0;bottom:0;z-index:600;width:100%;box-shadow:var(--sh-lg)}
+  .mob-btn{display:block}
+  .role-sw{display:none}
+  .draw-toolbar{display:none!important}
+  .draw-info{display:none!important}
+}
+@media(min-width:769px){
+  .modal-ov{align-items:center;padding:20px}
+  .modal{border-radius:20px;animation:fadeScale .2s ease}
+  @keyframes fadeScale{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
+  .m-handle{display:none}
+}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════
+     LOGIN SCREEN
+══════════════════════════════════════ -->
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="login-logo"><img src="data:image/png;base64,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" alt="AfD" style="height:42px;width:auto"></div>
+    <div class="login-title">FlyerOrg</div>
+    <div class="login-sub">Flyerverteilung · AfD Thüringen</div>
+
+    <div class="login-field">
+      <label class="login-label">E-Mail</label>
+      <input class="login-input" type="email" id="loginEmail" placeholder="deine@email.de" autocomplete="email">
+    </div>
+    <div class="login-field">
+      <label class="login-label">Passwort</label>
+      <input class="login-input" type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password">
+    </div>
+
+    <button class="login-btn" id="loginBtn" onclick="doLogin()">Anmelden</button>
+    <div class="login-error" id="loginError"></div>
+
+    <div class="login-footer">Zugang nur für autorisierte Mitglieder</div>
+  </div>
+</div>
+
+<!-- PASSWORT SETZEN SCREEN -->
+<div id="setPasswordScreen" style="position:fixed;inset:0;background:linear-gradient(160deg,#f2f2f7 0%,#e8f4fb 100%);display:none;flex-direction:column;align-items:center;justify-content:center;z-index:9001;padding:24px">
+  <div class="login-card">
+    <div class="login-title">Willkommen bei FlyerOrg</div>
+    <div class="login-sub">Bitte setze ein Passwort für deinen Account.</div>
+    <div class="login-field">
+      <label class="login-label">Neues Passwort</label>
+      <input class="login-input" type="password" id="newPassword" placeholder="Min. 6 Zeichen" autocomplete="new-password">
+    </div>
+    <div class="login-field">
+      <label class="login-label">Passwort wiederholen</label>
+      <input class="login-input" type="password" id="newPasswordConfirm" placeholder="Nochmal eingeben" autocomplete="new-password">
+    </div>
+    <button class="login-btn" id="setPwBtn" onclick="doSetPassword()">Passwort speichern</button>
+    <div class="login-error" id="setPwError"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     MAIN APP
+══════════════════════════════════════ -->
+<header id="appHeader" style="display:none">
+  <div class="h-left">
+    <button class="mob-btn" onclick="toggleSidebar()">☰</button>
+    <div class="afd-logo"><img src="data:image/png;base64,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" alt="AfD" style="height:28px;width:auto"></div>
+  </div>
+  <div class="h-center">
+    <div class="h-title">FlyerOrg</div>
+    <select class="kampagne-select" id="kampagneSelect">
+      <option value="">Kampagne wählen…</option>
+    </select>
+  </div>
+  <div class="h-right">
+    <!-- Admin: Nutzer einladen -->
+    <button id="inviteUserBtn" onclick="openInviteModal()" title="Nutzer einladen" style="display:none;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='var(--text3)'">➕👤</button>
+    <!-- User pill with role badge -->
+    <div class="user-pill" onclick="doLogout()" title="Abmelden">
+      <div class="user-avatar" id="userAvatar">?</div>
+      <div>
+        <div class="user-name" id="userName">–</div>
+        <div class="role-badge" id="roleBadge">–</div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="app-body" id="appBody" style="display:none">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar" id="sidebar">
+    <div class="sb-top">
+      <div class="pills" id="regionPills"></div>
+      <div class="stats">
+        <div class="stat"><div class="stat-n" id="statFlyer" style="color:var(--blue)">–</div><div class="stat-l">Gesamt</div></div>
+        <div class="stat"><div class="stat-n" id="statVerteilt" style="color:var(--green)">–</div><div class="stat-l">Verteilt</div></div>
+        <div class="stat"><div class="stat-n" id="statOffen" style="color:var(--orange)">–</div><div class="stat-l">Offen</div></div>
+      </div>
+    </div>
+    <div class="prog-wrap">
+      <div class="prog-row"><span>Fortschritt</span><span id="progText">–</span></div>
+      <div class="prog-track"><div class="prog-fill" id="progFill" style="width:0%"></div></div>
+    </div>
+    <div class="g-list" id="gebietList"></div>
+  </div>
+
+  <!-- MAP -->
+  <div style="position:relative;flex:1;min-width:0;min-height:0;display:flex;flex-direction:column">
+    <div id="map"></div>
+    <!-- DRAW TOOLBAR (only shown for admin/verwalter on >=768px) -->
+    <div class="draw-toolbar" id="drawToolbar">
+      <button class="draw-btn" id="drawStartBtn" onclick="toggleDraw()" title="Neues Gebiet zeichnen">✏️</button>
+      <button class="draw-btn" id="drawUndoBtn" onclick="drawUndo()" title="Letzten Punkt entfernen" disabled>↩️</button>
+      <button class="draw-btn" id="drawFinishBtn" onclick="drawFinish()" title="Polygon abschließen" disabled>✅</button>
+      <button class="draw-btn" id="drawCancelBtn" onclick="drawCancel()" title="Abbrechen" disabled>❌</button>
+    </div>
+    <div class="draw-info" id="drawInfo"></div>
+    <div class="map-legend">
+      <div class="leg-title">Status</div>
+      <div class="leg-row"><div class="leg-dot" style="background:#aeaeb2"></div>Offen</div>
+      <div class="leg-row"><div class="leg-dot" style="background:#ff9500"></div>Zugeteilt</div>
+      <div class="leg-row"><div class="leg-dot" style="background:#34c759"></div>Fertig</div>
+      <div class="leg-row"><div class="leg-dot" style="background:#ff3b30"></div>Problem</div>
+    </div>
+  </div>
+
+  <!-- DETAIL PANEL -->
+  <div class="detail-panel" id="detailPanel">
+    <div class="d-header">
+      <div class="d-hinfo">
+        <div class="d-id" id="detailId"></div>
+        <div class="d-name" id="detailTitle"></div>
+      </div>
+      <button class="d-close" onclick="closeDetail()">✕</button>
+    </div>
+    <div class="d-scroll" id="detailBody"></div>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div class="modal-ov" id="modalOv" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="m-handle"></div>
+    <div class="m-title">📦 Stückzahl-Anfrage</div>
+    <div style="display:flex;flex-direction:column;gap:9px">
+      <input type="number" id="modalMenge" placeholder="Neue Stückzahl (z.B. 250)">
+      <textarea id="modalGrund" placeholder="Begründung…"></textarea>
+    </div>
+    <div class="m-actions">
+      <button class="btn btn-g" onclick="closeModal()">Abbrechen</button>
+      <button class="btn btn-p" onclick="submitAnfrage()">Senden</button>
+    </div>
+  </div>
+</div>
+
+<!-- KML UPLOAD DIALOG -->
+<div class="modal-ov" id="kmlModalOv" onclick="if(event.target===this)closeKmlModal()">
+  <div class="modal">
+    <div class="m-handle"></div>
+    <div class="m-title">🗺️ KML hochgeladen</div>
+    <div id="kmlModalBody" style="display:flex;flex-direction:column;gap:12px">
+      <div style="font-size:.85rem;color:var(--text3)" id="kmlFoundInfo"></div>
+      <div id="kmlGebieteList" style="display:flex;flex-direction:column;gap:8px;max-height:300px;overflow-y:auto"></div>
+    </div>
+    <div class="m-actions" style="margin-top:14px">
+      <button class="btn btn-g" onclick="closeKmlModal()">Abbrechen</button>
+      <button class="btn btn-p" onclick="applyKmlAssignments()">Übernehmen</button>
+    </div>
+  </div>
+</div>
+
+<!-- NEW GEBIET MODAL (after drawing) -->
+<div class="modal-ov" id="newGebietModalOv" onclick="if(event.target===this)drawCancel()">
+  <div class="modal">
+    <div class="m-handle"></div>
+    <div class="m-title" id="newGebietModalTitle">📍 Neues Gebiet erstellen</div>
+    <div style="display:flex;flex-direction:column;gap:9px">
+      <div>
+        <div style="font-size:.6rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:3px">Gebiet-ID</div>
+        <input type="text" id="newGebietId" placeholder="z.B. 05A">
+      </div>
+      <div>
+        <div style="font-size:.6rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:3px">Name</div>
+        <input type="text" id="newGebietName" placeholder="z.B. Ronneburg Süd-West">
+      </div>
+      <div>
+        <div style="font-size:.6rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:3px">Region</div>
+        <select id="newGebietRegion"></select>
+      </div>
+      <div>
+        <div style="font-size:.6rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:3px">Stückzahl</div>
+        <input type="number" id="newGebietStueck" placeholder="z.B. 200" value="100">
+      </div>
+      <div id="newGebietCoordInfo" style="font-size:.7rem;color:var(--text3);padding:6px 0"></div>
+    </div>
+    <div class="m-actions" style="margin-top:13px">
+      <button class="btn btn-g" onclick="drawCancel()">Abbrechen</button>
+      <button class="btn btn-p" onclick="drawSave()">Gebiet speichern</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- NUTZER EINLADEN MODAL (nur Admin) -->
+<div class="modal-ov" id="inviteModalOv" onclick="if(event.target===this)closeInviteModal()">
+  <div class="modal">
+    <div class="m-handle"></div>
+    <div class="m-title">👤 Nutzer einladen</div>
+
+    <!-- Einladungsformular -->
+    <div style="display:flex;flex-direction:column;gap:7px">
+      <input type="email" id="inviteEmail" placeholder="E-Mail-Adresse">
+      <input type="text"  id="inviteName"  placeholder="Name (z.B. Max Mustermann)">
+      <select id="inviteRolle">
+        <option value="verteiler">Verteiler</option>
+        <option value="verwalter">Verwalter</option>
+        <option value="admin">Admin</option>
+      </select>
+      <div id="inviteRegionenWrap" style="display:none">
+        <div style="font-size:.6rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:4px">Zugewiesene Regionen</div>
+        <div id="inviteRegionenList" style="display:flex;flex-direction:column;gap:4px"></div>
+      </div>
+    </div>
+    <div id="inviteStatus" style="font-size:.78rem;margin-top:8px;min-height:18px"></div>
+    <div class="m-actions" style="margin-top:10px">
+      <button class="btn btn-g" onclick="closeInviteModal()">Schließen</button>
+      <button class="btn btn-p" id="inviteBtn" onclick="doInviteUser()">Einladung senden</button>
+    </div>
+  </div>
+</div>
+
+<!-- VERWALTER-REGIONEN BEARBEITEN MODAL (nur Admin) -->
+<div class="modal-ov" id="editRegModalOv" onclick="if(event.target===this)closeEditRegModal()">
+  <div class="modal">
+    <div class="m-handle"></div>
+    <div class="m-title" id="editRegModalTitle">🗺 Regionen bearbeiten</div>
+    <input type="hidden" id="editRegUserId">
+    <div style="font-size:.6rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:6px">Zugewiesene Regionen</div>
+    <div id="editRegList" style="display:flex;flex-direction:column;gap:5px;max-height:220px;overflow-y:auto;margin-bottom:4px"></div>
+    <div class="m-actions" style="margin-top:12px">
+      <button class="btn btn-g" onclick="closeEditRegModal()">Abbrechen</button>
+      <button class="btn btn-p" onclick="saveRegionen()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- KAMPAGNEN VERWALTEN MODAL -->
+<div class="modal-ov" id="kampagnenModalOv" onclick="if(event.target===this)closeKampagnenModal()">
+  <div class="modal">
+    <div class="m-handle"></div>
+    <div class="m-title">📋 Kampagnen verwalten</div>
+    <div id="kampagnenList" style="max-height:200px;overflow-y:auto;margin-bottom:12px"></div>
+    <div style="font-size:.6rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:6px">Neue Kampagne</div>
+    <div style="display:flex;flex-direction:column;gap:7px">
+      <input type="text" id="newKampName" placeholder="Name der Kampagne">
+      <input type="text" id="newKampBeschr" placeholder="Beschreibung (optional)">
+    </div>
+    <div class="m-actions" style="margin-top:12px">
+      <button class="btn btn-g" onclick="closeKampagnenModal()">Schließen</button>
+      <button class="btn btn-p" onclick="createKampagne()">Erstellen</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// SUPABASE INIT
+// ============================================================
+const SUPABASE_URL  = 'https://hccjiwwoeszikucjocqx.supabase.co';
+const SUPABASE_KEY  = 'sb_publishable_OPv0LC3IWNyddIHvmHueYw_9jO_y7dy';
+const { createClient } = supabase;
+const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ============================================================
+// AUTH
+// ============================================================
+let currentUser  = null;
+let currentProfile = null;
+
+async function doLogin() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const pass  = document.getElementById('loginPassword').value;
+  const btn   = document.getElementById('loginBtn');
+  const err   = document.getElementById('loginError');
+
+  if (!email || !pass) { showLoginError('Bitte E-Mail und Passwort eingeben.'); return; }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Anmelden…';
+  err.classList.remove('show');
+
+  const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
+
+  if (error) {
+    btn.disabled = false;
+    btn.textContent = 'Anmelden';
+    showLoginError('Anmeldung fehlgeschlagen. Bitte E-Mail und Passwort prüfen.');
+    return;
+  }
+
+  currentUser = data.user;
+  await loadProfile();
+  showApp();
+}
+
+// Set password for first-time invite-link users
+async function doSetPassword() {
+  const pw1 = document.getElementById('newPassword').value;
+  const pw2 = document.getElementById('newPasswordConfirm').value;
+  const btn = document.getElementById('setPwBtn');
+  const err = document.getElementById('setPwError');
+
+  err.textContent = '';
+  err.classList.remove('show');
+
+  if (!pw1 || !pw2) {
+    err.textContent = 'Bitte beide Felder ausfüllen.';
+    err.classList.add('show');
+    return;
+  }
+  if (pw1.length < 6) {
+    err.textContent = 'Passwort muss mindestens 6 Zeichen haben.';
+    err.classList.add('show');
+    return;
+  }
+  if (pw1 !== pw2) {
+    err.textContent = 'Passwörter stimmen nicht überein.';
+    err.classList.add('show');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Speichern…';
+
+  const { error } = await sb.auth.updateUser({ password: pw1 });
+
+  if (error) {
+    btn.disabled = false;
+    btn.textContent = 'Passwort speichern';
+    err.textContent = 'Fehler: ' + error.message;
+    err.classList.add('show');
+    return;
+  }
+
+  // Hide password screen, show app
+  document.getElementById('setPasswordScreen').style.display = 'none';
+  await loadProfile();
+  showApp();
+  toast('✅ Passwort erfolgreich gesetzt!');
+}
+
+async function loadProfile() {
+  const { data } = await sb.from('user_profiles').select('*').eq('id', currentUser.id).single();
+  currentProfile = data;
+}
+
+let allUsers = [];
+async function loadAllUsers() {
+  try {
+    const { data, error } = await sb.from('user_profiles').select('id, name, rolle, telefon, email, verwaltete_regionen').order('name');
+    if (!error) allUsers = data || [];
+  } catch(e) {
+    console.warn('loadAllUsers failed:', e);
+  }
+}
+
+// ============================================================
+// KAMPAGNEN (Product/Campaign system)
+// ============================================================
+let kampagnen = [];
+let curKampagne = null;
+
+async function loadKampagnen() {
+  try {
+    const { data, error } = await sb.from('kampagnen').select('*').order('created_at', { ascending: false });
+    if (!error && data && data.length > 0) {
+      kampagnen = data;
+    } else {
+      kampagnen = [{ id: 'default', name: 'Flyer Allgemein', beschreibung: 'Standard-Kampagne' }];
+    }
+  } catch(e) {
+    console.warn('loadKampagnen failed, using default:', e);
+    kampagnen = [{ id: 'default', name: 'Flyer Allgemein', beschreibung: 'Standard-Kampagne' }];
+  }
+  renderKampagnenDropdown();
+}
+
+function renderKampagnenDropdown() {
+  const sel = document.getElementById('kampagneSelect');
+  if (!sel) return;
+
+  // Admin/Verwalter bekommen Verwalten-Button neben Dropdown
+  const isManager = curRole === 'admin' || curRole === 'verwalter';
+  const wrap = sel.parentElement;
+  // Entferne alten Verwalten-Button falls vorhanden
+  const oldBtn = document.getElementById('kampagneVerwBtn');
+  if (oldBtn) oldBtn.remove();
+
+  sel.innerHTML = kampagnen.map((k, i) =>
+    `<option value="${k.id}" ${i === 0 ? 'selected' : ''}>${k.name}</option>`
+  ).join('');
+
+  if (kampagnen.length > 0 && !curKampagne) {
+    curKampagne = kampagnen[0];
+  }
+
+  if (isManager) {
+    const btn = document.createElement('button');
+    btn.id = 'kampagneVerwBtn';
+    btn.title = 'Kampagnen verwalten';
+    btn.textContent = '⚙';
+    btn.style.cssText = 'background:none;border:none;font-size:.9rem;cursor:pointer;color:var(--text3);padding:0 2px;line-height:1';
+    btn.onclick = () => openKampagnenModal();
+    wrap.appendChild(btn);
+  }
+
+  sel.onchange = async () => {
+    const selected = kampagnen.find(k => String(k.id) === sel.value);
+    if (selected) {
+      curKampagne = selected;
+      toast(`📋 ${selected.name}`);
+      await loadGebieteForKampagne(selected.id);
+    }
+  };
+}
+
+// Gebiete kampagnenspezifisch aus DB laden und lokal überschreiben
+async function loadGebieteForKampagne(kampagneId) {
+  try {
+    // Liest aus gebiet_status (composite PK: gebiet_id + kampagne_id)
+    const { data, error } = await sb.from('gebiet_status')
+      .select('*')
+      .eq('kampagne_id', kampagneId);
+    if (!error && data && data.length > 0) {
+      // Status pro Gebiet aus DB übernehmen, lokale Basisdaten bleiben
+      data.forEach(dbG => {
+        const localG = getG(dbG.gebiet_id);
+        if (localG) {
+          localG.status = dbG.status || 'offen';
+          localG.verteiler = dbG.verteiler_name || '';
+          localG.verteilerId = dbG.verteiler_id || null;
+          localG.stueckzahl = dbG.stueckzahl || localG.stueckzahl;
+        }
+      });
+      // Alle nicht in DB vorhandenen Gebiete → Status zurücksetzen auf 'offen'
+      const dbIds = data.map(d => d.gebiet_id);
+      Object.values(regionen).forEach(r => r.gebiete.forEach(g => {
+        if (!dbIds.includes(g.id)) {
+          g.status = 'offen';
+          g.verteiler = '';
+          g.verteilerId = null;
+        }
+      }));
+    } else {
+      // Keine DB-Daten → alle Gebiete auf 'offen' zurücksetzen
+      Object.values(regionen).forEach(r => r.gebiete.forEach(g => {
+        g.status = 'offen';
+        g.verteiler = '';
+        g.verteilerId = null;
+      }));
+    }
+  } catch(e) {
+    console.warn('loadGebieteForKampagne failed:', e);
+  }
+  closeDetail();
+  renderPills(); renderList(); renderStats(); drawPolygons(); showDrawToolbar();
+}
+
+// ============================================================
+// KAMPAGNEN VERWALTEN MODAL (Admin + Verwalter)
+// ============================================================
+function openKampagnenModal() {
+  renderKampagnenList();
+  document.getElementById('kampagnenModalOv').classList.add('open');
+}
+function closeKampagnenModal() {
+  document.getElementById('kampagnenModalOv').classList.remove('open');
+}
+
+function renderKampagnenList() {
+  const isAdmin = curRole === 'admin';
+  const verwalterRegionen = currentProfile?.verwaltete_regionen || [];
+  const list = document.getElementById('kampagnenList');
+
+  // Verwalter sieht globale Kampagnen + eigene Kampagnen (erstellt von ihm)
+  const sichtbar = isAdmin ? kampagnen : kampagnen.filter(k =>
+    !k.region_keys || k.region_keys.length === 0 ||
+    k.region_keys.some(r => verwalterRegionen.includes(r)) ||
+    String(k.erstellt_von) === String(currentUser?.id)
+  );
+
+  list.innerHTML = sichtbar.map(k => {
+    const kannLoeschen = isAdmin || (String(k.erstellt_von) === String(currentUser?.id));
+    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--sep)">
+      <div style="flex:1">
+        <div style="font-size:.85rem;font-weight:500">${k.name}</div>
+        ${k.beschreibung ? `<div style="font-size:.7rem;color:var(--text3)">${k.beschreibung}</div>` : ''}
+      </div>
+      ${kannLoeschen ? `<button class="btn btn-d" style="width:auto;padding:5px 10px;font-size:.75rem" onclick="deleteKampagne('${k.id}')">Löschen</button>` : ''}
+    </div>`;
+  }).join('') || '<div style="color:var(--text3);font-size:.85rem;padding:8px 0">Keine Kampagnen vorhanden.</div>';
+}
+
+async function createKampagne() {
+  const name = document.getElementById('newKampName').value.trim();
+  const beschr = document.getElementById('newKampBeschr').value.trim();
+  if (!name) { toast('⚠️ Bitte Namen eingeben'); return; }
+
+  const newK = {
+    name,
+    beschreibung: beschr,
+    erstellt_von: currentUser.id,
+    created_at: new Date()
+  };
+
+  // Verwalter: nur für zugewiesene Regionen
+  if (curRole === 'verwalter') {
+    const regionen_ids = (currentProfile?.verwaltete_regionen || []);
+    if (regionen_ids.length === 0) { toast('⚠️ Keine zugewiesenen Regionen'); return; }
+    newK.region_keys = regionen_ids;
+  }
+
+  try {
+    const { data, error } = await sb.from('kampagnen').insert(newK).select().single();
+    if (error) throw error;
+    kampagnen.unshift(data || { ...newK, id: Date.now() });
+  } catch(e) {
+    // Fallback lokal
+    kampagnen.unshift({ ...newK, id: Date.now().toString() });
+    console.warn('DB insert kampagne failed:', e);
+  }
+
+  document.getElementById('newKampName').value = '';
+  document.getElementById('newKampBeschr').value = '';
+  renderKampagnenList();
+  renderKampagnenDropdown();
+  toast(`✅ Kampagne „${name}" erstellt`);
+}
+
+async function deleteKampagne(id) {
+  if (!confirm('Kampagne wirklich löschen? Alle zugehörigen Status-Daten gehen verloren.')) return;
+  try {
+    // gebiet_status löscht sich via ON DELETE CASCADE automatisch mit
+    await sb.from('kampagnen').delete().eq('id', id);
+  } catch(e) { console.warn('DB delete kampagne failed:', e); }
+
+  kampagnen = kampagnen.filter(k => String(k.id) !== String(id));
+  if (curKampagne && String(curKampagne.id) === String(id)) {
+    curKampagne = kampagnen[0] || null;
+  }
+  renderKampagnenList();
+  renderKampagnenDropdown();
+  toast('🗑 Kampagne gelöscht');
+}
+
+function showLoginError(msg) {
+  const el = document.getElementById('loginError');
+  el.textContent = msg;
+  el.classList.add('show');
+}
+
+async function doLogout() {
+  if (!confirm('Wirklich abmelden?')) return;
+  await sb.auth.signOut();
+  location.reload();
+}
+
+// ============================================================
+// NUTZER EINLADEN (nur Admin)
+// ============================================================
+function openInviteModal() {
+  renderUserList();
+  renderInviteRegionen();
+  document.getElementById('inviteEmail').value = '';
+  document.getElementById('inviteName').value = '';
+  document.getElementById('inviteRolle').value = 'verteiler';
+  document.getElementById('inviteRegionenWrap').style.display = 'none';
+  document.getElementById('inviteStatus').textContent = '';
+  document.getElementById('inviteModalOv').classList.add('open');
+}
+
+function closeInviteModal() {
+  document.getElementById('inviteModalOv').classList.remove('open');
+}
+
+function renderUserList() {
+  const list = document.getElementById('userList');
+  if (!list) return;
+  if (allUsers.length === 0) {
+    list.innerHTML = '<div style="font-size:.78rem;color:var(--text3)">Keine Nutzer geladen.</div>';
+    return;
+  }
+  list.innerHTML = allUsers.map(u => {
+    const rolleFarbe = u.rolle === 'admin' ? 'var(--red)' : u.rolle === 'verwalter' ? 'var(--blue)' : 'var(--green)';
+    const regEdit = u.rolle === 'verwalter'
+      ? `<button onclick="openEditRegionenModal('${u.id}','${(u.name||'').replace(/'/g,"\\'")}',${JSON.stringify(u.verwaltete_regionen||[]).replace(/"/g,'&quot;')})" style="background:none;border:none;color:var(--blue);cursor:pointer;font-size:.8rem;padding:2px 4px;border-radius:4px" title="Regionen bearbeiten">🗺</button>`
+      : '';
+    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--surface2);border-radius:var(--r8)">
+      <div style="flex:1">
+        <div style="font-size:.82rem;font-weight:500">${u.name || '–'}</div>
+        <div style="font-size:.68rem;color:var(--text3)">${u.email || ''}</div>
+      </div>
+      <span style="font-size:.65rem;font-weight:600;padding:2px 7px;border-radius:4px;background:${rolleFarbe}22;color:${rolleFarbe}">${u.rolle}</span>
+      ${regEdit}
+      <button onclick="deleteUser('${u.id}','${(u.name||'').replace(/'/g,"\\'")}')" style="background:none;border:none;color:var(--text4);cursor:pointer;font-size:.8rem;padding:2px 4px;border-radius:4px" title="Nutzer entfernen">🗑</button>
+    </div>`;
+  }).join('');
+}
+
+// ============================================================
+// VERWALTER-REGIONEN BEARBEITEN
+// ============================================================
+function openEditRegionenModal(userId, userName, currentRegionen) {
+  document.getElementById('editRegModalTitle').textContent = `🗺 Regionen: ${userName}`;
+  document.getElementById('editRegUserId').value = userId;
+  const list = document.getElementById('editRegList');
+  list.innerHTML = Object.entries(regionen).map(([k, r]) =>
+    `<label style="display:flex;align-items:center;gap:6px;font-size:.82rem;cursor:pointer">
+      <input type="checkbox" id="editReg_${k}" value="${k}" ${currentRegionen.includes(k)?'checked':''}>
+      <span>${r.name}</span>
+    </label>`
+  ).join('');
+  document.getElementById('editRegModalOv').classList.add('open');
+}
+
+function closeEditRegModal() {
+  document.getElementById('editRegModalOv').classList.remove('open');
+}
+
+async function saveRegionen() {
+  const userId = document.getElementById('editRegUserId').value;
+  const selected = Array.from(document.querySelectorAll('#editRegList input[type=checkbox]:checked')).map(cb => cb.value);
+  const { error } = await sb.from('user_profiles').update({ verwaltete_regionen: selected, updated_at: new Date() }).eq('id', userId);
+  if (error) { toast('⚠️ Fehler beim Speichern der Regionen'); console.error(error); return; }
+  // Lokal aktualisieren
+  const u = allUsers.find(u => u.id === userId);
+  if (u) u.verwaltete_regionen = selected;
+  renderUserList();
+  closeEditRegModal();
+  toast('✅ Regionen gespeichert');
+}
+
+function renderInviteRegionen() {
+  const list = document.getElementById('inviteRegionenList');
+  list.innerHTML = Object.entries(regionen).map(([k, r]) =>
+    `<label style="display:flex;align-items:center;gap:6px;font-size:.8rem;cursor:pointer">
+      <input type="checkbox" id="invReg_${k}" value="${k}">
+      <span>${r.name}</span>
+    </label>`
+  ).join('');
+}
+
+// Rollen-Dropdown → Regionen-Auswahl nur bei Verwalter
+document.addEventListener('DOMContentLoaded', () => {
+  // Dynamisch nach DOM-Aufbau, also per Event-Delegation
+  document.body.addEventListener('change', e => {
+    if (e.target.id === 'inviteRolle') {
+      document.getElementById('inviteRegionenWrap').style.display =
+        e.target.value === 'verwalter' ? 'block' : 'none';
+    }
+  });
+});
+
+async function doInviteUser() {
+  const email  = document.getElementById('inviteEmail').value.trim();
+  const name   = document.getElementById('inviteName').value.trim();
+  const rolle  = document.getElementById('inviteRolle').value;
+  const btn    = document.getElementById('inviteBtn');
+  const status = document.getElementById('inviteStatus');
+
+  if (!email) { status.style.color = 'var(--red)'; status.textContent = '⚠️ Bitte E-Mail eingeben'; return; }
+  if (!name)  { status.style.color = 'var(--red)'; status.textContent = '⚠️ Bitte Name eingeben'; return; }
+
+  const verwaltete_regionen = rolle === 'verwalter'
+    ? Object.keys(regionen).filter(k => document.getElementById(`invReg_${k}`)?.checked)
+    : [];
+
+  btn.disabled = true;
+  status.style.color = 'var(--text3)';
+  status.textContent = '⏳ Einladung wird gesendet…';
+
+  try {
+    // Edge Function aufrufen (nutzt Service-Role-Key serverseitig)
+    const { data, error } = await sb.functions.invoke('invite-user', {
+      body: { email, name, rolle, verwaltete_regionen }
+    });
+
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
+
+    const hinweis = data?.alreadyRegistered
+      ? ` (war bereits registriert – Profil aktualisiert)`
+      : '';
+
+    status.style.color = 'var(--green)';
+    status.textContent = `✅ Einladung an ${email} gesendet${hinweis}`;
+    document.getElementById('inviteEmail').value = '';
+    document.getElementById('inviteName').value = '';
+    // Regionen-Checkboxen zurücksetzen
+    Object.keys(regionen).forEach(k => {
+      const cb = document.getElementById(`invReg_${k}`);
+      if (cb) cb.checked = false;
+    });
+
+    // Nutzerliste neu laden
+    await loadAllUsers();
+    renderUserList();
+
+  } catch(e) {
+    console.error('Invite failed:', e);
+    status.style.color = 'var(--red)';
+    if (e.message?.includes('already registered')) {
+      status.textContent = '⚠️ Diese E-Mail ist bereits registriert';
+    } else if (e.message?.includes('Edge Function') || e.message?.includes('Failed to send')) {
+      status.textContent = '⚠️ Edge Function nicht erreichbar – bitte deployen (siehe deploy-functions.sh)';
+    } else {
+      status.textContent = `⚠️ ${e.message}`;
+    }
+  }
+
+  btn.disabled = false;
+}
+
+async function deleteUser(userId, userName) {
+  if (!confirm(`Nutzer „${userName}" wirklich vollständig löschen?\n\nDies entfernt Login-Zugang und Profil dauerhaft.`)) return;
+  try {
+    const { data, error } = await sb.functions.invoke('delete-user', {
+      body: { userId }
+    });
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
+
+    allUsers = allUsers.filter(u => u.id !== userId);
+    renderUserList();
+    toast(`🗑 Nutzer „${userName}" gelöscht`);
+  } catch(e) {
+    console.error('delete-user failed:', e);
+    toast(`⚠️ Fehler: ${e.message}`);
+  }
+}
+
+// Lädt ALLE Gebiete aus der Datenbank (einzige Quelle der Wahrheit)
+async function loadCustomGebiete() {
+  try {
+    const { data, error } = await sb.from('gebiete').select('*');
+    if (error || !data) { console.warn('loadGebiete failed:', error); return; }
+
+    // Alle lokalen Gebiete-Arrays leeren
+    Object.values(regionen).forEach(r => r.gebiete = []);
+
+    data.forEach(dbG => {
+      // Polygon-Koordinaten aus DB laden
+      if (dbG.kml_coords) {
+        try { kmlP[dbG.id] = JSON.parse(dbG.kml_coords); } catch(e) {}
+      }
+      // Gebiet in die richtige Region einsortieren
+      const rKey = dbG.region_id || Object.keys(regionen)[0];
+      if (regionen[rKey]) {
+        regionen[rKey].gebiete.push({
+          id: dbG.id, name: dbG.name || dbG.id,
+          verteiler: '', verteilerId: null, whatsapp: false,
+          stueckzahl: dbG.stueckzahl || 0, status: 'offen', hinweise: []
+        });
+      }
+    });
+  } catch(e) {
+    console.warn('loadGebiete failed:', e);
+  }
+}
+
+async function showApp() {
+  document.getElementById('loginScreen').classList.add('hidden');
+  document.getElementById('appHeader').style.display = 'flex';
+  document.getElementById('appBody').style.display   = 'flex';
+
+  // User pill
+  const name  = currentProfile?.name || currentUser.email.split('@')[0];
+  const rolle = currentProfile?.rolle || 'verteiler';
+  document.getElementById('userAvatar').textContent  = name.charAt(0).toUpperCase();
+  document.getElementById('userName').textContent    = name;
+  const badge = document.getElementById('roleBadge');
+  badge.textContent  = rolle.charAt(0).toUpperCase() + rolle.slice(1);
+  badge.className    = `role-badge rb-${rolle}`;
+
+  curRole = rolle;
+  // Admin-Button: Nutzer einladen
+  if (rolle === 'admin') {
+    document.getElementById('inviteUserBtn').style.display = 'block';
+  }
+  await loadAllUsers();
+  await loadKampagnen();
+  await loadCustomGebiete();  // Selbst gezeichnete Gebiete aus DB laden
+  initApp();
+  // Erste Kampagne automatisch laden
+  if (curKampagne?.id && curKampagne.id !== 'default') {
+    await loadGebieteForKampagne(curKampagne.id);
+  }
+}
+
+// Check if already logged in on page load
+async function checkSession() {
+  // Detect invite/recovery link tokens in URL hash
+  const hash = window.location.hash;
+  const isInviteLink = hash.includes('type=invite') || hash.includes('type=recovery') || hash.includes('type=magiclink');
+
+  // Listen for auth state change (Supabase processes the token from the URL)
+  if (isInviteLink) {
+    const { data: { subscription } } = sb.auth.onAuthStateChange(async (event, session) => {
+      if (session && (event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY')) {
+        currentUser = session.user;
+        // Show password-set screen for invite links
+        document.getElementById('loginScreen').style.display = 'none';
+        document.getElementById('setPasswordScreen').style.display = 'flex';
+        subscription.unsubscribe();
+      }
+    });
+    return; // Don't proceed with normal session check
+  }
+
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) {
+    currentUser = session.user;
+    await loadProfile();
+    showApp();
+  }
+}
+
+// Enter key on login
+document.addEventListener('DOMContentLoaded', () => {
+  checkSession();
+  document.getElementById('loginPassword').addEventListener('keydown', e => {
+    if (e.key === 'Enter') doLogin();
+  });
+  document.getElementById('newPasswordConfirm').addEventListener('keydown', e => {
+    if (e.key === 'Enter') doSetPassword();
+  });
+  window.addEventListener('resize', ()=>{ if(mapInited) showDrawToolbar(); });
+});
+
+// ============================================================
+// APP DATA (local fallback while DB not fully set up)
+// ============================================================
+// Regionen-Metadaten (Gebiete werden aus DB geladen)
+const regionen = {
+  '01':{name:'Bad Köstritz / Caaschwitz',short:'Köstritz',center:[50.9250,12.0100],zoom:13,gebiete:[]},
+  '02':{name:'Kraftsdorf',short:'Kraftsdorf',center:[50.9600,12.0400],zoom:13,gebiete:[]},
+  '03':{name:'VG Brahmetal',short:'Brahmetal',center:[50.9900,12.1200],zoom:12,gebiete:[]},
+  '04':{name:'Ronneburg',short:'Ronneburg',center:[50.8680,12.1810],zoom:13,gebiete:[]},
+};
+
+const anfragen=[];
+
+// ============================================================
+// KML POLYGONS
+// ============================================================
+// Polygon-Koordinaten (werden aus DB geladen)
+const kmlP={};
+
+function parseKML(txt){
+  const doc=new DOMParser().parseFromString(txt,'text/xml'),res={};
+  doc.querySelectorAll('Placemark').forEach(pm=>{
+    const n=pm.querySelector('name'),c=pm.querySelector('coordinates');
+    if(!n||!c)return;
+    const id=n.textContent.trim().split(' ')[0];
+    const coords=c.textContent.trim().split(/\s+/).map(pt=>{const[lng,lat]=pt.split(',').map(Number);return[lat,lng]}).filter(c=>!isNaN(c[0]));
+    res[id]=coords;
+  });
+  return res;
+}
+
+function getCoords(rk,i,tot,gid){
+  if(kmlP[gid])return kmlP[gid];
+  const[cLat,cLng]=regionen[rk].center,cols=Math.ceil(Math.sqrt(tot)),col=i%cols,row=Math.floor(i/cols),s=.012;
+  const lat=cLat+(Math.ceil(tot/cols)/2-row-.5)*s*2,lng=cLng+(col-cols/2+.5)*s*2;
+  return[[lat+s,lng-s],[lat+s,lng+s],[lat-s,lng+s],[lat-s,lng-s]];
+}
+
+// ============================================================
+// STATE
+// ============================================================
+let curR='01',selId=null,curRole='verteiler',layers={},map,mapInited=false;
+const scol={offen:{f:'#aeaeb2',s:'#8e8e93'},zugeteilt:{f:'#ff9500',s:'#c97800'},fertig:{f:'#34c759',s:'#248a3d'},problem:{f:'#ff3b30',s:'#c62828'}};
+
+function initApp(){
+  renderPills(); renderList(); renderStats();
+  if(!mapInited){ setTimeout(()=>{ initMap(); mapInited=true; showDrawToolbar(); },100); }
+}
+
+// ============================================================
+// MAP
+// ============================================================
+function initMap(){
+  map=L.map('map',{center:[50.925,12.01],zoom:12,zoomControl:true});
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:19}).addTo(map); setTimeout(()=>map.invalidateSize(),200);
+  drawPolygons();
+}
+
+function drawPolygons(){
+  Object.values(layers).forEach(l=>map.removeLayer(l));layers={};
+  const r=regionen[curR];
+  r.gebiete.forEach((g,i)=>{
+    const c=getCoords(curR,i,r.gebiete.length,g.id),col=scol[g.status]||scol.offen;
+    const poly=L.polygon(c,{color:col.s,fillColor:col.f,fillOpacity:.35,weight:2}).addTo(map);
+    poly.bindPopup(`<div class="popup-id">${g.id}</div><div class="popup-name">${g.name}</div><div class="popup-meta">📦 ${g.stueckzahl} · ${g.verteiler||'Nicht zugeteilt'}</div>`);
+    poly.on('click',()=>{selGebiet(g.id);if(window.innerWidth<=768)document.getElementById('sidebar').classList.remove('open')});
+    poly.on('mouseover',()=>poly.setStyle({fillOpacity:.55}));
+    poly.on('mouseout',()=>poly.setStyle({fillOpacity:selId===g.id?.55:.35}));
+    layers[g.id]=poly;
+  });
+  map.flyTo(r.center,r.zoom,{duration:.8});
+}
+
+// ============================================================
+// SIDEBAR
+// ============================================================
+function renderPills(){
+  document.getElementById('regionPills').innerHTML=Object.entries(regionen).map(([k,r])=>
+    `<button class="pill ${k===curR?'active':''}" onclick="switchR('${k}')">${r.short}</button>`).join('');
+}
+function switchR(k){curR=k;selId=null;closeDetail();renderPills();renderList();renderStats();drawPolygons();showDrawToolbar()}
+function renderList(){
+  document.getElementById('gebietList').innerHTML=regionen[curR].gebiete.map(g=>`
+    <div class="g-card status-${g.status} ${selId===g.id?'sel':''}" onclick="selGebiet('${g.id}')">
+      <div class="g-top"><span class="g-id">${g.id}</span><span class="s-chip c-${g.status}">${sl(g.status)}</span></div>
+      <div class="g-name">${g.name}</div>
+      <div class="g-meta"><span>📦 ${g.stueckzahl}</span><span>${g.verteiler?'👤 '+g.verteiler.split(' ')[0]:'— offen'}</span>${g.whatsapp?'<span class="wa">WA</span>':''}</div>
+    </div>`).join('');
+}
+function sl(s){return{offen:'Offen',zugeteilt:'Zugeteilt',fertig:'Fertig ✓',problem:'Problem !'}[s]||s}
+function renderStats(){
+  const gs=regionen[curR].gebiete,tot=gs.reduce((a,g)=>a+g.stueckzahl,0),
+    vert=gs.filter(g=>g.status==='fertig').reduce((a,g)=>a+g.stueckzahl,0),fn=gs.filter(g=>g.status==='fertig').length;
+  document.getElementById('statFlyer').textContent=tot.toLocaleString('de');
+  document.getElementById('statVerteilt').textContent=vert.toLocaleString('de');
+  document.getElementById('statOffen').textContent=(tot-vert).toLocaleString('de');
+  document.getElementById('progText').textContent=`${fn} / ${gs.length}`;
+  document.getElementById('progFill').style.width=(fn/gs.length*100)+'%';
+}
+
+// ============================================================
+// DETAIL
+// ============================================================
+function selGebiet(id){
+  selId=id;renderList();
+  Object.entries(layers).forEach(([gid,l])=>l.setStyle({fillOpacity:gid===id?.6:.22,weight:gid===id?3:2}));
+  openDetail(id);
+}
+function getG(id){for(const r of Object.values(regionen)){const g=r.gebiete.find(g=>g.id===id);if(g)return g}}
+
+function openDetail(id){
+  const g=getG(id);
+  document.getElementById('detailId').textContent=g.id;
+  document.getElementById('detailTitle').textContent=g.name;
+  const isAdmin=curRole==='admin';
+  const isM=(curRole==='verwalter'&&verwalterHatGebietZugriff(id))||isAdmin;
+  // isV: echter Verteiler, ODER jemand (auch Admin/Verwalter) der diesem Gebiet zugewiesen ist
+  const isV=curRole==='verteiler'||(g.verteilerId&&g.verteilerId===currentUser?.id);
+  // Darf dieser Nutzer den Verteiler-Status (Fertig/Problem) setzen?
+  const darfVerteilerStatus = isM || isV;
+  let h='';
+
+  h+=`<div class="d-sec"><div class="info-g">
+    <div><div class="ii-label">Stückzahl</div><div class="ii-val" style="color:var(--blue)">${g.stueckzahl}</div></div>
+    <div><div class="ii-label">Status</div><div class="ii-val">${sl(g.status)}</div></div>
+    <div class="ii-full"><div class="ii-label">Verteiler</div><div class="ii-val">${g.verteiler||'— nicht zugeteilt'}</div></div>
+  </div></div>`;
+
+  h+=`<div class="d-sec"><div class="sec-hd">Status</div><div class="s-grid">
+    ${isM?`<button class="s-btn ${g.status==='offen'?'ao':''}" onclick="setSt('${g.id}','offen')">Offen</button>`:''}
+    ${isM?`<button class="s-btn ${g.status==='zugeteilt'?'az':''}" onclick="setSt('${g.id}','zugeteilt')">Zugeteilt</button>`:''}
+    ${darfVerteilerStatus?`<button class="s-btn ${g.status==='fertig'?'af':''}" onclick="setSt('${g.id}','fertig')">Fertig ✓</button>`:''}
+    ${darfVerteilerStatus?`<button class="s-btn ${g.status==='problem'?'ap':''}" onclick="setSt('${g.id}','problem')">Problem !</button>`:''}
+  </div></div>`;
+
+  if(isM){
+    const userOptions = `<option value="">— nicht zugeteilt</option>` +
+      allUsers.map(u=>
+        `<option value="${u.id}" data-name="${u.name}" ${g.verteilerId===u.id?'selected':''}>${u.name}${u.rolle==='verwalter'?' (Verwalter)':u.rolle==='admin'?' (Admin)':''}</option>`
+      ).join('');
+    h+=`<div class="d-sec"><div class="sec-hd">Verteiler zuweisen</div><div class="f-stack">
+      <select id="inpV">${userOptions}</select>
+      <button class="btn btn-p" onclick="saveZ('${g.id}')">Speichern</button>
+    </div></div>
+    <div class="d-sec"><div class="sec-hd">Stückzahl</div><div class="f-stack">
+      <input type="number" id="inpS" value="${g.stueckzahl}">
+      <button class="btn btn-g" onclick="saveSt2('${g.id}')">Ändern</button>
+    </div></div>`;
+  }
+  if(isV){
+    h+=`<div class="d-sec"><div class="sec-hd">Anfrage</div><div class="f-stack">
+      <button class="btn btn-g" onclick="openModal('${g.id}')">📦 Stückzahl beantragen</button>
+    </div></div>`;
+  }
+  h+=`<div class="d-sec"><div class="sec-hd">Hinweis</div><div class="f-stack">
+    <textarea id="inpH" placeholder="z.B. Briefkastensperren in Hauptstraße…"></textarea>
+    <button class="btn btn-g" onclick="saveH('${g.id}')">Speichern</button>
+  </div></div>`;
+  if(g.hinweise.length){
+    h+=`<div class="d-sec"><div class="sec-hd">Hinweise (${g.hinweise.length})</div><div class="f-stack">
+      ${g.hinweise.map(n=>`<div class="hint-item">💬 ${n}</div>`).join('')}
+    </div></div>`;
+  }
+  if(curRole==='admin'){
+    h+=`<div class="d-sec"><div class="sec-hd">Admin – Geodaten</div><div class="f-stack">
+      <label class="btn-f">📂 KML hochladen<input type="file" accept=".kml" style="display:none" onchange="handleKML(event)"></label>
+      ${window.innerWidth>=768?`<button class="btn btn-g" onclick="redrawGebiet('${g.id}')">✏️ Polygon neu zeichnen</button>`:''}
+      <button class="btn btn-d" onclick="deleteGebiet('${g.id}')">Gebiet löschen</button>
+    </div></div>`;
+  } else if(curRole==='verwalter' && window.innerWidth>=768 && verwalterHatGebietZugriff(g.id)){
+    h+=`<div class="d-sec"><div class="sec-hd">Geodaten</div><div class="f-stack">
+      <button class="btn btn-g" onclick="redrawGebiet('${g.id}')">✏️ Polygon neu zeichnen</button>
+    </div></div>`;
+  }
+  document.getElementById('detailBody').innerHTML=h;
+  document.getElementById('detailPanel').classList.add('open');
+}
+
+function closeDetail(){
+  document.getElementById('detailPanel').classList.remove('open');
+  selId=null;Object.values(layers).forEach(l=>l.setStyle({fillOpacity:.35,weight:2}));renderList();
+}
+
+// ============================================================
+// ACTIONS (write to Supabase + local update)
+// ============================================================
+async function setSt(id,s){
+  const g=getG(id); g.status=s;
+  const col=scol[s];
+  if(layers[id])layers[id].setStyle({fillColor:col.f,color:col.s,fillOpacity:.6});
+  renderList();renderStats();openDetail(id);
+  const kampId = curKampagne?.id || null;
+  if (!kampId) { toast(`${id} → ${sl(s)} (lokal, keine Kampagne)`); return; }
+  // Upsert in gebiet_status (composite PK: gebiet_id + kampagne_id)
+  const { error } = await sb.from('gebiet_status').upsert({
+    gebiet_id: id,
+    kampagne_id: kampId,
+    status: s,
+    stueckzahl: g.stueckzahl,
+    updated_at: new Date().toISOString()
+  }, { onConflict: 'gebiet_id,kampagne_id' });
+  if (error) console.error('setSt error:', JSON.stringify(error));
+  toast(error ? `⚠️ DB-Fehler: ${error.message||error.code||'unbekannt'}` : `${id} → ${sl(s)}`);
+}
+
+async function saveZ(id){
+  const g=getG(id);
+  const sel=document.getElementById('inpV');
+  const userId=sel.value;
+  const userName=sel.options[sel.selectedIndex]?.dataset?.name||'';
+  g.verteiler=userName; g.verteilerId=userId; g.status=userId?'zugeteilt':'offen';
+  const col=scol[g.status];
+  if(layers[id])layers[id].setStyle({fillColor:col.f,color:col.s});
+  renderList();renderStats();openDetail(id);
+  const kampId = curKampagne?.id || null;
+  if (!kampId) { toast('⚠️ Keine Kampagne ausgewählt'); return; }
+  // Upsert in gebiet_status (composite PK: gebiet_id + kampagne_id)
+  const { error } = await sb.from('gebiet_status').upsert({
+    gebiet_id: id,
+    kampagne_id: kampId,
+    status: g.status,
+    verteiler_id: userId||null,
+    verteiler_name: userName||null,
+    stueckzahl: g.stueckzahl,
+    updated_at: new Date().toISOString()
+  }, { onConflict: 'gebiet_id,kampagne_id' });
+  if (error) console.error('saveZ error:', JSON.stringify(error));
+  toast(error ? `⚠️ DB-Fehler: ${error.message||error.code||'unbekannt'}` : `${id} → ${userName||'nicht zugeteilt'}`);
+}
+
+async function saveSt2(id){
+  const g=getG(id),v=parseInt(document.getElementById('inpS').value);
+  const kampId = curKampagne?.id || null;
+  if(!isNaN(v)&&v>0){
+    g.stueckzahl=v;
+    renderStats();openDetail(id);
+    if (kampId) {
+      // Upsert in gebiet_status (composite PK: gebiet_id + kampagne_id)
+      const {error}=await sb.from('gebiet_status').upsert({
+        gebiet_id: id,
+        kampagne_id: kampId,
+        stueckzahl: v,
+        status: g.status,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'gebiet_id,kampagne_id' });
+      if (error) console.error('saveSt2 error:', JSON.stringify(error));
+      toast(error ? '⚠️ DB-Fehler' : `Stückzahl → ${v}`);
+    } else {
+      toast(`Stückzahl → ${v} (lokal, keine Kampagne)`);
+    }
+  }
+}
+
+async function saveH(id){
+  const g=getG(id),t=document.getElementById('inpH').value.trim();
+  if(t){
+    g.hinweise.push(t);
+    openDetail(id);
+    const {error}=await sb.from('hinweise').insert({gebiet_id:id,user_id:currentUser.id,text:t});
+    toast(error ? '⚠️ DB-Fehler' : 'Hinweis gespeichert');
+  }
+}
+
+async function deleteGebiet(id){
+  if(!confirm(`Gebiet ${id} wirklich löschen?`)) return;
+
+  // Zuerst aus DB löschen (gebiet_status + gebiete)
+  await sb.from('gebiet_status').delete().eq('gebiet_id', id);
+  const { error } = await sb.from('gebiete').delete().eq('id',id);
+  if (error) {
+    console.error('DB delete gebiet failed:', error);
+    toast('⚠️ Gebiet konnte nicht gelöscht werden: ' + error.message);
+    return;
+  }
+
+  // Erst nach erfolgreichem DB-Delete lokal entfernen
+  for(const r of Object.values(regionen)){
+    const idx=r.gebiete.findIndex(g=>g.id===id);
+    if(idx>-1){ r.gebiete.splice(idx,1); break; }
+  }
+  if(layers[id]){ map.removeLayer(layers[id]); delete layers[id]; }
+  delete kmlP[id];
+
+  closeDetail();
+  renderPills(); renderList(); renderStats();
+  toast(`🗑 Gebiet ${id} gelöscht`);
+}
+
+// ============================================================
+// MODAL
+// ============================================================
+let mId=null;
+function openModal(id){mId=id;document.getElementById('modalMenge').value='';document.getElementById('modalGrund').value='';document.getElementById('modalOv').classList.add('open')}
+function closeModal(){document.getElementById('modalOv').classList.remove('open')}
+async function submitAnfrage(){
+  const m=document.getElementById('modalMenge').value;
+  if(!m){toast('Stückzahl eingeben');return}
+  const {error}=await sb.from('anfragen').insert({gebiet_id:mId,user_id:currentUser.id,neue_stueckzahl:parseInt(m),grund:document.getElementById('modalGrund').value});
+  closeModal();
+  toast(error ? '⚠️ DB-Fehler' : `Anfrage für ${mId} gesendet`);
+}
+
+// ============================================================
+// MISC
+// ============================================================
+function toggleSidebar(){document.getElementById('sidebar').classList.toggle('open')}
+let pendingKml = {};
+
+function handleKML(e){
+  const f=e.target.files[0]; if(!f)return;
+  const rd=new FileReader();
+  rd.onload=ev=>{
+    const parsed=parseKML(ev.target.result);
+    const ids=Object.keys(parsed);
+    if(ids.length===0){toast('⚠️ Keine Gebiete in KML gefunden');return;}
+
+    pendingKml=parsed;
+
+    // Check which IDs already exist vs new
+    const allExistingIds=Object.values(regionen).flatMap(r=>r.gebiete.map(g=>g.id));
+    const known=ids.filter(id=>allExistingIds.includes(id));
+    const unknown=ids.filter(id=>!allExistingIds.includes(id));
+
+    document.getElementById('kmlFoundInfo').innerHTML=
+      `<strong>${ids.length} Polygon(e)</strong> gefunden: ${ids.join(', ')}`+
+      (known.length ? `<br><span style="color:var(--green)">✓ ${known.length} bekannte Gebiete werden automatisch aktualisiert</span>` : '')+
+      (unknown.length ? `<br><span style="color:var(--orange)">⚠️ ${unknown.length} unbekannte IDs – bitte Region zuweisen:</span>` : '');
+
+    // Build assignment rows for unknown IDs
+    const regionOptions=Object.entries(regionen).map(([k,r])=>
+      `<option value="${k}">${r.name}</option>`).join('');
+
+    document.getElementById('kmlGebieteList').innerHTML=unknown.map(id=>`
+      <div style="background:var(--surface2);border-radius:var(--r8);padding:10px 12px">
+        <div style="font-size:.8rem;font-weight:600;margin-bottom:6px">📍 Gebiet <span style="color:var(--blue)">${id}</span></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          <div>
+            <div style="font-size:.6rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:3px">Region</div>
+            <select id="kml_region_${id}" style="font-size:.78rem">${regionOptions}</select>
+          </div>
+          <div>
+            <div style="font-size:.6rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:3px">Name</div>
+            <input type="text" id="kml_name_${id}" placeholder="z.B. Kraftsdorf Nord" style="font-size:.78rem">
+          </div>
+          <div style="grid-column:1/-1">
+            <div style="font-size:.6rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:3px">Stückzahl</div>
+            <input type="number" id="kml_stueck_${id}" placeholder="z.B. 200" style="font-size:.78rem">
+          </div>
+        </div>
+      </div>`).join('');
+
+    document.getElementById('kmlModalOv').classList.add('open');
+  };
+  rd.readAsText(f);
+  // Reset input so same file can be uploaded again
+  e.target.value='';
+}
+
+function closeKmlModal(){
+  document.getElementById('kmlModalOv').classList.remove('open');
+  pendingKml={};
+}
+
+function applyKmlAssignments(){
+  const allExistingIds=Object.values(regionen).flatMap(r=>r.gebiete.map(g=>g.id));
+
+  // Apply all polygons
+  Object.assign(kmlP, pendingKml);
+
+  // For unknown IDs: create new gebiete entries
+  Object.keys(pendingKml).forEach(id=>{
+    if(!allExistingIds.includes(id)){
+      const regionKey=document.getElementById(`kml_region_${id}`)?.value||curR;
+      const name=document.getElementById(`kml_name_${id}`)?.value.trim()||id;
+      const stueck=parseInt(document.getElementById(`kml_stueck_${id}`)?.value)||100;
+      regionen[regionKey].gebiete.push({
+        id, name, verteiler:'', verteilerId:null, whatsapp:false,
+        stueckzahl:stueck, status:'offen', hinweise:[]
+      });
+    }
+  });
+
+  closeKmlModal();
+  renderPills(); renderList(); renderStats(); drawPolygons();
+  toast(`✓ ${Object.keys(pendingKml).length} Polygon(e) übernommen`);
+}
+// ============================================================
+// DRAW TOOL (desktop/tablet only, admin/verwalter)
+// ============================================================
+let drawMode=false, drawPoints=[], drawMarkers=[], drawPolyline=null, drawPreviewLine=null, drawEditId=null;
+
+function showDrawToolbar(){
+  const isAdmin = curRole === 'admin';
+  const isVerwalterWithAccess = curRole === 'verwalter' && verwalterHatRegionZugriff(curR);
+  if((isAdmin || isVerwalterWithAccess) && window.innerWidth >= 768){
+    document.getElementById('drawToolbar').classList.add('visible');
+  } else {
+    document.getElementById('drawToolbar').classList.remove('visible');
+  }
+}
+
+// Prüft ob der aktuelle Verwalter Zugriff auf eine Region hat
+function verwalterHatRegionZugriff(regionKey) {
+  if (curRole === 'admin') return true;
+  if (curRole !== 'verwalter') return false;
+  const verwRegionen = currentProfile?.verwaltete_regionen || [];
+  // Leere Liste = kein Zugriff (noch nicht zugewiesen)
+  return verwRegionen.includes(regionKey);
+}
+
+// Prüft ob Verwalter Zugriff auf ein Gebiet hat (anhand Region)
+function verwalterHatGebietZugriff(gebietId) {
+  if (curRole === 'admin') return true;
+  if (curRole !== 'verwalter') return false;
+  // Region des Gebiets ermitteln
+  for (const [rk, r] of Object.entries(regionen)) {
+    if (r.gebiete.find(g => g.id === gebietId)) {
+      return verwalterHatRegionZugriff(rk);
+    }
+  }
+  return false;
+}
+
+function toggleDraw(){
+  if(drawMode){drawCancel();return}
+  if(curRole==='verwalter' && !verwalterHatRegionZugriff(curR)){
+    toast('⚠️ Kein Zugriff auf diese Region');return;
+  }
+  drawMode=true;
+  drawPoints=[];drawMarkers=[];
+  document.getElementById('drawStartBtn').classList.add('active');
+  document.getElementById('drawCancelBtn').disabled=false;
+  setDrawInfo('Klicke auf die Karte um Punkte zu setzen');
+  map.getContainer().style.cursor='crosshair';
+  map.on('click',onDrawClick);
+  map.on('mousemove',onDrawMouseMove);
+}
+
+function onDrawClick(e){
+  if(!drawMode)return;
+  const ll=e.latlng;
+  drawPoints.push([ll.lat,ll.lng]);
+
+  // Add marker
+  const m=L.circleMarker(ll,{radius:5,color:'#009ee0',fillColor:'#fff',fillOpacity:1,weight:2}).addTo(map);
+  drawMarkers.push(m);
+
+  // Update polyline
+  if(drawPolyline)map.removeLayer(drawPolyline);
+  drawPolyline=L.polyline(drawPoints,{color:'#009ee0',weight:2,dashArray:'6,4'}).addTo(map);
+
+  const n=drawPoints.length;
+  document.getElementById('drawUndoBtn').disabled=false;
+  document.getElementById('drawFinishBtn').disabled=n<3;
+  setDrawInfo(`${n} Punkt${n>1?'e':''} gesetzt${n<3?' (min. 3)':' – ✅ zum Abschließen'}`);
+}
+
+function onDrawMouseMove(e){
+  if(!drawMode||drawPoints.length===0)return;
+  if(drawPreviewLine)map.removeLayer(drawPreviewLine);
+  const pts=[...drawPoints,[e.latlng.lat,e.latlng.lng]];
+  // Close preview to first point
+  if(drawPoints.length>=2) pts.push(drawPoints[0]);
+  drawPreviewLine=L.polyline(pts,{color:'#009ee0',weight:1,opacity:.4,dashArray:'3,6'}).addTo(map);
+}
+
+function drawUndo(){
+  if(drawPoints.length===0)return;
+  drawPoints.pop();
+  const m=drawMarkers.pop();
+  if(m)map.removeLayer(m);
+  if(drawPolyline)map.removeLayer(drawPolyline);
+  if(drawPreviewLine)map.removeLayer(drawPreviewLine);
+  if(drawPoints.length>0){
+    drawPolyline=L.polyline(drawPoints,{color:'#009ee0',weight:2,dashArray:'6,4'}).addTo(map);
+  }
+  const n=drawPoints.length;
+  document.getElementById('drawUndoBtn').disabled=n===0;
+  document.getElementById('drawFinishBtn').disabled=n<3;
+  setDrawInfo(n===0?'Klicke auf die Karte um Punkte zu setzen':`${n} Punkt${n>1?'e':''} gesetzt${n<3?' (min. 3)':' – ✅ zum Abschließen'}`);
+}
+
+function drawFinish(){
+  if(drawPoints.length<3)return;
+  // Clean up drawing visuals
+  map.off('click',onDrawClick);
+  map.off('mousemove',onDrawMouseMove);
+  if(drawPreviewLine){map.removeLayer(drawPreviewLine);drawPreviewLine=null}
+  map.getContainer().style.cursor='';
+  setDrawInfo('');
+
+  // Show preview polygon
+  if(drawPolyline)map.removeLayer(drawPolyline);
+  drawPolyline=L.polygon(drawPoints,{color:'#009ee0',fillColor:'#009ee0',fillOpacity:.25,weight:2,dashArray:'6,4'}).addTo(map);
+
+  // Fill region dropdown (Verwalter nur eigene Regionen)
+  const sel=document.getElementById('newGebietRegion');
+  const allowedRegionen = Object.entries(regionen).filter(([k])=>verwalterHatRegionZugriff(k));
+  sel.innerHTML=allowedRegionen.map(([k,r])=>
+    `<option value="${k}" ${k===curR?'selected':''}>${r.name}</option>`).join('');
+  if(!allowedRegionen.find(([k])=>k===curR) && allowedRegionen.length>0){
+    sel.value=allowedRegionen[0][0];
+  }
+
+  // Check if we're editing an existing gebiet
+  const existingG=drawEditId?getG(drawEditId):null;
+  document.getElementById('newGebietModalTitle').textContent=existingG?`✏️ Polygon für ${drawEditId} aktualisieren`:'📍 Neues Gebiet erstellen';
+  if(existingG){
+    document.getElementById('newGebietId').value=existingG.id;
+    document.getElementById('newGebietId').readOnly=true;
+    document.getElementById('newGebietName').value=existingG.name;
+    document.getElementById('newGebietStueck').value=existingG.stueckzahl;
+    document.getElementById('newGebietCoordInfo').textContent=`📐 ${drawPoints.length} Eckpunkte neu gezeichnet (ersetzt altes Polygon)`;
+  } else {
+    document.getElementById('newGebietId').readOnly=false;
+    // Auto-suggest next ID
+    const rGebiete=regionen[curR].gebiete;
+    const lastId=rGebiete.length>0?rGebiete[rGebiete.length-1].id:'';
+    const prefix=curR;
+    const lastLetter=lastId?lastId.replace(prefix,''):'';
+    const nextLetter=lastLetter?String.fromCharCode(lastLetter.charCodeAt(0)+1):'A';
+    document.getElementById('newGebietId').value=prefix+nextLetter;
+    document.getElementById('newGebietName').value='';
+    document.getElementById('newGebietStueck').value='100';
+    document.getElementById('newGebietCoordInfo').textContent=`📐 ${drawPoints.length} Eckpunkte gezeichnet`;
+  }
+
+  document.getElementById('newGebietModalOv').classList.add('open');
+}
+
+function drawCancel(){
+  drawMode=false;drawEditId=null;
+  map.off('click',onDrawClick);
+  map.off('mousemove',onDrawMouseMove);
+  map.getContainer().style.cursor='';
+  // Remove visuals
+  drawMarkers.forEach(m=>map.removeLayer(m));
+  if(drawPolyline){map.removeLayer(drawPolyline);drawPolyline=null}
+  if(drawPreviewLine){map.removeLayer(drawPreviewLine);drawPreviewLine=null}
+  drawPoints=[];drawMarkers=[];
+  // Reset buttons
+  document.getElementById('drawStartBtn').classList.remove('active');
+  document.getElementById('drawUndoBtn').disabled=true;
+  document.getElementById('drawFinishBtn').disabled=true;
+  document.getElementById('drawCancelBtn').disabled=true;
+  setDrawInfo('');
+  document.getElementById('newGebietModalOv').classList.remove('open');
+}
+
+function redrawGebiet(id){
+  // Start draw mode for an existing gebiet
+  closeDetail();
+  drawEditId=id;
+  // Zoom to existing polygon if available
+  if(layers[id]){
+    map.fitBounds(layers[id].getBounds().pad(0.3));
+  }
+  toggleDraw();
+  setDrawInfo(`Polygon für ${id} neu zeichnen – Klicke Eckpunkte auf die Karte`);
+}
+
+async function drawSave(){
+  const id=document.getElementById('newGebietId').value.trim();
+  const name=document.getElementById('newGebietName').value.trim();
+  const regionKey=document.getElementById('newGebietRegion').value;
+  const stueck=parseInt(document.getElementById('newGebietStueck').value)||100;
+
+  if(!id){toast('⚠️ Bitte Gebiet-ID eingeben');return}
+  if(!name){toast('⚠️ Bitte Name eingeben');return}
+
+  // Store polygon coordinates
+  kmlP[id]=drawPoints.slice();
+
+  const existing=getG(id);
+  if(existing){
+    // UPDATE existing gebiet
+    existing.name=name;
+    existing.stueckzahl=stueck;
+
+    // Save polygon to Supabase
+    try{
+      const {error}=await sb.from('gebiete').update({
+        name, stueckzahl:stueck, kml_coords:JSON.stringify(drawPoints), updated_at:new Date()
+      }).eq('id',id);
+      if(error){ console.warn('DB update error:',error); toast(`⚠️ DB-Fehler: ${error.message||error.code}`); return; }
+    }catch(e){ console.warn('DB update failed:',e); toast(`⚠️ Fehler beim Speichern`); return; }
+
+    document.getElementById('newGebietModalOv').classList.remove('open');
+    drawCancel();
+    renderPills(); renderList(); renderStats(); drawPolygons();
+    toast(`✅ Polygon für ${id} „${name}" aktualisiert`);
+  } else {
+    // CREATE new gebiet
+    regionen[regionKey].gebiete.push({
+      id, name, verteiler:'', verteilerId:null, whatsapp:false,
+      stueckzahl:stueck, status:'offen', hinweise:[]
+    });
+
+    try{
+      const {error}=await sb.from('gebiete').insert({
+        id, name, region_id:regionKey, stueckzahl:stueck,
+        kml_coords:JSON.stringify(drawPoints)
+      });
+      if(error){
+        console.warn('DB save error:',error);
+        // Gebiet aus lokalen Daten wieder entfernen (Rollback)
+        const idx=regionen[regionKey].gebiete.findIndex(g=>g.id===id);
+        if(idx>-1) regionen[regionKey].gebiete.splice(idx,1);
+        delete kmlP[id];
+        toast(`⚠️ DB-Fehler: ${error.message||error.code}`);
+        return;
+      }
+    }catch(e){ console.warn('DB save failed:',e); toast(`⚠️ Fehler beim Speichern`); return; }
+
+    document.getElementById('newGebietModalOv').classList.remove('open');
+    drawCancel();
+    if(regionKey!==curR) switchR(regionKey);
+    else { renderPills(); renderList(); renderStats(); drawPolygons(); }
+    toast(`✅ Gebiet ${id} „${name}" erstellt`);
+  }
+  drawEditId=null;
+}
+
+function setDrawInfo(msg){
+  const el=document.getElementById('drawInfo');
+  if(msg){el.textContent=msg;el.classList.add('visible')}
+  else{el.classList.remove('visible')}
+}
+
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2800)}
+</script>
+</body>
+</html>
