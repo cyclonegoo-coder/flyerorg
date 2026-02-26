@@ -282,7 +282,7 @@ textarea{min-height:68px}
     <button id="manageUsersBtn" onclick="openManageUsersModal()" title="Nutzerverwaltung" style="display:none;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='var(--text3)'">👥</button>
     <button id="inviteUserBtn" onclick="openInviteModal()" title="Nutzer einladen" style="display:none;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='var(--text3)'">➕👤</button>
     <!-- User pill with role badge -->
-    <div class="user-pill" onclick="doLogout()" title="Abmelden">
+    <div class="user-pill" onclick="openProfilModal()" title="Mein Profil">
       <div class="user-avatar" id="userAvatar">?</div>
       <div>
         <div class="user-name" id="userName">–</div>
@@ -445,6 +445,40 @@ textarea{min-height:68px}
     <div id="manageUserList" style="max-height:350px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;margin-bottom:10px"></div>
     <div class="m-actions">
       <button class="btn btn-g" onclick="closeManageUsersModal()">Schließen</button>
+    </div>
+  </div>
+</div>
+
+<!-- MEIN PROFIL MODAL -->
+<div class="modal-ov" id="profilModalOv" onclick="if(event.target===this)closeProfilModal()">
+  <div class="modal">
+    <div class="m-handle"></div>
+    <div class="m-title">👤 Mein Profil</div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div>
+        <div style="font-size:.65rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:2px">Name</div>
+        <div id="profilName" style="font-size:.85rem;font-weight:500">–</div>
+      </div>
+      <div>
+        <div style="font-size:.65rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:2px">E-Mail</div>
+        <div id="profilEmail" style="font-size:.85rem">–</div>
+      </div>
+      <div>
+        <div style="font-size:.65rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:2px">Rolle</div>
+        <div id="profilRolle" style="font-size:.85rem">–</div>
+      </div>
+      <div>
+        <div style="font-size:.65rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:4px">Telefonnummer</div>
+        <div style="display:flex;gap:6px">
+          <input type="tel" id="profilTelefon" placeholder="+49 123 456789" style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:var(--r8);font-size:.82rem">
+          <button class="btn btn-p" onclick="saveProfilTelefon()" style="font-size:.78rem">Speichern</button>
+        </div>
+      </div>
+    </div>
+    <div id="profilStatus" style="font-size:.78rem;margin-top:8px;min-height:18px"></div>
+    <div class="m-actions" style="margin-top:10px">
+      <button class="btn btn-d" onclick="doLogout()" style="font-size:.78rem">Abmelden</button>
+      <button class="btn btn-g" onclick="closeProfilModal()">Schließen</button>
     </div>
   </div>
 </div>
@@ -797,6 +831,36 @@ async function doLogout() {
   if (!confirm('Wirklich abmelden?')) return;
   await sb.auth.signOut();
   location.reload();
+}
+
+// ============================================================
+// MEIN PROFIL
+// ============================================================
+function openProfilModal() {
+  document.getElementById('profilName').textContent = currentProfile?.name || '–';
+  document.getElementById('profilEmail').textContent = currentUser?.email || '–';
+  document.getElementById('profilRolle').textContent = (currentProfile?.rolle || 'verteiler').charAt(0).toUpperCase() + (currentProfile?.rolle || 'verteiler').slice(1);
+  document.getElementById('profilTelefon').value = currentProfile?.telefon || '';
+  document.getElementById('profilStatus').textContent = '';
+  document.getElementById('profilModalOv').classList.add('open');
+}
+function closeProfilModal() {
+  document.getElementById('profilModalOv').classList.remove('open');
+}
+async function saveProfilTelefon() {
+  const tel = document.getElementById('profilTelefon').value.trim();
+  const { error } = await sb.from('user_profiles').update({ telefon: tel }).eq('id', currentUser.id);
+  if (error) {
+    document.getElementById('profilStatus').style.color = 'var(--red)';
+    document.getElementById('profilStatus').textContent = '⚠️ Fehler: ' + (error.message || error.code);
+    return;
+  }
+  currentProfile.telefon = tel;
+  // Auch in allUsers aktualisieren
+  const u = allUsers.find(u => u.id === currentUser.id);
+  if (u) u.telefon = tel;
+  document.getElementById('profilStatus').style.color = 'var(--green)';
+  document.getElementById('profilStatus').textContent = '✅ Telefonnummer gespeichert';
 }
 
 // ============================================================
@@ -1356,6 +1420,52 @@ function openDetail(id){
     ${darfVerteilerStatus?`<button class="s-btn ${g.status==='fertig'?'af':''}" onclick="setSt('${g.id}','fertig')">Fertig ✓</button>`:''}
     ${darfVerteilerStatus?`<button class="s-btn ${g.status==='problem'?'ap':''}" onclick="setSt('${g.id}','problem')">Problem !</button>`:''}
   </div></div>`;
+
+  // Kontakt-Sektion
+  const kontakte = [];
+  // Region dieses Gebiets ermitteln
+  let gebietRegion = null;
+  for (const [rk, r] of Object.entries(regionen)) {
+    if (r.gebiete.find(gg => gg.id === g.id)) { gebietRegion = rk; break; }
+  }
+
+  if (curRole === 'verteiler') {
+    // Verteiler sieht: Verwalter seiner Region
+    allUsers.filter(u => u.rolle === 'verwalter' && u.verwaltete_regionen && u.verwaltete_regionen.includes(gebietRegion))
+      .forEach(u => kontakte.push({ ...u, label: 'Verwalter' }));
+  } else if (curRole === 'verwalter') {
+    // Verwalter sieht: Verteiler dieses Gebiets + Admins
+    if (g.verteilerId) {
+      const vt = allUsers.find(u => u.id === g.verteilerId);
+      if (vt) kontakte.push({ ...vt, label: 'Verteiler' });
+    }
+    allUsers.filter(u => u.rolle === 'admin').forEach(u => kontakte.push({ ...u, label: 'Admin' }));
+  } else if (isAdmin) {
+    // Admin sieht: Verteiler + Verwalter der Region
+    if (g.verteilerId) {
+      const vt = allUsers.find(u => u.id === g.verteilerId);
+      if (vt) kontakte.push({ ...vt, label: 'Verteiler' });
+    }
+    allUsers.filter(u => u.rolle === 'verwalter' && u.verwaltete_regionen && u.verwaltete_regionen.includes(gebietRegion))
+      .forEach(u => kontakte.push({ ...u, label: 'Verwalter' }));
+  }
+
+  if (kontakte.length > 0) {
+    h += `<div class="d-sec"><div class="sec-hd">Kontakt</div><div class="f-stack">`;
+    kontakte.forEach(k => {
+      const tel = k.telefon || '';
+      const hasPhone = tel.length > 0;
+      h += `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--surface2);border-radius:var(--r8)">
+        <div style="flex:1">
+          <div style="font-size:.8rem;font-weight:500">${k.name} <span style="font-size:.65rem;color:var(--text4)">(${k.label})</span></div>
+          ${hasPhone ? `<div style="font-size:.72rem;color:var(--text3)">${tel}</div>` : `<div style="font-size:.72rem;color:var(--text4)">Keine Nummer hinterlegt</div>`}
+        </div>
+        ${hasPhone ? `<a href="tel:${tel}" style="background:none;border:none;font-size:1rem;text-decoration:none;padding:2px 4px" title="Anrufen">📞</a>
+        <a href="https://wa.me/${tel.replace(/[^0-9+]/g,'').replace(/^0/,'+49')}" target="_blank" style="background:none;border:none;font-size:1rem;text-decoration:none;padding:2px 4px" title="WhatsApp">💬</a>` : ''}
+      </div>`;
+    });
+    h += `</div></div>`;
+  }
 
   if(isM){
     const userOptions = `<option value="">— nicht zugeteilt</option>` +
