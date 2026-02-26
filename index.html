@@ -817,7 +817,14 @@ function renderUserList() {
     return;
   }
   list.innerHTML = allUsers.map(u => {
-    const rolleFarbe = u.rolle === 'admin' ? 'var(--red)' : u.rolle === 'verwalter' ? 'var(--blue)' : 'var(--green)';
+    const isSelf = u.id === currentUser?.id;
+    const rolleSelect = isSelf
+      ? `<span style="font-size:.65rem;font-weight:600;padding:2px 7px;border-radius:4px;background:var(--red)22;color:var(--red)">${u.rolle}</span>`
+      : `<select onchange="changeRole('${u.id}',this.value)" style="font-size:.72rem;padding:2px 4px;border-radius:4px;border:1px solid var(--border);background:var(--surface1);cursor:pointer">
+          <option value="verteiler" ${u.rolle==='verteiler'?'selected':''}>Verteiler</option>
+          <option value="verwalter" ${u.rolle==='verwalter'?'selected':''}>Verwalter</option>
+          <option value="admin" ${u.rolle==='admin'?'selected':''}>Admin</option>
+        </select>`;
     const regEdit = u.rolle === 'verwalter'
       ? `<button onclick="openEditRegionenModal('${u.id}','${(u.name||'').replace(/'/g,"\\'")}',${JSON.stringify(u.verwaltete_regionen||[]).replace(/"/g,'&quot;')})" style="background:none;border:none;color:var(--blue);cursor:pointer;font-size:.8rem;padding:2px 4px;border-radius:4px" title="Regionen bearbeiten">🗺</button>`
       : '';
@@ -826,11 +833,29 @@ function renderUserList() {
         <div style="font-size:.82rem;font-weight:500">${u.name || '–'}</div>
         <div style="font-size:.68rem;color:var(--text3)">${u.email || ''}</div>
       </div>
-      <span style="font-size:.65rem;font-weight:600;padding:2px 7px;border-radius:4px;background:${rolleFarbe}22;color:${rolleFarbe}">${u.rolle}</span>
+      ${rolleSelect}
       ${regEdit}
       <button onclick="deleteUser('${u.id}','${(u.name||'').replace(/'/g,"\\'")}')" style="background:none;border:none;color:var(--text4);cursor:pointer;font-size:.8rem;padding:2px 4px;border-radius:4px" title="Nutzer entfernen">🗑</button>
     </div>`;
   }).join('');
+}
+
+// ============================================================
+// ROLLE ÄNDERN (Admin)
+// ============================================================
+async function changeRole(userId, newRolle) {
+  const { error } = await sb.from('user_profiles').update({ rolle: newRolle }).eq('id', userId);
+  if (error) {
+    toast('⚠️ Fehler: ' + (error.message || error.code));
+    console.error('changeRole error:', error);
+    renderUserList(); // Dropdown zurücksetzen
+    return;
+  }
+  // Lokal aktualisieren
+  const u = allUsers.find(u => u.id === userId);
+  if (u) u.rolle = newRolle;
+  renderUserList(); // Neu rendern (zeigt/versteckt 🗺-Button)
+  toast('✅ Rolle geändert → ' + newRolle);
 }
 
 // ============================================================
@@ -856,8 +881,8 @@ function closeEditRegModal() {
 async function saveRegionen() {
   const userId = document.getElementById('editRegUserId').value;
   const selected = Array.from(document.querySelectorAll('#editRegList input[type=checkbox]:checked')).map(cb => cb.value);
-  const { error } = await sb.from('user_profiles').update({ verwaltete_regionen: selected, updated_at: new Date() }).eq('id', userId);
-  if (error) { toast('⚠️ Fehler beim Speichern der Regionen'); console.error(error); return; }
+  const { error } = await sb.from('user_profiles').update({ verwaltete_regionen: selected }).eq('id', userId);
+  if (error) { toast('⚠️ Fehler: ' + (error.message || error.code)); console.error('saveRegionen error:', error); return; }
   // Lokal aktualisieren
   const u = allUsers.find(u => u.id === userId);
   if (u) u.verwaltete_regionen = selected;
@@ -1180,8 +1205,8 @@ function openDetail(id){
   document.getElementById('detailTitle').textContent=g.name;
   const isAdmin=curRole==='admin';
   const isM=(curRole==='verwalter'&&verwalterHatGebietZugriff(id))||isAdmin;
-  // isV: echter Verteiler, ODER jemand (auch Admin/Verwalter) der diesem Gebiet zugewiesen ist
-  const isV=curRole==='verteiler'||(g.verteilerId&&g.verteilerId===currentUser?.id);
+  // isV: nur wenn der aktuelle Nutzer diesem Gebiet als Verteiler zugewiesen ist
+  const isV=g.verteilerId&&g.verteilerId===currentUser?.id;
   // Darf dieser Nutzer den Verteiler-Status (Fertig/Problem) setzen?
   const darfVerteilerStatus = isM || isV;
   let h='';
@@ -1251,9 +1276,18 @@ function closeDetail(){
 // ACTIONS (write to Supabase + local update)
 // ============================================================
 async function setSt(id,s){
-  // Zugriffsprüfung: nur Admin oder Verwalter mit Regionszugriff
+  // Zugriffsprüfung
   if (curRole === 'verwalter' && !verwalterHatGebietZugriff(id)) {
     toast('⚠️ Kein Zugriff auf dieses Gebiet'); return;
+  }
+  if (curRole === 'verteiler') {
+    const g=getG(id);
+    if (!g?.verteilerId || g.verteilerId !== currentUser?.id) {
+      toast('⚠️ Du bist diesem Gebiet nicht zugewiesen'); return;
+    }
+    if (s !== 'fertig' && s !== 'problem') {
+      toast('⚠️ Du darfst nur Fertig oder Problem setzen'); return;
+    }
   }
   const g=getG(id); g.status=s;
   const col=scol[s];
