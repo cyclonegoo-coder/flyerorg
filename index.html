@@ -1062,6 +1062,7 @@ async function showApp() {
   await loadKampagnen();
   await loadCustomGebiete();  // Selbst gezeichnete Gebiete aus DB laden
   await loadAnfragen();       // Offene Anfragen laden
+  await loadHinweise();       // Hinweise aus DB laden
   initApp();
   // Erste Kampagne automatisch laden
   if (curKampagne?.id && curKampagne.id !== 'default') {
@@ -1121,6 +1122,20 @@ const regionen = {
 };
 
 let alleAnfragen = [];
+let alleHinweise = [];
+
+async function loadHinweise() {
+  try {
+    const { data, error } = await sb.from('hinweise').select('*').order('created_at', { ascending: true });
+    if (!error && data) {
+      alleHinweise = data;
+      // Hinweise den Gebieten zuordnen
+      Object.values(regionen).forEach(r => r.gebiete.forEach(g => {
+        g.hinweise = alleHinweise.filter(h => h.gebiet_id === g.id);
+      }));
+    }
+  } catch(e) { console.warn('loadHinweise failed:', e); }
+}
 
 async function loadAnfragen() {
   try {
@@ -1379,14 +1394,32 @@ function openDetail(id){
       <button class="btn btn-g" onclick="openModal('${g.id}')">📦 Stückzahl beantragen</button>
     </div></div>`;
   }
-  h+=`<div class="d-sec"><div class="sec-hd">Hinweis</div><div class="f-stack">
-    <textarea id="inpH" placeholder="z.B. Briefkastensperren in Hauptstraße…"></textarea>
-    <button class="btn btn-g" onclick="saveH('${g.id}')">Speichern</button>
-  </div></div>`;
-  if(g.hinweise.length){
-    h+=`<div class="d-sec"><div class="sec-hd">Hinweise (${g.hinweise.length})</div><div class="f-stack">
-      ${g.hinweise.map(n=>`<div class="hint-item">💬 ${n}</div>`).join('')}
+  // Hinweis schreiben: Admin überall, Verwalter in seiner Region, Verteiler nur in seinem Gebiet
+  const darfHinweis = isAdmin || isM || isV;
+  if (darfHinweis) {
+    h+=`<div class="d-sec"><div class="sec-hd">Hinweis schreiben</div><div class="f-stack">
+      <textarea id="inpH" placeholder="z.B. Briefkastensperren in Hauptstraße…"></textarea>
+      <button class="btn btn-g" onclick="saveH('${g.id}')">Speichern</button>
     </div></div>`;
+  }
+  // Hinweise anzeigen (für alle sichtbar)
+  if(g.hinweise && g.hinweise.length){
+    h+=`<div class="d-sec"><div class="sec-hd">Hinweise (${g.hinweise.length})</div><div class="f-stack">`;
+    g.hinweise.forEach(hw => {
+      const autor = allUsers.find(u => u.id === hw.user_id);
+      const autorName = autor ? autor.name : 'Unbekannt';
+      const datum = new Date(hw.created_at).toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+      // Löschen: Admin immer, Verwalter in seiner Region, Verteiler nur eigene
+      const darfLoeschen = isAdmin || (isM && curRole==='verwalter') || (hw.user_id === currentUser?.id);
+      h+=`<div style="background:var(--surface2);border-radius:var(--r8);padding:8px;display:flex;align-items:flex-start;gap:8px">
+        <div style="flex:1">
+          <div style="font-size:.78rem">💬 ${hw.text}</div>
+          <div style="font-size:.65rem;color:var(--text4);margin-top:2px">👤 ${autorName} · ${datum}</div>
+        </div>
+        ${darfLoeschen ? `<button onclick="deleteHinweis('${hw.id}','${g.id}')" style="background:none;border:none;color:var(--text4);cursor:pointer;font-size:.75rem;padding:2px" title="Hinweis löschen">🗑</button>` : ''}
+      </div>`;
+    });
+    h+=`</div></div>`;
   }
   if(curRole==='admin'){
     h+=`<div class="d-sec"><div class="sec-hd">Admin – Geodaten</div><div class="f-stack">
@@ -1503,12 +1536,28 @@ async function saveSt2(id){
 
 async function saveH(id){
   const g=getG(id),t=document.getElementById('inpH').value.trim();
-  if(t){
-    g.hinweise.push(t);
-    openDetail(id);
-    const {error}=await sb.from('hinweise').insert({gebiet_id:id,user_id:currentUser.id,text:t});
-    toast(error ? '⚠️ DB-Fehler' : 'Hinweis gespeichert');
+  if(!t) return;
+  // Berechtigungsprüfung
+  if (curRole === 'verteiler' && (!g.verteilerId || g.verteilerId !== currentUser?.id)) {
+    toast('⚠️ Du bist diesem Gebiet nicht zugewiesen'); return;
   }
+  if (curRole === 'verwalter' && !verwalterHatGebietZugriff(id)) {
+    toast('⚠️ Kein Zugriff auf dieses Gebiet'); return;
+  }
+  const {error}=await sb.from('hinweise').insert({gebiet_id:id,user_id:currentUser.id,text:t});
+  if (error) { toast('⚠️ DB-Fehler: ' + (error.message || error.code)); return; }
+  await loadHinweise();
+  openDetail(id);
+  toast('✅ Hinweis gespeichert');
+}
+
+async function deleteHinweis(hinweisId, gebietId) {
+  if (!confirm('Hinweis wirklich löschen?')) return;
+  const { error } = await sb.from('hinweise').delete().eq('id', hinweisId);
+  if (error) { toast('⚠️ Fehler: ' + (error.message || error.code)); return; }
+  await loadHinweise();
+  openDetail(gebietId);
+  toast('🗑 Hinweis gelöscht');
 }
 
 async function deleteGebiet(id){
