@@ -278,6 +278,7 @@ textarea{min-height:68px}
   </div>
   <div class="h-right">
     <!-- Admin: Nutzer einladen -->
+    <button id="anfragenBtn" onclick="openAnfragenModal()" title="Offene Anfragen" style="display:none;position:relative;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--orange)'" onmouseout="this.style.color='var(--text3)'">🔔<span id="anfragenBadge" style="display:none;position:absolute;top:-2px;right:-2px;background:var(--red);color:#fff;font-size:.55rem;font-weight:700;min-width:14px;height:14px;border-radius:7px;align-items:center;justify-content:center;padding:0 3px">0</span></button>
     <button id="manageUsersBtn" onclick="openManageUsersModal()" title="Nutzerverwaltung" style="display:none;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='var(--text3)'">👥</button>
     <button id="inviteUserBtn" onclick="openInviteModal()" title="Nutzer einladen" style="display:none;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='var(--text3)'">➕👤</button>
     <!-- User pill with role badge -->
@@ -448,6 +449,18 @@ textarea{min-height:68px}
   </div>
 </div>
 
+<!-- ANFRAGEN MODAL (Admin/Verwalter) -->
+<div class="modal-ov" id="anfragenModalOv" onclick="if(event.target===this)closeAnfragenModal()">
+  <div class="modal">
+    <div class="m-handle"></div>
+    <div class="m-title">🔔 Offene Anfragen</div>
+    <div id="anfragenList" style="max-height:400px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;margin-bottom:10px"></div>
+    <div class="m-actions">
+      <button class="btn btn-g" onclick="closeAnfragenModal()">Schließen</button>
+    </div>
+  </div>
+</div>
+
 <!-- VERWALTER-REGIONEN BEARBEITEN MODAL (nur Admin) -->
 <div class="modal-ov" id="editRegModalOv" onclick="if(event.target===this)closeEditRegModal()">
   <div class="modal">
@@ -569,7 +582,9 @@ async function doSetPassword() {
 }
 
 async function loadProfile() {
-  const { data } = await sb.from('user_profiles').select('*').eq('id', currentUser.id).single();
+  const { data, error } = await sb.from('user_profiles').select('*').eq('id', currentUser.id).single();
+  if (error) console.error('loadProfile error:', error);
+  console.log('loadProfile result:', data);
   currentProfile = data;
 }
 
@@ -825,7 +840,7 @@ function renderUserList() {
           <option value="verwalter" ${u.rolle==='verwalter'?'selected':''}>Verwalter</option>
           <option value="admin" ${u.rolle==='admin'?'selected':''}>Admin</option>
         </select>`;
-    const regEdit = u.rolle === 'verwalter'
+    const regEdit = (u.rolle === 'verwalter' || u.rolle === 'admin')
       ? `<button onclick="openEditRegionenModal('${u.id}','${(u.name||'').replace(/'/g,"\\'")}',${JSON.stringify(u.verwaltete_regionen||[]).replace(/"/g,'&quot;')})" style="background:none;border:none;color:var(--blue);cursor:pointer;font-size:.8rem;padding:2px 4px;border-radius:4px" title="Regionen bearbeiten">🗺</button>`
       : '';
     return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--surface2);border-radius:var(--r8)">
@@ -1039,9 +1054,14 @@ async function showApp() {
     document.getElementById('inviteUserBtn').style.display = 'block';
     document.getElementById('manageUsersBtn').style.display = 'block';
   }
+  // Anfragen-Glocke für Admin und Verwalter
+  if (rolle === 'admin' || rolle === 'verwalter') {
+    document.getElementById('anfragenBtn').style.display = 'inline-block';
+  }
   await loadAllUsers();
   await loadKampagnen();
   await loadCustomGebiete();  // Selbst gezeichnete Gebiete aus DB laden
+  await loadAnfragen();       // Offene Anfragen laden
   initApp();
   // Erste Kampagne automatisch laden
   if (curKampagne?.id && curKampagne.id !== 'default') {
@@ -1100,7 +1120,104 @@ const regionen = {
   '04':{name:'Ronneburg',short:'Ronneburg',center:[50.8680,12.1810],zoom:13,gebiete:[]},
 };
 
-const anfragen=[];
+let alleAnfragen = [];
+
+async function loadAnfragen() {
+  try {
+    const { data, error } = await sb.from('anfragen').select('*').eq('status', 'offen').order('created_at', { ascending: false });
+    if (!error && data) {
+      alleAnfragen = data;
+      updateAnfragenBadge();
+    }
+  } catch(e) { console.warn('loadAnfragen failed:', e); }
+}
+
+function updateAnfragenBadge() {
+  const badge = document.getElementById('anfragenBadge');
+  if (!badge) return;
+  let sichtbar = alleAnfragen;
+  if (curRole === 'verwalter') {
+    sichtbar = alleAnfragen.filter(a => verwalterHatGebietZugriff(a.gebiet_id));
+  }
+  if (sichtbar.length > 0) {
+    badge.textContent = sichtbar.length;
+    badge.style.display = 'flex';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function openAnfragenModal() {
+  renderAnfragenList();
+  document.getElementById('anfragenModalOv').classList.add('open');
+}
+function closeAnfragenModal() {
+  document.getElementById('anfragenModalOv').classList.remove('open');
+}
+
+function renderAnfragenList() {
+  const list = document.getElementById('anfragenList');
+  if (!list) return;
+  let sichtbar = alleAnfragen;
+  if (curRole === 'verwalter') {
+    sichtbar = alleAnfragen.filter(a => verwalterHatGebietZugriff(a.gebiet_id));
+  }
+  if (sichtbar.length === 0) {
+    list.innerHTML = '<div style="font-size:.82rem;color:var(--text3);text-align:center;padding:20px">Keine offenen Anfragen</div>';
+    return;
+  }
+  list.innerHTML = sichtbar.map(a => {
+    const g = getG(a.gebiet_id);
+    const gebietName = g ? g.name : a.gebiet_id;
+    const user = allUsers.find(u => u.id === a.user_id);
+    const userName = user ? user.name : 'Unbekannt';
+    const datum = new Date(a.created_at).toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+    return `<div style="background:var(--surface2);border-radius:var(--r8);padding:10px;border-left:3px solid var(--orange)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <span style="font-size:.82rem;font-weight:600">${gebietName} (${a.gebiet_id})</span>
+        <span style="font-size:.65rem;color:var(--text4)">${datum}</span>
+      </div>
+      <div style="font-size:.78rem;color:var(--text2);margin-bottom:2px">👤 ${userName} → 📦 <strong>${a.neue_stueckzahl}</strong> Stück</div>
+      ${a.grund ? `<div style="font-size:.75rem;color:var(--text3);margin-bottom:6px;font-style:italic">${a.grund}</div>` : ''}
+      <div style="display:flex;gap:6px">
+        <button onclick="handleAnfrage('${a.id}','genehmigt',${a.neue_stueckzahl},'${a.gebiet_id}')" style="flex:1;padding:5px;border:none;border-radius:var(--r8);background:var(--green);color:#fff;font-size:.75rem;font-weight:600;cursor:pointer">✓ Genehmigen</button>
+        <button onclick="handleAnfrage('${a.id}','abgelehnt',null,null)" style="flex:1;padding:5px;border:none;border-radius:var(--r8);background:var(--red);color:#fff;font-size:.75rem;font-weight:600;cursor:pointer">✗ Ablehnen</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function handleAnfrage(anfrageId, entscheidung, neueStueckzahl, gebietId) {
+  const { error } = await sb.from('anfragen').update({
+    status: entscheidung,
+    bearbeitet_von: currentUser.id,
+    updated_at: new Date().toISOString()
+  }).eq('id', anfrageId);
+  if (error) { toast('⚠️ Fehler: ' + (error.message || error.code)); return; }
+
+  if (entscheidung === 'genehmigt' && neueStueckzahl && gebietId) {
+    const g = getG(gebietId);
+    if (g) {
+      g.stueckzahl = neueStueckzahl;
+      await sb.from('gebiete').update({ stueckzahl: neueStueckzahl }).eq('id', gebietId);
+      const kampId = curKampagne?.id || null;
+      if (kampId) {
+        await sb.from('gebiet_status').upsert({
+          gebiet_id: gebietId, kampagne_id: kampId,
+          stueckzahl: neueStueckzahl, status: g.status,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'gebiet_id,kampagne_id' });
+      }
+      renderList(); renderStats();
+    }
+  }
+
+  alleAnfragen = alleAnfragen.filter(a => a.id !== anfrageId);
+  updateAnfragenBadge();
+  renderAnfragenList();
+  if (selId) openDetail(selId);
+  toast(entscheidung === 'genehmigt' ? '✅ Anfrage genehmigt – Stückzahl aktualisiert' : '❌ Anfrage abgelehnt');
+}
 
 // ============================================================
 // KML POLYGONS
@@ -1148,6 +1265,7 @@ function initMap(){
 }
 
 function drawPolygons(){
+  if(!map) return;
   Object.values(layers).forEach(l=>map.removeLayer(l));layers={};
   const r=regionen[curR];
   r.gebiete.forEach((g,i)=>{
@@ -1237,6 +1355,24 @@ function openDetail(id){
       <input type="number" id="inpS" value="${g.stueckzahl}">
       <button class="btn btn-g" onclick="saveSt2('${g.id}')">Ändern</button>
     </div></div>`;
+    // Offene Anfragen für dieses Gebiet anzeigen
+    const gebietAnfragen = alleAnfragen.filter(a => a.gebiet_id === g.id);
+    if (gebietAnfragen.length > 0) {
+      h += `<div class="d-sec"><div class="sec-hd">📦 Offene Anfragen (${gebietAnfragen.length})</div><div class="f-stack">`;
+      gebietAnfragen.forEach(a => {
+        const user = allUsers.find(u => u.id === a.user_id);
+        const userName = user ? user.name : 'Unbekannt';
+        h += `<div style="background:var(--surface2);border-radius:var(--r8);padding:8px;border-left:3px solid var(--orange)">
+          <div style="font-size:.78rem;margin-bottom:4px">👤 ${userName} → 📦 <strong>${a.neue_stueckzahl}</strong> Stück</div>
+          ${a.grund ? `<div style="font-size:.72rem;color:var(--text3);margin-bottom:4px;font-style:italic">${a.grund}</div>` : ''}
+          <div style="display:flex;gap:6px">
+            <button onclick="handleAnfrage('${a.id}','genehmigt',${a.neue_stueckzahl},'${a.gebiet_id}')" style="flex:1;padding:4px;border:none;border-radius:var(--r8);background:var(--green);color:#fff;font-size:.7rem;font-weight:600;cursor:pointer">✓ Genehmigen</button>
+            <button onclick="handleAnfrage('${a.id}','abgelehnt',null,null)" style="flex:1;padding:4px;border:none;border-radius:var(--r8);background:var(--red);color:#fff;font-size:.7rem;font-weight:600;cursor:pointer">✗ Ablehnen</button>
+          </div>
+        </div>`;
+      });
+      h += `</div></div>`;
+    }
   }
   if(isV){
     h+=`<div class="d-sec"><div class="sec-hd">Anfrage</div><div class="f-stack">
@@ -1412,7 +1548,9 @@ async function submitAnfrage(){
   if(!m){toast('Stückzahl eingeben');return}
   const {error}=await sb.from('anfragen').insert({gebiet_id:mId,user_id:currentUser.id,neue_stueckzahl:parseInt(m),grund:document.getElementById('modalGrund').value});
   closeModal();
-  toast(error ? '⚠️ DB-Fehler' : `Anfrage für ${mId} gesendet`);
+  if (error) { toast('⚠️ DB-Fehler'); return; }
+  toast(`✅ Anfrage für ${mId} gesendet`);
+  await loadAnfragen(); // Glocke aktualisieren
 }
 
 // ============================================================
