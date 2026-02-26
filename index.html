@@ -278,6 +278,7 @@ textarea{min-height:68px}
   </div>
   <div class="h-right">
     <!-- Admin: Nutzer einladen -->
+    <button id="manageUsersBtn" onclick="openManageUsersModal()" title="Nutzerverwaltung" style="display:none;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='var(--text3)'">👥</button>
     <button id="inviteUserBtn" onclick="openInviteModal()" title="Nutzer einladen" style="display:none;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='var(--text3)'">➕👤</button>
     <!-- User pill with role badge -->
     <div class="user-pill" onclick="doLogout()" title="Abmelden">
@@ -431,6 +432,18 @@ textarea{min-height:68px}
     <div class="m-actions" style="margin-top:10px">
       <button class="btn btn-g" onclick="closeInviteModal()">Schließen</button>
       <button class="btn btn-p" id="inviteBtn" onclick="doInviteUser()">Einladung senden</button>
+    </div>
+  </div>
+</div>
+
+<!-- NUTZERVERWALTUNG MODAL (nur Admin) -->
+<div class="modal-ov" id="manageUsersModalOv" onclick="if(event.target===this)closeManageUsersModal()">
+  <div class="modal">
+    <div class="m-handle"></div>
+    <div class="m-title">👥 Nutzerverwaltung</div>
+    <div id="manageUserList" style="max-height:350px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;margin-bottom:10px"></div>
+    <div class="m-actions">
+      <button class="btn btn-g" onclick="closeManageUsersModal()">Schließen</button>
     </div>
   </div>
 </div>
@@ -774,8 +787,15 @@ async function doLogout() {
 // ============================================================
 // NUTZER EINLADEN (nur Admin)
 // ============================================================
-function openInviteModal() {
+function openManageUsersModal() {
   renderUserList();
+  document.getElementById('manageUsersModalOv').classList.add('open');
+}
+function closeManageUsersModal() {
+  document.getElementById('manageUsersModalOv').classList.remove('open');
+}
+
+function openInviteModal() {
   renderInviteRegionen();
   document.getElementById('inviteEmail').value = '';
   document.getElementById('inviteName').value = '';
@@ -790,7 +810,7 @@ function closeInviteModal() {
 }
 
 function renderUserList() {
-  const list = document.getElementById('userList');
+  const list = document.getElementById('manageUserList');
   if (!list) return;
   if (allUsers.length === 0) {
     list.innerHTML = '<div style="font-size:.78rem;color:var(--text3)">Keine Nutzer geladen.</div>';
@@ -989,9 +1009,10 @@ async function showApp() {
   badge.className    = `role-badge rb-${rolle}`;
 
   curRole = rolle;
-  // Admin-Button: Nutzer einladen
+  // Admin-Buttons: Nutzer einladen + Nutzerverwaltung
   if (rolle === 'admin') {
     document.getElementById('inviteUserBtn').style.display = 'block';
+    document.getElementById('manageUsersBtn').style.display = 'block';
   }
   await loadAllUsers();
   await loadKampagnen();
@@ -1230,6 +1251,10 @@ function closeDetail(){
 // ACTIONS (write to Supabase + local update)
 // ============================================================
 async function setSt(id,s){
+  // Zugriffsprüfung: nur Admin oder Verwalter mit Regionszugriff
+  if (curRole === 'verwalter' && !verwalterHatGebietZugriff(id)) {
+    toast('⚠️ Kein Zugriff auf dieses Gebiet'); return;
+  }
   const g=getG(id); g.status=s;
   const col=scol[s];
   if(layers[id])layers[id].setStyle({fillColor:col.f,color:col.s,fillOpacity:.6});
@@ -1249,6 +1274,11 @@ async function setSt(id,s){
 }
 
 async function saveZ(id){
+  // Zugriffsprüfung: nur Admin oder Verwalter mit Regionszugriff
+  if (curRole === 'verwalter' && !verwalterHatGebietZugriff(id)) {
+    toast('⚠️ Kein Zugriff auf dieses Gebiet'); return;
+  }
+  if (curRole === 'verteiler') { toast('⚠️ Keine Berechtigung'); return; }
   const g=getG(id);
   const sel=document.getElementById('inpV');
   const userId=sel.value;
@@ -1274,6 +1304,11 @@ async function saveZ(id){
 }
 
 async function saveSt2(id){
+  // Zugriffsprüfung: nur Admin oder Verwalter mit Regionszugriff
+  if (curRole === 'verwalter' && !verwalterHatGebietZugriff(id)) {
+    toast('⚠️ Kein Zugriff auf dieses Gebiet'); return;
+  }
+  if (curRole === 'verteiler') { toast('⚠️ Keine Berechtigung'); return; }
   const g=getG(id),v=parseInt(document.getElementById('inpS').value);
   const kampId = curKampagne?.id || null;
   if(!isNaN(v)&&v>0){
@@ -1307,6 +1342,7 @@ async function saveH(id){
 }
 
 async function deleteGebiet(id){
+  if (curRole !== 'admin') { toast('⚠️ Nur Admins dürfen Gebiete löschen'); return; }
   if(!confirm(`Gebiet ${id} wirklich löschen?`)) return;
 
   // Zuerst aus DB löschen (gebiet_status + gebiete)
