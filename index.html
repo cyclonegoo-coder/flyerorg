@@ -430,6 +430,7 @@ textarea{min-height:68px}
       </div>
     </div>
     <div id="inviteStatus" style="font-size:.78rem;margin-top:8px;min-height:18px"></div>
+    <div id="inviteShareWrap"></div>
     <div class="m-actions" style="margin-top:10px">
       <button class="btn btn-g" onclick="closeInviteModal()">Schließen</button>
       <button class="btn btn-p" id="inviteBtn" onclick="doInviteUser()">Einladung senden</button>
@@ -881,6 +882,7 @@ function openInviteModal() {
   document.getElementById('inviteRolle').value = 'verteiler';
   document.getElementById('inviteRegionenWrap').style.display = 'none';
   document.getElementById('inviteStatus').textContent = '';
+  document.getElementById('inviteShareWrap').innerHTML = '';
   document.getElementById('inviteModalOv').classList.add('open');
 }
 
@@ -1024,6 +1026,22 @@ async function doInviteUser() {
 
     status.style.color = 'var(--green)';
     status.textContent = `✅ Einladung an ${email} gesendet${hinweis}`;
+
+    // Teilen-Buttons anzeigen wenn Einladungslink vorhanden
+    const shareWrap = document.getElementById('inviteShareWrap');
+    if (data?.inviteLink) {
+      const link = data.inviteLink;
+      const msg = encodeURIComponent(`Hallo ${name}! Du wurdest als ${rolle} zur FlyerOrg-App eingeladen. Klicke hier um dich anzumelden:\n${link}`);
+      shareWrap.innerHTML = `
+        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+          <button onclick="navigator.clipboard.writeText('${link.replace(/'/g,"\\'")}');this.textContent='✅ Kopiert!';setTimeout(()=>this.textContent='📋 Link kopieren',2000)" style="padding:6px 12px;border:1px solid #ddd;border-radius:8px;background:#f5f5f5;cursor:pointer;font-size:.8rem">📋 Link kopieren</button>
+          <a href="https://wa.me/?text=${msg}" target="_blank" style="padding:6px 12px;border:1px solid #25D366;border-radius:8px;background:#25D366;color:#fff;text-decoration:none;font-size:.8rem;display:inline-flex;align-items:center;gap:4px">💬 WhatsApp</a>
+          <a href="https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(`Hallo ${name}! Du wurdest als ${rolle} zur FlyerOrg-App eingeladen.`)}" target="_blank" style="padding:6px 12px;border:1px solid #0088cc;border-radius:8px;background:#0088cc;color:#fff;text-decoration:none;font-size:.8rem;display:inline-flex;align-items:center;gap:4px">✈️ Telegram</a>
+        </div>`;
+    } else {
+      shareWrap.innerHTML = '';
+    }
+
     document.getElementById('inviteEmail').value = '';
     document.getElementById('inviteName').value = '';
     // Regionen-Checkboxen zurücksetzen
