@@ -87,6 +87,18 @@ header{height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturate(18
 .pill{font-size:.7rem;font-weight:500;padding:5px 11px;border-radius:20px;border:1px solid var(--sep);background:var(--surface);color:var(--text3);cursor:pointer;transition:all .15s}
 .pill:hover{background:var(--surface3)}
 .pill.active{background:var(--blue);border-color:var(--blue);color:#fff;box-shadow:0 2px 8px rgba(0,158,224,.28)}
+.breadcrumb{display:flex;align-items:center;gap:2px;flex-wrap:wrap;margin-bottom:9px;font-size:.75rem}
+.bc-sep{color:var(--text4);font-size:.65rem;margin:0 1px}
+.bc-item{position:relative}
+.bc-btn{font-size:.72rem;font-weight:500;padding:4px 10px;border-radius:8px;border:1px solid var(--sep);background:var(--surface);color:var(--text2);cursor:pointer;transition:all .15s;white-space:nowrap;display:flex;align-items:center;gap:3px}
+.bc-btn:hover{background:var(--surface3)}
+.bc-btn.has-value{background:var(--blue);border-color:var(--blue);color:#fff}
+.bc-drop{display:none;position:absolute;top:100%;left:0;margin-top:4px;min-width:180px;max-height:250px;overflow-y:auto;background:#fff;border:1px solid var(--sep);border-radius:var(--r8);box-shadow:0 8px 24px rgba(0,0,0,.15);z-index:600;padding:4px}
+.bc-drop.open{display:block}
+.bc-opt{padding:6px 10px;border-radius:6px;cursor:pointer;font-size:.75rem;transition:background .1s}
+.bc-opt:hover{background:var(--surface2)}
+.bc-opt.active{background:rgba(0,158,224,.1);color:var(--blue);font-weight:600}
+.bc-opt .bc-hint{font-size:.6rem;color:var(--text4);margin-left:4px}
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
 .stat{background:var(--surface);border-radius:var(--r12);padding:9px 6px;text-align:center;box-shadow:var(--sh-sm)}
 .stat-n{font-size:1.2rem;font-weight:700;letter-spacing:-.03em;line-height:1}
@@ -296,6 +308,7 @@ textarea{min-height:68px}
     <!-- Admin: Nutzer einladen -->
     <button id="anfragenBtn" onclick="openAnfragenModal()" title="Offene Anfragen" style="display:none;position:relative;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--orange)'" onmouseout="this.style.color='var(--text3)'">🔔<span id="anfragenBadge" style="display:none;position:absolute;top:-2px;right:-2px;background:var(--red);color:#fff;font-size:.55rem;font-weight:700;min-width:14px;height:14px;border-radius:7px;align-items:center;justify-content:center;padding:0 3px">0</span></button>
     <button id="manageUsersBtn" onclick="openManageUsersModal()" title="Nutzerverwaltung" style="display:none;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='var(--text3)'">👥</button>
+    <button id="hierarchyBtn" onclick="openHierarchyModal()" title="Gebietsstruktur verwalten" style="display:none;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='var(--text3)'">🏗</button>
     <button id="inviteUserBtn" onclick="openInviteModal()" title="Nutzer einladen" style="display:none;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='var(--text3)'">➕👤</button>
     <!-- User pill with role badge -->
     <div class="user-pill" onclick="openProfilModal()" title="Mein Profil">
@@ -532,6 +545,50 @@ textarea{min-height:68px}
   </div>
 </div>
 
+<!-- HIERARCHIE VERWALTEN MODAL (Admin) -->
+<div class="modal-ov" id="hierarchyModalOv" onclick="if(event.target===this)closeHierarchyModal()">
+  <div class="modal" style="max-width:420px">
+    <div class="m-handle"></div>
+    <div class="m-title">🏗 Gebietsstruktur verwalten</div>
+    <!-- Tabs -->
+    <div style="display:flex;gap:4px;margin-bottom:10px">
+      <button class="pill active" id="hTabLK" onclick="switchHTab('lk')">Landkreise</button>
+      <button class="pill" id="hTabGV" onclick="switchHTab('gv')">Gebietsverbände</button>
+      <button class="pill" id="hTabReg" onclick="switchHTab('reg')">Regionen</button>
+    </div>
+    <!-- Landkreise -->
+    <div id="hPanelLK">
+      <div id="hListLK" style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;margin-bottom:8px"></div>
+      <div style="display:flex;gap:4px"><input type="text" id="hNewLKName" placeholder="Neuer Landkreis" style="flex:1;padding:6px 10px;border:1px solid var(--sep);border-radius:var(--r8);font-size:.8rem">
+      <button class="btn btn-p" onclick="addLandkreis()" style="padding:6px 12px;font-size:.75rem">+</button></div>
+    </div>
+    <!-- Gebietsverbände -->
+    <div id="hPanelGV" style="display:none">
+      <div id="hListGV" style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;margin-bottom:8px"></div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <select id="hNewGVLK" style="padding:6px 10px;border:1px solid var(--sep);border-radius:var(--r8);font-size:.8rem"></select>
+        <div style="display:flex;gap:4px"><input type="text" id="hNewGVName" placeholder="Neuer Gebietsverband" style="flex:1;padding:6px 10px;border:1px solid var(--sep);border-radius:var(--r8);font-size:.8rem">
+        <button class="btn btn-p" onclick="addGebietsverband()" style="padding:6px 12px;font-size:.75rem">+</button></div>
+      </div>
+    </div>
+    <!-- Regionen -->
+    <div id="hPanelReg" style="display:none">
+      <div id="hListReg" style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;margin-bottom:8px"></div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <select id="hNewRegGV" style="padding:6px 10px;border:1px solid var(--sep);border-radius:var(--r8);font-size:.8rem"></select>
+        <div style="display:flex;gap:4px">
+          <input type="text" id="hNewRegName" placeholder="Name" style="flex:1;padding:6px 10px;border:1px solid var(--sep);border-radius:var(--r8);font-size:.8rem">
+          <input type="text" id="hNewRegShort" placeholder="Kürzel" style="width:80px;padding:6px 10px;border:1px solid var(--sep);border-radius:var(--r8);font-size:.8rem">
+          <button class="btn btn-p" onclick="addRegion()" style="padding:6px 12px;font-size:.75rem">+</button>
+        </div>
+      </div>
+    </div>
+    <div class="m-actions" style="margin-top:12px">
+      <button class="btn btn-g" onclick="closeHierarchyModal()">Schließen</button>
+    </div>
+  </div>
+</div>
+
 <!-- KAMPAGNEN VERWALTEN MODAL -->
 <div class="modal-ov" id="kampagnenModalOv" onclick="if(event.target===this)closeKampagnenModal()">
   <div class="modal">
@@ -679,7 +736,7 @@ async function loadProfile() {
 let allUsers = [];
 async function loadAllUsers() {
   try {
-    const { data, error } = await sb.from('user_profiles').select('id, name, rolle, telefon, email, verwaltete_regionen').order('name');
+    const { data, error } = await sb.from('user_profiles').select('id, name, rolle, telefon, email, verwaltete_regionen, verwaltete_gebietsverbaende').order('name');
     if (!error) allUsers = data || [];
   } catch(e) {
     console.warn('loadAllUsers failed:', e);
@@ -785,7 +842,7 @@ async function loadGebieteForKampagne(kampagneId) {
     console.warn('loadGebieteForKampagne failed:', e);
   }
   closeDetail();
-  renderPills(); renderList(); renderStats(); drawPolygons(); showDrawToolbar();
+  renderBreadcrumb(); renderList(); renderStats(); drawPolygons(); showDrawToolbar();
 }
 
 // ============================================================
@@ -996,10 +1053,13 @@ async function changeRole(userId, newRolle) {
 // VERWALTER-REGIONEN BEARBEITEN
 // ============================================================
 function getRegionVerwalter(regionKey, excludeUserId) {
+  // Now looks for verwalter of the gebietsverband that contains this region
+  const reg = regionen[regionKey];
+  if (!reg) return null;
   return allUsers.find(u =>
     u.id !== excludeUserId &&
     (u.rolle === 'verwalter' || u.rolle === 'admin') &&
-    u.verwaltete_regionen && u.verwaltete_regionen.includes(regionKey)
+    (u.verwaltete_gebietsverbaende || u.verwaltete_regionen || []).includes(reg.gebietsverband_id)
   );
 }
 
@@ -1027,11 +1087,11 @@ function closeEditRegModal() {
 async function saveRegionen() {
   const userId = document.getElementById('editRegUserId').value;
   const selected = Array.from(document.querySelectorAll('#editRegList input[type=checkbox]:checked')).map(cb => cb.value);
-  const { error } = await sb.from('user_profiles').update({ verwaltete_regionen: selected }).eq('id', userId);
+  const { error } = await sb.from('user_profiles').update({ verwaltete_regionen: selected, verwaltete_gebietsverbaende: selected }).eq('id', userId);
   if (error) { toast('⚠️ Fehler: ' + (error.message || error.code)); console.error('saveRegionen error:', error); return; }
   // Lokal aktualisieren
   const u = allUsers.find(u => u.id === userId);
-  if (u) u.verwaltete_regionen = selected;
+  if (u) { u.verwaltete_regionen = selected; u.verwaltete_gebietsverbaende = selected; }
   renderUserList();
   closeEditRegModal();
   toast('✅ Regionen gespeichert');
@@ -1155,6 +1215,32 @@ async function deleteUser(userId, userName) {
   }
 }
 
+// Lädt Hierarchie (Landkreise, Gebietsverbände, Regionen) aus DB
+async function loadHierarchy() {
+  try {
+    const [lkRes, gvRes, regRes] = await Promise.all([
+      sb.from('landkreise').select('*').order('name'),
+      sb.from('gebietsverbaende').select('*').order('name'),
+      sb.from('regionen').select('*').order('name')
+    ]);
+    if (lkRes.error) console.warn('landkreise load failed:', lkRes.error);
+    if (gvRes.error) console.warn('gebietsverbaende load failed:', gvRes.error);
+    if (regRes.error) console.warn('regionen load failed:', regRes.error);
+    landkreise = {};
+    (lkRes.data || []).forEach(lk => { landkreise[lk.id] = lk; });
+    gebietsverbaende = {};
+    (gvRes.data || []).forEach(gv => { gebietsverbaende[gv.id] = gv; });
+    regionen = {};
+    (regRes.data || []).forEach(r => {
+      regionen[r.id] = { ...r, center: [r.center_lat, r.center_lng], gebiete: [] };
+    });
+    const lkKeys = Object.keys(landkreise);
+    if (lkKeys.length === 1) curLK = lkKeys[0];
+    const gvKeys = Object.keys(gebietsverbaende);
+    if (gvKeys.length === 1) curGV = gvKeys[0];
+  } catch(e) { console.warn('loadHierarchy failed:', e); }
+}
+
 // Lädt ALLE Gebiete aus der Datenbank (einzige Quelle der Wahrheit)
 async function loadCustomGebiete() {
   try {
@@ -1170,7 +1256,7 @@ async function loadCustomGebiete() {
         try { kmlP[dbG.id] = JSON.parse(dbG.kml_coords); } catch(e) {}
       }
       // Gebiet in die richtige Region einsortieren
-      const rKey = dbG.region_id || Object.keys(regionen)[0];
+      const rKey = dbG.region_id;
       if (regionen[rKey]) {
         regionen[rKey].gebiete.push({
           id: dbG.id, name: dbG.name || dbG.id,
@@ -1203,11 +1289,13 @@ async function showApp() {
   if (rolle === 'admin') {
     document.getElementById('inviteUserBtn').style.display = 'block';
     document.getElementById('manageUsersBtn').style.display = 'block';
+    document.getElementById('hierarchyBtn').style.display = 'block';
   }
   // Anfragen-Glocke für alle Rollen (Admin/Verwalter: offene Anfragen, Verteiler: Rückmeldungen)
   document.getElementById('anfragenBtn').style.display = 'inline-block';
   await loadAllUsers();
   await loadKampagnen();
+  await loadHierarchy();
   await loadCustomGebiete();  // Selbst gezeichnete Gebiete aus DB laden
   await loadAnfragen();       // Offene Anfragen laden
   await loadHinweise();       // Hinweise aus DB laden
@@ -1261,13 +1349,10 @@ document.addEventListener('DOMContentLoaded', () => {
 // ============================================================
 // APP DATA (local fallback while DB not fully set up)
 // ============================================================
-// Regionen-Metadaten (Gebiete werden aus DB geladen)
-const regionen = {
-  '01':{name:'Bad Köstritz / Caaschwitz',short:'Köstritz',center:[50.9250,12.0100],zoom:13,gebiete:[]},
-  '02':{name:'Kraftsdorf',short:'Kraftsdorf',center:[50.9600,12.0400],zoom:13,gebiete:[]},
-  '03':{name:'VG Brahmetal',short:'Brahmetal',center:[50.9900,12.1200],zoom:12,gebiete:[]},
-  '04':{name:'Ronneburg',short:'Ronneburg',center:[50.8680,12.1810],zoom:13,gebiete:[]},
-};
+// Hierarchie: Landkreis → Gebietsverband → Region → Gebiet (aus DB geladen)
+let landkreise = {};        // {uuid: {id, name}}
+let gebietsverbaende = {};  // {uuid: {id, name, landkreis_id, center_lat, center_lng, zoom}}
+let regionen = {};          // {uuid: {id, name, short, gebietsverband_id, center_lat, center_lng, zoom, gebiete:[]}}
 
 let alleAnfragen = [];
 let alleHinweise = [];
@@ -1464,11 +1549,11 @@ function getCoords(rk,i,tot,gid){
 // ============================================================
 // STATE
 // ============================================================
-let curR='alle',selId=null,curRole='verteiler',layers={},map,mapInited=false;
+let curLK='alle',curGV='alle',curReg='alle',selId=null,curRole='verteiler',layers={},map,mapInited=false;
 const scol={offen:{f:'#aeaeb2',s:'#8e8e93'},zugeteilt:{f:'#ff9500',s:'#c97800'},fertig:{f:'#34c759',s:'#248a3d'},problem:{f:'#ff3b30',s:'#c62828'}};
 
 function initApp(){
-  renderPills(); renderList(); renderStats();
+  renderBreadcrumb(); renderList(); renderStats();
   if(!mapInited){ setTimeout(()=>{ initMap(); mapInited=true; showDrawToolbar(); },100); }
 }
 
@@ -1608,49 +1693,106 @@ function renderGrenzen(){
 function drawPolygons(){
   if(!map) return;
   Object.values(layers).forEach(l=>map.removeLayer(l));layers={};
-  if(curR==='alle'){
-    const allBounds=[];
-    Object.entries(regionen).forEach(([rk,r])=>{
-      r.gebiete.forEach((g,i)=>{
-        const c=getCoords(rk,i,r.gebiete.length,g.id),col=scol[g.status]||scol.offen;
-        const poly=L.polygon(c,{color:col.s,fillColor:col.f,fillOpacity:.35,weight:2}).addTo(map);
-        poly.bindPopup(`<div class="popup-id">${g.id}</div><div class="popup-name">${g.name}</div><div class="popup-meta">📦 ${g.stueckzahl} · ${g.verteiler||'Nicht zugeteilt'}</div>`);
-        poly.on('click',()=>{selGebiet(g.id);if(window.innerWidth<=768)document.getElementById('sidebar').classList.remove('open')});
-        poly.on('mouseover',()=>poly.setStyle({fillOpacity:.55}));
-        poly.on('mouseout',()=>poly.setStyle({fillOpacity:selId===g.id?.55:.35}));
-        layers[g.id]=poly;
-        allBounds.push(...c);
-      });
-    });
-    if(allBounds.length>0) map.flyToBounds(L.latLngBounds(allBounds).pad(0.1),{duration:.8});
-  } else {
-    const r=regionen[curR];
-    r.gebiete.forEach((g,i)=>{
-      const c=getCoords(curR,i,r.gebiete.length,g.id),col=scol[g.status]||scol.offen;
-      const poly=L.polygon(c,{color:col.s,fillColor:col.f,fillOpacity:.35,weight:2}).addTo(map);
-      poly.bindPopup(`<div class="popup-id">${g.id}</div><div class="popup-name">${g.name}</div><div class="popup-meta">📦 ${g.stueckzahl} · ${g.verteiler||'Nicht zugeteilt'}</div>`);
-      poly.on('click',()=>{selGebiet(g.id);if(window.innerWidth<=768)document.getElementById('sidebar').classList.remove('open')});
-      poly.on('mouseover',()=>poly.setStyle({fillOpacity:.55}));
-      poly.on('mouseout',()=>poly.setStyle({fillOpacity:selId===g.id?.55:.35}));
-      layers[g.id]=poly;
-    });
-    map.flyTo(r.center,r.zoom,{duration:.8});
+  const gs=getVisibleGebiete();
+  const allBounds=[];
+  gs.forEach(g=>{
+    // Find region for this gebiet to get coords
+    let rKey=null;
+    for(const [k,r] of Object.entries(regionen)){ if(r.gebiete.includes(g)){rKey=k;break;} }
+    const rObj=rKey?regionen[rKey]:null;
+    const idx=rObj?rObj.gebiete.indexOf(g):0;
+    const c=getCoords(rKey,idx,rObj?rObj.gebiete.length:1,g.id);
+    const col=scol[g.status]||scol.offen;
+    const poly=L.polygon(c,{color:col.s,fillColor:col.f,fillOpacity:.35,weight:2}).addTo(map);
+    poly.bindPopup(`<div class="popup-id">${g.id}</div><div class="popup-name">${g.name}</div><div class="popup-meta">📦 ${g.stueckzahl} · ${g.verteiler||'Nicht zugeteilt'}</div>`);
+    poly.on('click',()=>{selGebiet(g.id);if(window.innerWidth<=768)document.getElementById('sidebar').classList.remove('open')});
+    poly.on('mouseover',()=>poly.setStyle({fillOpacity:.55}));
+    poly.on('mouseout',()=>poly.setStyle({fillOpacity:selId===g.id?.55:.35}));
+    layers[g.id]=poly;
+    allBounds.push(...c);
+  });
+  // Fly to appropriate view
+  if(curReg!=='alle'&&regionen[curReg]){
+    map.flyTo(regionen[curReg].center,regionen[curReg].zoom,{duration:.8});
+  } else if(curGV!=='alle'&&gebietsverbaende[curGV]){
+    const gv=gebietsverbaende[curGV];
+    map.flyTo([gv.center_lat,gv.center_lng],gv.zoom||11,{duration:.8});
+  } else if(allBounds.length>0){
+    map.flyToBounds(L.latLngBounds(allBounds).pad(0.1),{duration:.8});
   }
 }
 
 // ============================================================
 // SIDEBAR
 // ============================================================
-function renderPills(){
-  let html=`<button class="pill ${'alle'===curR?'active':''}" onclick="switchR('alle')">Alle</button>`;
-  html+=Object.entries(regionen).map(([k,r])=>
-    `<button class="pill ${k===curR?'active':''}" onclick="switchR('${k}')">${r.short}</button>`).join('');
+function getFilteredGV(){ return curLK==='alle' ? Object.entries(gebietsverbaende) : Object.entries(gebietsverbaende).filter(([,gv])=>gv.landkreis_id===curLK); }
+function getFilteredReg(){ return curGV==='alle' ? Object.entries(regionen) : Object.entries(regionen).filter(([,r])=>r.gebietsverband_id===curGV); }
+function getVisibleGebiete(){
+  if(curReg!=='alle') return regionen[curReg]?.gebiete||[];
+  let gs=[];
+  if(curGV!=='alle'){ Object.values(regionen).forEach(r=>{ if(r.gebietsverband_id===curGV) gs=gs.concat(r.gebiete); }); return gs; }
+  if(curLK!=='alle'){ Object.values(regionen).forEach(r=>{ const gv=gebietsverbaende[r.gebietsverband_id]; if(gv&&gv.landkreis_id===curLK) gs=gs.concat(r.gebiete); }); return gs; }
+  return getAllGebiete();
+}
+
+function renderBreadcrumb(){
+  const lkCount=Object.keys(landkreise).length;
+  const gvCount=getFilteredGV().length;
+  const regCount=getFilteredReg().length;
+  let html='<div class="breadcrumb">';
+  // Landkreis dropdown (nur wenn >1)
+  if(lkCount>1){
+    const lkName=curLK==='alle'?'Alle Landkreise':landkreise[curLK]?.name||'?';
+    html+=`<div class="bc-item"><button class="bc-btn ${curLK!=='alle'?'has-value':''}" onclick="toggleBcDrop('lk')">${lkName} ▾</button>`;
+    html+=`<div class="bc-drop" id="bcDropLK">`;
+    html+=`<div class="bc-opt ${curLK==='alle'?'active':''}" onclick="switchLK('alle')">Alle Landkreise</div>`;
+    Object.entries(landkreise).forEach(([id,lk])=>{
+      html+=`<div class="bc-opt ${id===curLK?'active':''}" onclick="switchLK('${id}')">${lk.name}</div>`;
+    });
+    html+=`</div></div><span class="bc-sep">›</span>`;
+  }
+  // Gebietsverband dropdown
+  if(gvCount>0){
+    const gvName=curGV==='alle'?'Alle Gebietsverbände':gebietsverbaende[curGV]?.name||'?';
+    html+=`<div class="bc-item"><button class="bc-btn ${curGV!=='alle'?'has-value':''}" onclick="toggleBcDrop('gv')">${gvName} ▾</button>`;
+    html+=`<div class="bc-drop" id="bcDropGV">`;
+    html+=`<div class="bc-opt ${curGV==='alle'?'active':''}" onclick="switchGV('alle')">Alle Gebietsverbände</div>`;
+    getFilteredGV().forEach(([id,gv])=>{
+      html+=`<div class="bc-opt ${id===curGV?'active':''}" onclick="switchGV('${id}')">${gv.name}</div>`;
+    });
+    html+=`</div></div><span class="bc-sep">›</span>`;
+  }
+  // Region dropdown
+  if(regCount>0){
+    const regName=curReg==='alle'?'Alle Regionen':regionen[curReg]?.short||regionen[curReg]?.name||'?';
+    html+=`<div class="bc-item"><button class="bc-btn ${curReg!=='alle'?'has-value':''}" onclick="toggleBcDrop('reg')">${regName} ▾</button>`;
+    html+=`<div class="bc-drop" id="bcDropReg">`;
+    html+=`<div class="bc-opt ${curReg==='alle'?'active':''}" onclick="switchReg('alle')">Alle Regionen</div>`;
+    getFilteredReg().forEach(([id,r])=>{
+      html+=`<div class="bc-opt ${id===curReg?'active':''}" onclick="switchReg('${id}')">${r.short||r.name}</div>`;
+    });
+    html+=`</div></div>`;
+  }
+  html+='</div>';
   document.getElementById('regionPills').innerHTML=html;
 }
+function toggleBcDrop(type){
+  const ids={lk:'bcDropLK',gv:'bcDropGV',reg:'bcDropReg'};
+  Object.entries(ids).forEach(([k,id])=>{
+    const el=document.getElementById(id);
+    if(!el)return;
+    if(k===type) el.classList.toggle('open');
+    else el.classList.remove('open');
+  });
+}
+document.addEventListener('click',e=>{if(!e.target.closest('.bc-item'))document.querySelectorAll('.bc-drop').forEach(d=>d.classList.remove('open'));});
+function switchLK(id){curLK=id;const gvs=getFilteredGV();curGV=id!=='alle'&&gvs.length===1?gvs[0][0]:'alle';curReg='alle';selId=null;closeDetail();renderBreadcrumb();renderList();renderStats();drawPolygons();showDrawToolbar();}
+function switchGV(id){curGV=id;if(id!=='alle'){const gv=gebietsverbaende[id];if(gv&&curLK==='alle')curLK=gv.landkreis_id;}const regs=getFilteredReg();curReg=id!=='alle'&&regs.length===1?regs[0][0]:'alle';selId=null;closeDetail();renderBreadcrumb();renderList();renderStats();drawPolygons();showDrawToolbar();}
+function switchReg(id){curReg=id;if(id!=='alle'){const r=regionen[id];if(r){if(curGV==='alle')curGV=r.gebietsverband_id;const gv=gebietsverbaende[r.gebietsverband_id];if(gv&&curLK==='alle')curLK=gv.landkreis_id;}}selId=null;closeDetail();renderBreadcrumb();renderList();renderStats();drawPolygons();showDrawToolbar();}
+
 function getAllGebiete(){return Object.values(regionen).flatMap(r=>r.gebiete)}
-function switchR(k){curR=k;selId=null;closeDetail();renderPills();renderList();renderStats();drawPolygons();showDrawToolbar()}
 function renderList(){
-  const gs=curR==='alle'?getAllGebiete():regionen[curR].gebiete;
+  const gs=getVisibleGebiete();
   document.getElementById('gebietList').innerHTML=gs.map(g=>`
     <div class="g-card status-${g.status} ${selId===g.id?'sel':''}" onclick="selGebiet('${g.id}')">
       <div class="g-top"><span class="g-id">${g.id}</span><span class="s-chip c-${g.status}">${sl(g.status)}</span></div>
@@ -1660,7 +1802,7 @@ function renderList(){
 }
 function sl(s){return{offen:'Offen',zugeteilt:'Zugeteilt',fertig:'Fertig ✓',problem:'Problem !'}[s]||s}
 function renderStats(){
-  const gs=curR==='alle'?getAllGebiete():regionen[curR].gebiete;
+  const gs=getVisibleGebiete();
   const tot=gs.reduce((a,g)=>a+g.stueckzahl,0),
     vert=gs.filter(g=>g.status==='fertig').reduce((a,g)=>a+g.stueckzahl,0),fn=gs.filter(g=>g.status==='fertig').length;
   document.getElementById('statFlyer').textContent=tot.toLocaleString('de');
@@ -1978,7 +2120,7 @@ async function deleteGebiet(id){
   delete kmlP[id];
 
   closeDetail();
-  renderPills(); renderList(); renderStats();
+  renderBreadcrumb(); renderList(); renderStats();
   toast(`🗑 Gebiet ${id} gelöscht`);
 }
 
@@ -2068,7 +2210,7 @@ function applyKmlAssignments(){
   // For unknown IDs: create new gebiete entries
   Object.keys(pendingKml).forEach(id=>{
     if(!allExistingIds.includes(id)){
-      const regionKey=document.getElementById(`kml_region_${id}`)?.value||curR;
+      const regionKey=document.getElementById(`kml_region_${id}`)?.value||curReg;
       const name=document.getElementById(`kml_name_${id}`)?.value.trim()||id;
       const stueck=parseInt(document.getElementById(`kml_stueck_${id}`)?.value)||100;
       regionen[regionKey].gebiete.push({
@@ -2079,7 +2221,7 @@ function applyKmlAssignments(){
   });
 
   closeKmlModal();
-  renderPills(); renderList(); renderStats(); drawPolygons();
+  renderBreadcrumb(); renderList(); renderStats(); drawPolygons();
   toast(`✓ ${Object.keys(pendingKml).length} Polygon(e) übernommen`);
 }
 // ============================================================
@@ -2087,10 +2229,148 @@ function applyKmlAssignments(){
 // ============================================================
 let drawMode=false, drawPoints=[], drawMarkers=[], drawPolyline=null, drawPreviewLine=null, drawEditId=null;
 
+// ============================================================
+// HIERARCHIE VERWALTUNG (Admin)
+// ============================================================
+function openHierarchyModal(){
+  switchHTab('lk');
+  renderHierarchyLists();
+  document.getElementById('hierarchyModalOv').classList.add('open');
+}
+function closeHierarchyModal(){document.getElementById('hierarchyModalOv').classList.remove('open');}
+function switchHTab(tab){
+  ['lk','gv','reg'].forEach(t=>{
+    document.getElementById('hTab'+t.charAt(0).toUpperCase()+t.slice(1).toUpperCase().replace('K','K').replace('V','V').replace('EG','eg')).className = t===tab?'pill active':'pill';
+    // Fix tab ID mapping
+  });
+  document.getElementById('hTabLK').className=tab==='lk'?'pill active':'pill';
+  document.getElementById('hTabGV').className=tab==='gv'?'pill active':'pill';
+  document.getElementById('hTabReg').className=tab==='reg'?'pill active':'pill';
+  document.getElementById('hPanelLK').style.display=tab==='lk'?'block':'none';
+  document.getElementById('hPanelGV').style.display=tab==='gv'?'block':'none';
+  document.getElementById('hPanelReg').style.display=tab==='reg'?'block':'none';
+  renderHierarchyLists();
+}
+function renderHierarchyLists(){
+  // Landkreise
+  const lkList=document.getElementById('hListLK');
+  if(lkList) lkList.innerHTML=Object.entries(landkreise).map(([id,lk])=>`
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 8px;background:var(--surface);border-radius:var(--r8)">
+      <span style="font-size:.82rem;font-weight:500">${lk.name}</span>
+      <button onclick="deleteLandkreis('${id}')" style="background:none;border:none;cursor:pointer;font-size:.75rem;color:var(--red)" title="Löschen">🗑</button>
+    </div>`).join('')||'<div style="font-size:.78rem;color:var(--text4);text-align:center;padding:10px">Keine Landkreise</div>';
+
+  // Gebietsverbände
+  const gvList=document.getElementById('hListGV');
+  if(gvList){
+    gvList.innerHTML=Object.entries(gebietsverbaende).map(([id,gv])=>{
+      const lk=landkreise[gv.landkreis_id];
+      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 8px;background:var(--surface);border-radius:var(--r8)">
+        <div><span style="font-size:.82rem;font-weight:500">${gv.name}</span><span style="font-size:.65rem;color:var(--text4);margin-left:6px">${lk?.name||''}</span></div>
+        <button onclick="deleteGebietsverband('${id}')" style="background:none;border:none;cursor:pointer;font-size:.75rem;color:var(--red)" title="Löschen">🗑</button>
+      </div>`;
+    }).join('')||'<div style="font-size:.78rem;color:var(--text4);text-align:center;padding:10px">Keine Gebietsverbände</div>';
+    // LK-Dropdown befüllen
+    const sel=document.getElementById('hNewGVLK');
+    if(sel) sel.innerHTML=Object.entries(landkreise).map(([id,lk])=>`<option value="${id}">${lk.name}</option>`).join('');
+  }
+
+  // Regionen
+  const regList=document.getElementById('hListReg');
+  if(regList){
+    regList.innerHTML=Object.entries(regionen).map(([id,r])=>{
+      const gv=gebietsverbaende[r.gebietsverband_id];
+      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 8px;background:var(--surface);border-radius:var(--r8)">
+        <div><span style="font-size:.82rem;font-weight:500">${r.name}</span><span style="font-size:.65rem;color:var(--text4);margin-left:4px">(${r.short||''})</span><span style="font-size:.62rem;color:var(--text4);margin-left:6px">${gv?.name||''}</span></div>
+        <button onclick="deleteRegion('${id}')" style="background:none;border:none;cursor:pointer;font-size:.75rem;color:var(--red)" title="Löschen">🗑</button>
+      </div>`;
+    }).join('')||'<div style="font-size:.78rem;color:var(--text4);text-align:center;padding:10px">Keine Regionen</div>';
+    // GV-Dropdown befüllen
+    const sel=document.getElementById('hNewRegGV');
+    if(sel) sel.innerHTML=Object.entries(gebietsverbaende).map(([id,gv])=>`<option value="${id}">${gv.name}</option>`).join('');
+  }
+}
+
+async function addLandkreis(){
+  const name=document.getElementById('hNewLKName').value.trim();
+  if(!name){toast('⚠️ Name eingeben');return;}
+  const {data,error}=await sb.from('landkreise').insert({name}).select().single();
+  if(error){toast('⚠️ '+error.message);return;}
+  landkreise[data.id]=data;
+  document.getElementById('hNewLKName').value='';
+  renderHierarchyLists();renderBreadcrumb();
+  toast('✅ Landkreis erstellt');
+}
+async function deleteLandkreis(id){
+  if(!confirm('Landkreis löschen? Alle zugehörigen Gebietsverbände und Regionen werden auch gelöscht!'))return;
+  const {error}=await sb.from('landkreise').delete().eq('id',id);
+  if(error){toast('⚠️ '+error.message);return;}
+  // Lokal entfernen inkl. Kinder
+  Object.entries(gebietsverbaende).forEach(([gvId,gv])=>{
+    if(gv.landkreis_id===id){
+      Object.entries(regionen).forEach(([rId,r])=>{if(r.gebietsverband_id===gvId)delete regionen[rId];});
+      delete gebietsverbaende[gvId];
+    }
+  });
+  delete landkreise[id];
+  if(curLK===id)curLK='alle';
+  renderHierarchyLists();renderBreadcrumb();renderList();renderStats();drawPolygons();
+  toast('✅ Landkreis gelöscht');
+}
+
+async function addGebietsverband(){
+  const name=document.getElementById('hNewGVName').value.trim();
+  const lkId=document.getElementById('hNewGVLK').value;
+  if(!name){toast('⚠️ Name eingeben');return;}
+  if(!lkId){toast('⚠️ Landkreis wählen');return;}
+  const {data,error}=await sb.from('gebietsverbaende').insert({name,landkreis_id:lkId,center_lat:50.94,center_lng:12.10,zoom:11}).select().single();
+  if(error){toast('⚠️ '+error.message);return;}
+  gebietsverbaende[data.id]=data;
+  document.getElementById('hNewGVName').value='';
+  renderHierarchyLists();renderBreadcrumb();
+  toast('✅ Gebietsverband erstellt');
+}
+async function deleteGebietsverband(id){
+  if(!confirm('Gebietsverband löschen? Alle zugehörigen Regionen werden auch gelöscht!'))return;
+  const {error}=await sb.from('gebietsverbaende').delete().eq('id',id);
+  if(error){toast('⚠️ '+error.message);return;}
+  Object.entries(regionen).forEach(([rId,r])=>{if(r.gebietsverband_id===id)delete regionen[rId];});
+  delete gebietsverbaende[id];
+  if(curGV===id)curGV='alle';
+  renderHierarchyLists();renderBreadcrumb();renderList();renderStats();drawPolygons();
+  toast('✅ Gebietsverband gelöscht');
+}
+
+async function addRegion(){
+  const name=document.getElementById('hNewRegName').value.trim();
+  const short=document.getElementById('hNewRegShort').value.trim();
+  const gvId=document.getElementById('hNewRegGV').value;
+  if(!name){toast('⚠️ Name eingeben');return;}
+  if(!gvId){toast('⚠️ Gebietsverband wählen');return;}
+  const gv=gebietsverbaende[gvId];
+  const {data,error}=await sb.from('regionen').insert({name,short:short||name,gebietsverband_id:gvId,center_lat:gv?.center_lat||50.94,center_lng:gv?.center_lng||12.10,zoom:13}).select().single();
+  if(error){toast('⚠️ '+error.message);return;}
+  regionen[data.id]={...data,center:[data.center_lat,data.center_lng],gebiete:[]};
+  document.getElementById('hNewRegName').value='';
+  document.getElementById('hNewRegShort').value='';
+  renderHierarchyLists();renderBreadcrumb();
+  toast('✅ Region erstellt');
+}
+async function deleteRegion(id){
+  if(!confirm('Region löschen? Alle Gebiete in dieser Region verlieren ihre Zuordnung!'))return;
+  const {error}=await sb.from('regionen').delete().eq('id',id);
+  if(error){toast('⚠️ '+error.message);return;}
+  delete regionen[id];
+  if(curReg===id)curReg='alle';
+  renderHierarchyLists();renderBreadcrumb();renderList();renderStats();drawPolygons();
+  toast('✅ Region gelöscht');
+}
+
 function showDrawToolbar(){
-  if(curR==='alle'){document.getElementById('drawToolbar').classList.remove('visible');return;}
+  if(curReg==='alle'){document.getElementById('drawToolbar').classList.remove('visible');return;}
   const isAdmin = curRole === 'admin';
-  const isVerwalterWithAccess = curRole === 'verwalter' && verwalterHatRegionZugriff(curR);
+  const reg=regionen[curReg];
+  const isVerwalterWithAccess = curRole === 'verwalter' && reg && verwalterHatGebietsverbandZugriff(reg.gebietsverband_id);
   if((isAdmin || isVerwalterWithAccess) && window.innerWidth >= 768){
     document.getElementById('drawToolbar').classList.add('visible');
   } else {
@@ -2099,12 +2379,19 @@ function showDrawToolbar(){
 }
 
 // Prüft ob der aktuelle Verwalter Zugriff auf eine Region hat
-function verwalterHatRegionZugriff(regionKey) {
+function verwalterHatRegionZugriff(regionId) {
   if (curRole === 'admin') return true;
   if (curRole !== 'verwalter') return false;
-  const verwRegionen = currentProfile?.verwaltete_regionen || [];
-  // Leere Liste = kein Zugriff (noch nicht zugewiesen)
-  return verwRegionen.includes(regionKey);
+  const reg = regionen[regionId];
+  if (!reg) return false;
+  return verwalterHatGebietsverbandZugriff(reg.gebietsverband_id);
+}
+
+function verwalterHatGebietsverbandZugriff(gvId) {
+  if (curRole === 'admin') return true;
+  if (curRole !== 'verwalter') return false;
+  const verwGV = currentProfile?.verwaltete_gebietsverbaende || currentProfile?.verwaltete_regionen || [];
+  return verwGV.includes(gvId);
 }
 
 // Prüft ob Verwalter Zugriff auf ein Gebiet hat (anhand Region)
@@ -2122,7 +2409,8 @@ function verwalterHatGebietZugriff(gebietId) {
 
 function toggleDraw(){
   if(drawMode){drawCancel();return}
-  if(curRole==='verwalter' && !verwalterHatRegionZugriff(curR)){
+  if(curReg==='alle'){toast('⚠️ Bitte zuerst eine Region wählen');return;}
+  if(curRole==='verwalter' && !verwalterHatRegionZugriff(curReg)){
     toast('⚠️ Kein Zugriff auf diese Region');return;
   }
   drawMode=true;
@@ -2196,8 +2484,8 @@ function drawFinish(){
   const sel=document.getElementById('newGebietRegion');
   const allowedRegionen = Object.entries(regionen).filter(([k])=>verwalterHatRegionZugriff(k));
   sel.innerHTML=allowedRegionen.map(([k,r])=>
-    `<option value="${k}" ${k===curR?'selected':''}>${r.name}</option>`).join('');
-  if(!allowedRegionen.find(([k])=>k===curR) && allowedRegionen.length>0){
+    `<option value="${k}" ${k===curReg?'selected':''}>${r.name}</option>`).join('');
+  if(!allowedRegionen.find(([k])=>k===curReg) && allowedRegionen.length>0){
     sel.value=allowedRegionen[0][0];
   }
 
@@ -2213,9 +2501,9 @@ function drawFinish(){
   } else {
     document.getElementById('newGebietId').readOnly=false;
     // Auto-suggest next ID
-    const rGebiete=regionen[curR].gebiete;
+    const rGebiete=regionen[curReg].gebiete;
     const lastId=rGebiete.length>0?rGebiete[rGebiete.length-1].id:'';
-    const prefix=curR;
+    const prefix=curReg;
     const lastLetter=lastId?lastId.replace(prefix,''):'';
     const nextLetter=lastLetter?String.fromCharCode(lastLetter.charCodeAt(0)+1):'A';
     document.getElementById('newGebietId').value=prefix+nextLetter;
@@ -2428,7 +2716,7 @@ async function drawSave(){
 
     document.getElementById('newGebietModalOv').classList.remove('open');
     drawCancel();
-    renderPills(); renderList(); renderStats(); drawPolygons();
+    renderBreadcrumb(); renderList(); renderStats(); drawPolygons();
     toast(`✅ Polygon für ${id} „${name}" aktualisiert`);
   } else {
     // CREATE new gebiet
@@ -2455,8 +2743,8 @@ async function drawSave(){
 
     document.getElementById('newGebietModalOv').classList.remove('open');
     drawCancel();
-    if(regionKey!==curR) switchR(regionKey);
-    else { renderPills(); renderList(); renderStats(); drawPolygons(); }
+    if(regionKey!==curReg) switchReg(regionKey);
+    else { renderBreadcrumb(); renderList(); renderStats(); drawPolygons(); }
     toast(`✅ Gebiet ${id} „${name}" erstellt`);
   }
   drawEditId=null;
