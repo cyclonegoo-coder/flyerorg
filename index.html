@@ -1326,7 +1326,7 @@ function getCoords(rk,i,tot,gid){
 // ============================================================
 // STATE
 // ============================================================
-let curR='01',selId=null,curRole='verteiler',layers={},map,mapInited=false;
+let curR='alle',selId=null,curRole='verteiler',layers={},map,mapInited=false;
 const scol={offen:{f:'#aeaeb2',s:'#8e8e93'},zugeteilt:{f:'#ff9500',s:'#c97800'},fertig:{f:'#34c759',s:'#248a3d'},problem:{f:'#ff3b30',s:'#c62828'}};
 
 function initApp(){
@@ -1338,7 +1338,7 @@ function initApp(){
 // MAP
 // ============================================================
 function initMap(){
-  map=L.map('map',{center:[50.925,12.01],zoom:12,zoomControl:true});
+  map=L.map('map',{center:[50.94,12.10],zoom:11,zoomControl:true});
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:19}).addTo(map); setTimeout(()=>map.invalidateSize(),200);
   drawPolygons();
 }
@@ -1346,29 +1346,50 @@ function initMap(){
 function drawPolygons(){
   if(!map) return;
   Object.values(layers).forEach(l=>map.removeLayer(l));layers={};
-  const r=regionen[curR];
-  r.gebiete.forEach((g,i)=>{
-    const c=getCoords(curR,i,r.gebiete.length,g.id),col=scol[g.status]||scol.offen;
-    const poly=L.polygon(c,{color:col.s,fillColor:col.f,fillOpacity:.35,weight:2}).addTo(map);
-    poly.bindPopup(`<div class="popup-id">${g.id}</div><div class="popup-name">${g.name}</div><div class="popup-meta">📦 ${g.stueckzahl} · ${g.verteiler||'Nicht zugeteilt'}</div>`);
-    poly.on('click',()=>{selGebiet(g.id);if(window.innerWidth<=768)document.getElementById('sidebar').classList.remove('open')});
-    poly.on('mouseover',()=>poly.setStyle({fillOpacity:.55}));
-    poly.on('mouseout',()=>poly.setStyle({fillOpacity:selId===g.id?.55:.35}));
-    layers[g.id]=poly;
-  });
-  map.flyTo(r.center,r.zoom,{duration:.8});
+  if(curR==='alle'){
+    const allBounds=[];
+    Object.entries(regionen).forEach(([rk,r])=>{
+      r.gebiete.forEach((g,i)=>{
+        const c=getCoords(rk,i,r.gebiete.length,g.id),col=scol[g.status]||scol.offen;
+        const poly=L.polygon(c,{color:col.s,fillColor:col.f,fillOpacity:.35,weight:2}).addTo(map);
+        poly.bindPopup(`<div class="popup-id">${g.id}</div><div class="popup-name">${g.name}</div><div class="popup-meta">📦 ${g.stueckzahl} · ${g.verteiler||'Nicht zugeteilt'}</div>`);
+        poly.on('click',()=>{selGebiet(g.id);if(window.innerWidth<=768)document.getElementById('sidebar').classList.remove('open')});
+        poly.on('mouseover',()=>poly.setStyle({fillOpacity:.55}));
+        poly.on('mouseout',()=>poly.setStyle({fillOpacity:selId===g.id?.55:.35}));
+        layers[g.id]=poly;
+        allBounds.push(...c);
+      });
+    });
+    if(allBounds.length>0) map.flyToBounds(L.latLngBounds(allBounds).pad(0.1),{duration:.8});
+  } else {
+    const r=regionen[curR];
+    r.gebiete.forEach((g,i)=>{
+      const c=getCoords(curR,i,r.gebiete.length,g.id),col=scol[g.status]||scol.offen;
+      const poly=L.polygon(c,{color:col.s,fillColor:col.f,fillOpacity:.35,weight:2}).addTo(map);
+      poly.bindPopup(`<div class="popup-id">${g.id}</div><div class="popup-name">${g.name}</div><div class="popup-meta">📦 ${g.stueckzahl} · ${g.verteiler||'Nicht zugeteilt'}</div>`);
+      poly.on('click',()=>{selGebiet(g.id);if(window.innerWidth<=768)document.getElementById('sidebar').classList.remove('open')});
+      poly.on('mouseover',()=>poly.setStyle({fillOpacity:.55}));
+      poly.on('mouseout',()=>poly.setStyle({fillOpacity:selId===g.id?.55:.35}));
+      layers[g.id]=poly;
+    });
+    map.flyTo(r.center,r.zoom,{duration:.8});
+  }
 }
 
 // ============================================================
 // SIDEBAR
 // ============================================================
 function renderPills(){
-  document.getElementById('regionPills').innerHTML=Object.entries(regionen).map(([k,r])=>
+  let html=`<button class="pill ${'alle'===curR?'active':''}" onclick="switchR('alle')">Alle</button>`;
+  html+=Object.entries(regionen).map(([k,r])=>
     `<button class="pill ${k===curR?'active':''}" onclick="switchR('${k}')">${r.short}</button>`).join('');
+  document.getElementById('regionPills').innerHTML=html;
 }
+function getAllGebiete(){return Object.values(regionen).flatMap(r=>r.gebiete)}
 function switchR(k){curR=k;selId=null;closeDetail();renderPills();renderList();renderStats();drawPolygons();showDrawToolbar()}
 function renderList(){
-  document.getElementById('gebietList').innerHTML=regionen[curR].gebiete.map(g=>`
+  const gs=curR==='alle'?getAllGebiete():regionen[curR].gebiete;
+  document.getElementById('gebietList').innerHTML=gs.map(g=>`
     <div class="g-card status-${g.status} ${selId===g.id?'sel':''}" onclick="selGebiet('${g.id}')">
       <div class="g-top"><span class="g-id">${g.id}</span><span class="s-chip c-${g.status}">${sl(g.status)}</span></div>
       <div class="g-name">${g.name}</div>
@@ -1377,13 +1398,14 @@ function renderList(){
 }
 function sl(s){return{offen:'Offen',zugeteilt:'Zugeteilt',fertig:'Fertig ✓',problem:'Problem !'}[s]||s}
 function renderStats(){
-  const gs=regionen[curR].gebiete,tot=gs.reduce((a,g)=>a+g.stueckzahl,0),
+  const gs=curR==='alle'?getAllGebiete():regionen[curR].gebiete;
+  const tot=gs.reduce((a,g)=>a+g.stueckzahl,0),
     vert=gs.filter(g=>g.status==='fertig').reduce((a,g)=>a+g.stueckzahl,0),fn=gs.filter(g=>g.status==='fertig').length;
   document.getElementById('statFlyer').textContent=tot.toLocaleString('de');
   document.getElementById('statVerteilt').textContent=vert.toLocaleString('de');
   document.getElementById('statOffen').textContent=(tot-vert).toLocaleString('de');
   document.getElementById('progText').textContent=`${fn} / ${gs.length}`;
-  document.getElementById('progFill').style.width=(fn/gs.length*100)+'%';
+  document.getElementById('progFill').style.width=(gs.length?fn/gs.length*100:0)+'%';
 }
 
 // ============================================================
@@ -1802,6 +1824,7 @@ function applyKmlAssignments(){
 let drawMode=false, drawPoints=[], drawMarkers=[], drawPolyline=null, drawPreviewLine=null, drawEditId=null;
 
 function showDrawToolbar(){
+  if(curR==='alle'){document.getElementById('drawToolbar').classList.remove('visible');return;}
   const isAdmin = curRole === 'admin';
   const isVerwalterWithAccess = curRole === 'verwalter' && verwalterHatRegionZugriff(curR);
   if((isAdmin || isVerwalterWithAccess) && window.innerWidth >= 768){
