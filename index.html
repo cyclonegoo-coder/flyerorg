@@ -240,6 +240,21 @@ textarea{min-height:68px}
     <button class="login-btn" id="loginBtn" onclick="doLogin()">Anmelden</button>
     <div class="login-error" id="loginError"></div>
 
+    <div id="resetWrap" style="margin-top:12px;text-align:center">
+      <a href="#" onclick="showResetForm();return false" style="font-size:.78rem;color:var(--blue);text-decoration:none">Passwort vergessen?</a>
+    </div>
+    <div id="resetForm" style="display:none;margin-top:12px">
+      <div class="login-field">
+        <label class="login-label">E-Mail für Passwort-Reset</label>
+        <input class="login-input" type="email" id="resetEmail" placeholder="deine@email.de" autocomplete="email">
+      </div>
+      <button class="login-btn" id="resetBtn" onclick="doResetPassword()" style="background:var(--orange)">Reset-Link senden</button>
+      <div id="resetStatus" style="font-size:.78rem;margin-top:6px;min-height:18px;text-align:center"></div>
+      <div style="text-align:center;margin-top:8px">
+        <a href="#" onclick="hideResetForm();return false" style="font-size:.78rem;color:var(--text3);text-decoration:none">← Zurück zum Login</a>
+      </div>
+    </div>
+
     <div class="login-footer">Zugang nur für autorisierte Mitglieder</div>
   </div>
 </div>
@@ -568,6 +583,38 @@ async function doLogin() {
   currentUser = data.user;
   await loadProfile();
   showApp();
+}
+
+// Passwort vergessen
+function showResetForm() {
+  document.getElementById('resetWrap').style.display = 'none';
+  document.getElementById('resetForm').style.display = 'block';
+  document.getElementById('resetEmail').value = document.getElementById('loginEmail').value || '';
+  document.getElementById('resetStatus').textContent = '';
+}
+function hideResetForm() {
+  document.getElementById('resetForm').style.display = 'none';
+  document.getElementById('resetWrap').style.display = 'block';
+}
+async function doResetPassword() {
+  const email = document.getElementById('resetEmail').value.trim();
+  const btn = document.getElementById('resetBtn');
+  const status = document.getElementById('resetStatus');
+  if (!email) { status.style.color = 'var(--red)'; status.textContent = '⚠️ Bitte E-Mail eingeben'; return; }
+  btn.disabled = true;
+  status.style.color = 'var(--text3)';
+  status.textContent = '⏳ Link wird gesendet…';
+  const { error } = await sb.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin + window.location.pathname
+  });
+  if (error) {
+    status.style.color = 'var(--red)';
+    status.textContent = '⚠️ ' + error.message;
+  } else {
+    status.style.color = 'var(--green)';
+    status.textContent = '✅ Reset-Link an ' + email + ' gesendet. Bitte E-Mail prüfen!';
+  }
+  btn.disabled = false;
 }
 
 // Set password for first-time invite-link users
@@ -942,16 +989,28 @@ async function changeRole(userId, newRolle) {
 // ============================================================
 // VERWALTER-REGIONEN BEARBEITEN
 // ============================================================
+function getRegionVerwalter(regionKey, excludeUserId) {
+  return allUsers.find(u =>
+    u.id !== excludeUserId &&
+    (u.rolle === 'verwalter' || u.rolle === 'admin') &&
+    u.verwaltete_regionen && u.verwaltete_regionen.includes(regionKey)
+  );
+}
+
 function openEditRegionenModal(userId, userName, currentRegionen) {
   document.getElementById('editRegModalTitle').textContent = `🗺 Regionen: ${userName}`;
   document.getElementById('editRegUserId').value = userId;
   const list = document.getElementById('editRegList');
-  list.innerHTML = Object.entries(regionen).map(([k, r]) =>
-    `<label style="display:flex;align-items:center;gap:6px;font-size:.82rem;cursor:pointer">
-      <input type="checkbox" id="editReg_${k}" value="${k}" ${currentRegionen.includes(k)?'checked':''}>
-      <span>${r.name}</span>
-    </label>`
-  ).join('');
+  list.innerHTML = Object.entries(regionen).map(([k, r]) => {
+    const belegt = getRegionVerwalter(k, userId);
+    const disabled = belegt ? 'disabled' : '';
+    const checked = currentRegionen.includes(k) ? 'checked' : '';
+    const hint = belegt ? `<span style="font-size:.7rem;color:var(--text4);margin-left:4px">(${belegt.name})</span>` : '';
+    return `<label style="display:flex;align-items:center;gap:6px;font-size:.82rem;cursor:pointer;${belegt?'opacity:.5':''}">
+      <input type="checkbox" id="editReg_${k}" value="${k}" ${checked} ${disabled}>
+      <span>${r.name}${hint}</span>
+    </label>`;
+  }).join('');
   document.getElementById('editRegModalOv').classList.add('open');
 }
 
@@ -974,12 +1033,15 @@ async function saveRegionen() {
 
 function renderInviteRegionen() {
   const list = document.getElementById('inviteRegionenList');
-  list.innerHTML = Object.entries(regionen).map(([k, r]) =>
-    `<label style="display:flex;align-items:center;gap:6px;font-size:.8rem;cursor:pointer">
-      <input type="checkbox" id="invReg_${k}" value="${k}">
-      <span>${r.name}</span>
-    </label>`
-  ).join('');
+  list.innerHTML = Object.entries(regionen).map(([k, r]) => {
+    const belegt = getRegionVerwalter(k, null);
+    const disabled = belegt ? 'disabled' : '';
+    const hint = belegt ? `<span style="font-size:.7rem;color:var(--text4);margin-left:4px">(${belegt.name})</span>` : '';
+    return `<label style="display:flex;align-items:center;gap:6px;font-size:.8rem;cursor:pointer;${belegt?'opacity:.5':''}">
+      <input type="checkbox" id="invReg_${k}" value="${k}" ${disabled}>
+      <span>${r.name}${hint}</span>
+    </label>`;
+  }).join('');
 }
 
 // Rollen-Dropdown → Regionen-Auswahl nur bei Verwalter
@@ -1136,10 +1198,8 @@ async function showApp() {
     document.getElementById('inviteUserBtn').style.display = 'block';
     document.getElementById('manageUsersBtn').style.display = 'block';
   }
-  // Anfragen-Glocke für Admin und Verwalter
-  if (rolle === 'admin' || rolle === 'verwalter') {
-    document.getElementById('anfragenBtn').style.display = 'inline-block';
-  }
+  // Anfragen-Glocke für alle Rollen (Admin/Verwalter: offene Anfragen, Verteiler: Rückmeldungen)
+  document.getElementById('anfragenBtn').style.display = 'inline-block';
   await loadAllUsers();
   await loadKampagnen();
   await loadCustomGebiete();  // Selbst gezeichnete Gebiete aus DB laden
@@ -1219,25 +1279,34 @@ async function loadHinweise() {
   } catch(e) { console.warn('loadHinweise failed:', e); }
 }
 
+let meineRueckmeldungen = [];
 async function loadAnfragen() {
   try {
+    // Offene Anfragen (für Admin/Verwalter)
     const { data, error } = await sb.from('anfragen').select('*').eq('status', 'offen').order('created_at', { ascending: false });
-    if (!error && data) {
-      alleAnfragen = data;
-      updateAnfragenBadge();
+    if (!error && data) { alleAnfragen = data; }
+    // Bearbeitete eigene Anfragen (Rückmeldungen für Verteiler)
+    if (currentUser?.id) {
+      const { data: rm, error: rmErr } = await sb.from('anfragen').select('*').eq('user_id', currentUser.id).in('status', ['genehmigt', 'abgelehnt']).eq('gelesen', false).order('updated_at', { ascending: false });
+      if (!rmErr && rm) { meineRueckmeldungen = rm; }
     }
+    updateAnfragenBadge();
   } catch(e) { console.warn('loadAnfragen failed:', e); }
 }
 
 function updateAnfragenBadge() {
   const badge = document.getElementById('anfragenBadge');
   if (!badge) return;
-  let sichtbar = alleAnfragen;
-  if (curRole === 'verwalter') {
-    sichtbar = alleAnfragen.filter(a => verwalterHatGebietZugriff(a.gebiet_id));
+  let count = 0;
+  if (curRole === 'admin') {
+    count = alleAnfragen.length;
+  } else if (curRole === 'verwalter') {
+    count = alleAnfragen.filter(a => verwalterHatGebietZugriff(a.gebiet_id)).length;
   }
-  if (sichtbar.length > 0) {
-    badge.textContent = sichtbar.length;
+  // Verteiler (und alle Rollen): eigene Rückmeldungen zählen
+  count += meineRueckmeldungen.length;
+  if (count > 0) {
+    badge.textContent = count;
     badge.style.display = 'flex';
   } else {
     badge.style.display = 'none';
@@ -1255,33 +1324,78 @@ function closeAnfragenModal() {
 function renderAnfragenList() {
   const list = document.getElementById('anfragenList');
   if (!list) return;
-  let sichtbar = alleAnfragen;
-  if (curRole === 'verwalter') {
+  let html = '';
+
+  // 1) Rückmeldungen für den aktuellen Nutzer (alle Rollen)
+  if (meineRueckmeldungen.length > 0) {
+    html += '<div style="font-size:.7rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:6px">Rückmeldungen zu deinen Anfragen</div>';
+    html += meineRueckmeldungen.map(a => {
+      const g = getG(a.gebiet_id);
+      const gebietName = g ? g.name : a.gebiet_id;
+      const bearbeiter = allUsers.find(u => u.id === a.bearbeitet_von);
+      const bearName = bearbeiter ? bearbeiter.name : 'Verwalter';
+      const datum = new Date(a.updated_at || a.created_at).toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+      const istGenehmigt = a.status === 'genehmigt';
+      const farbe = istGenehmigt ? 'var(--green)' : 'var(--red)';
+      const icon = istGenehmigt ? '✅' : '❌';
+      const statusText = istGenehmigt ? 'Genehmigt' : 'Abgelehnt';
+      return `<div style="background:var(--surface2);border-radius:var(--r8);padding:10px;border-left:3px solid ${farbe}">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <span style="font-size:.82rem;font-weight:600">${gebietName}</span>
+          <span style="font-size:.65rem;color:var(--text4)">${datum}</span>
+        </div>
+        <div style="font-size:.78rem;color:var(--text2);margin-bottom:4px">${icon} <strong>${statusText}</strong> — 📦 ${a.neue_stueckzahl} Stück</div>
+        <div style="font-size:.72rem;color:var(--text3);margin-bottom:6px">von ${bearName}</div>
+        <button onclick="markAnfrageGelesen('${a.id}')" style="width:100%;padding:5px;border:none;border-radius:var(--r8);background:var(--surface3);color:var(--text2);font-size:.75rem;cursor:pointer">✓ Zur Kenntnis genommen</button>
+      </div>`;
+    }).join('');
+  }
+
+  // 2) Offene Anfragen (für Admin/Verwalter)
+  let sichtbar = [];
+  if (curRole === 'admin') {
+    sichtbar = alleAnfragen;
+  } else if (curRole === 'verwalter') {
     sichtbar = alleAnfragen.filter(a => verwalterHatGebietZugriff(a.gebiet_id));
   }
-  if (sichtbar.length === 0) {
-    list.innerHTML = '<div style="font-size:.82rem;color:var(--text3);text-align:center;padding:20px">Keine offenen Anfragen</div>';
-    return;
+
+  if (sichtbar.length > 0) {
+    if (html) html += '<hr style="border:none;border-top:1px solid var(--surface3);margin:12px 0">';
+    html += '<div style="font-size:.7rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:6px">Offene Anfragen</div>';
+    html += sichtbar.map(a => {
+      const g = getG(a.gebiet_id);
+      const gebietName = g ? g.name : a.gebiet_id;
+      const user = allUsers.find(u => u.id === a.user_id);
+      const userName = user ? user.name : 'Unbekannt';
+      const datum = new Date(a.created_at).toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+      return `<div style="background:var(--surface2);border-radius:var(--r8);padding:10px;border-left:3px solid var(--orange)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <span style="font-size:.82rem;font-weight:600">${gebietName} (${a.gebiet_id})</span>
+          <span style="font-size:.65rem;color:var(--text4)">${datum}</span>
+        </div>
+        <div style="font-size:.78rem;color:var(--text2);margin-bottom:2px">👤 ${userName} → 📦 <strong>${a.neue_stueckzahl}</strong> Stück</div>
+        ${a.grund ? `<div style="font-size:.75rem;color:var(--text3);margin-bottom:6px;font-style:italic">${a.grund}</div>` : ''}
+        <div style="display:flex;gap:6px">
+          <button onclick="handleAnfrage('${a.id}','genehmigt',${a.neue_stueckzahl},'${a.gebiet_id}')" style="flex:1;padding:5px;border:none;border-radius:var(--r8);background:var(--green);color:#fff;font-size:.75rem;font-weight:600;cursor:pointer">✓ Genehmigen</button>
+          <button onclick="handleAnfrage('${a.id}','abgelehnt',null,null)" style="flex:1;padding:5px;border:none;border-radius:var(--r8);background:var(--red);color:#fff;font-size:.75rem;font-weight:600;cursor:pointer">✗ Ablehnen</button>
+        </div>
+      </div>`;
+    }).join('');
   }
-  list.innerHTML = sichtbar.map(a => {
-    const g = getG(a.gebiet_id);
-    const gebietName = g ? g.name : a.gebiet_id;
-    const user = allUsers.find(u => u.id === a.user_id);
-    const userName = user ? user.name : 'Unbekannt';
-    const datum = new Date(a.created_at).toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
-    return `<div style="background:var(--surface2);border-radius:var(--r8);padding:10px;border-left:3px solid var(--orange)">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-        <span style="font-size:.82rem;font-weight:600">${gebietName} (${a.gebiet_id})</span>
-        <span style="font-size:.65rem;color:var(--text4)">${datum}</span>
-      </div>
-      <div style="font-size:.78rem;color:var(--text2);margin-bottom:2px">👤 ${userName} → 📦 <strong>${a.neue_stueckzahl}</strong> Stück</div>
-      ${a.grund ? `<div style="font-size:.75rem;color:var(--text3);margin-bottom:6px;font-style:italic">${a.grund}</div>` : ''}
-      <div style="display:flex;gap:6px">
-        <button onclick="handleAnfrage('${a.id}','genehmigt',${a.neue_stueckzahl},'${a.gebiet_id}')" style="flex:1;padding:5px;border:none;border-radius:var(--r8);background:var(--green);color:#fff;font-size:.75rem;font-weight:600;cursor:pointer">✓ Genehmigen</button>
-        <button onclick="handleAnfrage('${a.id}','abgelehnt',null,null)" style="flex:1;padding:5px;border:none;border-radius:var(--r8);background:var(--red);color:#fff;font-size:.75rem;font-weight:600;cursor:pointer">✗ Ablehnen</button>
-      </div>
-    </div>`;
-  }).join('');
+
+  if (!html) {
+    html = '<div style="font-size:.82rem;color:var(--text3);text-align:center;padding:20px">Keine Benachrichtigungen</div>';
+  }
+  list.innerHTML = html;
+}
+
+async function markAnfrageGelesen(anfrageId) {
+  const { error } = await sb.from('anfragen').update({ gelesen: true }).eq('id', anfrageId);
+  if (error) { toast('⚠️ Fehler: ' + (error.message || error.code)); return; }
+  meineRueckmeldungen = meineRueckmeldungen.filter(a => a.id !== anfrageId);
+  updateAnfragenBadge();
+  renderAnfragenList();
+  toast('✓ Gelesen');
 }
 
 async function handleAnfrage(anfrageId, entscheidung, neueStueckzahl, gebietId) {
