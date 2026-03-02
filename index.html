@@ -1688,12 +1688,14 @@ function openDetail(id){
   if(curRole==='admin'){
     h+=`<div class="d-sec"><div class="sec-hd">Admin – Geodaten</div><div class="f-stack">
       <label class="btn-f">📂 KML hochladen<input type="file" accept=".kml" style="display:none" onchange="handleKML(event)"></label>
-      ${window.innerWidth>=768?`<button class="btn btn-g" onclick="redrawGebiet('${g.id}')">✏️ Polygon neu zeichnen</button>`:''}
+      ${kmlP[g.id]?`<button class="btn btn-g" onclick="editPolygon('${g.id}')">✏️ Polygon bearbeiten</button>`:''}
+      ${window.innerWidth>=768?`<button class="btn btn-g" onclick="redrawGebiet('${g.id}')">🔄 Polygon neu zeichnen</button>`:''}
       <button class="btn btn-d" onclick="deleteGebiet('${g.id}')">Gebiet löschen</button>
     </div></div>`;
   } else if(curRole==='verwalter' && window.innerWidth>=768 && verwalterHatGebietZugriff(g.id)){
     h+=`<div class="d-sec"><div class="sec-hd">Geodaten</div><div class="f-stack">
-      <button class="btn btn-g" onclick="redrawGebiet('${g.id}')">✏️ Polygon neu zeichnen</button>
+      ${kmlP[g.id]?`<button class="btn btn-g" onclick="editPolygon('${g.id}')">✏️ Polygon bearbeiten</button>`:''}
+      <button class="btn btn-g" onclick="redrawGebiet('${g.id}')">🔄 Polygon neu zeichnen</button>
     </div></div>`;
   }
   document.getElementById('detailBody').innerHTML=h;
@@ -2124,6 +2126,148 @@ function redrawGebiet(id){
   }
   toggleDraw();
   setDrawInfo(`Polygon für ${id} neu zeichnen – Klicke Eckpunkte auf die Karte`);
+}
+
+// ============================================================
+// POLYGON BEARBEITEN (Eckpunkte verschieben)
+// ============================================================
+let editingGebietId=null, editMarkers=[], editMidMarkers=[], editOrigCoords=null;
+
+function editPolygon(id){
+  if(!kmlP[id]||!layers[id]){toast('⚠️ Kein Polygon zum Bearbeiten vorhanden');return;}
+  closeDetail();
+  editingGebietId=id;
+  editOrigCoords=JSON.parse(JSON.stringify(kmlP[id]));
+
+  // Zoom to polygon
+  map.fitBounds(layers[id].getBounds().pad(0.3));
+
+  // Highlight polygon
+  layers[id].setStyle({color:'#009ee0',weight:3,dashArray:'6,4'});
+
+  // Create draggable markers for each vertex
+  rebuildEditMarkers();
+
+  // Show edit toolbar
+  const info=document.getElementById('drawInfo');
+  info.innerHTML=`<span style="font-size:.82rem">✏️ <strong>${id}</strong> bearbeiten – Eckpunkte verschieben |
+    <a href="#" onclick="editPolyAddPoint();return false" style="color:var(--blue)">+ Punkt</a> |
+    <a href="#" onclick="editPolySave();return false" style="color:var(--green)">💾 Speichern</a> |
+    <a href="#" onclick="editPolyCancel();return false" style="color:var(--red)">❌ Abbrechen</a></span>`;
+  info.style.display='block';
+}
+
+function rebuildEditMarkers(){
+  // Clear existing markers
+  editMarkers.forEach(m=>map.removeLayer(m));
+  editMidMarkers.forEach(m=>map.removeLayer(m));
+  editMarkers=[];editMidMarkers=[];
+
+  const coords=kmlP[editingGebietId];
+
+  // Vertex markers (blue, draggable)
+  coords.forEach((c,i)=>{
+    const m=L.circleMarker(c,{radius:6,color:'#009ee0',fillColor:'#fff',fillOpacity:1,weight:2,className:'edit-vertex'}).addTo(map);
+    m._idx=i;
+    m.options.draggable=true;
+
+    // Make draggable via mouse events
+    let dragging=false,startLatLng;
+    m.on('mousedown',function(e){
+      dragging=true;startLatLng=e.latlng;
+      map.dragging.disable();
+      L.DomEvent.stopPropagation(e);
+      map.on('mousemove',onVertexDrag);
+      map.on('mouseup',onVertexDragEnd);
+    });
+    function onVertexDrag(e){
+      if(!dragging)return;
+      coords[i]=[e.latlng.lat,e.latlng.lng];
+      m.setLatLng(e.latlng);
+      layers[editingGebietId].setLatLngs(coords);
+      updateMidMarkers();
+    }
+    function onVertexDragEnd(){
+      dragging=false;
+      map.dragging.enable();
+      map.off('mousemove',onVertexDrag);
+      map.off('mouseup',onVertexDragEnd);
+    }
+
+    // Right-click to delete vertex (min 3)
+    m.on('contextmenu',function(e){
+      L.DomEvent.stopPropagation(e);
+      if(coords.length<=3){toast('⚠️ Mindestens 3 Eckpunkte nötig');return;}
+      coords.splice(i,1);
+      layers[editingGebietId].setLatLngs(coords);
+      rebuildEditMarkers();
+    });
+
+    editMarkers.push(m);
+  });
+
+  // Midpoint markers (grey, smaller, click to add vertex)
+  updateMidMarkers();
+}
+
+function updateMidMarkers(){
+  editMidMarkers.forEach(m=>map.removeLayer(m));
+  editMidMarkers=[];
+  const coords=kmlP[editingGebietId];
+  for(let i=0;i<coords.length;i++){
+    const next=(i+1)%coords.length;
+    const midLat=(coords[i][0]+coords[next][0])/2;
+    const midLng=(coords[i][1]+coords[next][1])/2;
+    const mm=L.circleMarker([midLat,midLng],{radius:4,color:'#aaa',fillColor:'#ddd',fillOpacity:.8,weight:1}).addTo(map);
+    mm._insertAfter=i;
+    mm.on('click',function(e){
+      L.DomEvent.stopPropagation(e);
+      coords.splice(i+1,0,[midLat,midLng]);
+      layers[editingGebietId].setLatLngs(coords);
+      rebuildEditMarkers();
+    });
+    editMidMarkers.push(mm);
+  }
+}
+
+function editPolyAddPoint(){
+  toast('💡 Klicke auf einen grauen Mittelpunkt um dort einen neuen Eckpunkt einzufügen');
+}
+
+async function editPolySave(){
+  const id=editingGebietId;
+  const coords=kmlP[id];
+  // Save to DB
+  try{
+    const {error}=await sb.from('gebiete').update({
+      kml_coords:JSON.stringify(coords), updated_at:new Date()
+    }).eq('id',id);
+    if(error){toast('⚠️ DB-Fehler: '+(error.message||error.code));return;}
+  }catch(e){toast('⚠️ Fehler beim Speichern');return;}
+
+  // Cleanup edit mode
+  cleanupEditMode();
+  drawPolygons();
+  toast('✅ Polygon gespeichert');
+}
+
+function editPolyCancel(){
+  // Restore original coordinates
+  if(editOrigCoords && editingGebietId){
+    kmlP[editingGebietId]=editOrigCoords;
+    if(layers[editingGebietId]) layers[editingGebietId].setLatLngs(editOrigCoords);
+  }
+  cleanupEditMode();
+  drawPolygons();
+}
+
+function cleanupEditMode(){
+  editMarkers.forEach(m=>map.removeLayer(m));
+  editMidMarkers.forEach(m=>map.removeLayer(m));
+  editMarkers=[];editMidMarkers=[];
+  editingGebietId=null;editOrigCoords=null;
+  document.getElementById('drawInfo').style.display='none';
+  document.getElementById('drawInfo').innerHTML='';
 }
 
 async function drawSave(){
