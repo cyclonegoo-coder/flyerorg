@@ -123,6 +123,7 @@ header{height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturate(18
 .leaflet-control-zoom a{background:var(--surface)!important;color:var(--text)!important;border:none!important;font-size:.95rem!important;line-height:30px!important;width:32px!important;height:32px!important}
 .leaflet-control-zoom a:hover{background:var(--surface3)!important}
 .map-legend{position:absolute;bottom:22px;left:10px;z-index:400;background:rgba(255,255,255,.92);backdrop-filter:blur(12px);border-radius:var(--r12);padding:9px 13px;box-shadow:var(--sh);font-size:.7rem}
+.grenzen-tooltip{background:rgba(255,255,255,.9);border:1px solid #999;border-radius:4px;padding:2px 6px;font-size:.7rem;font-weight:500;color:#333;box-shadow:0 1px 4px rgba(0,0,0,.15)}
 .leg-title{font-size:.58rem;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
 .leg-row{display:flex;align-items:center;gap:7px;margin-bottom:3px;color:var(--text2)}
 .leg-row:last-child{margin-bottom:0}
@@ -343,6 +344,11 @@ textarea{min-height:68px}
       <div class="leg-row"><div class="leg-dot" style="background:#ff9500"></div>Zugeteilt</div>
       <div class="leg-row"><div class="leg-dot" style="background:#34c759"></div>Fertig</div>
       <div class="leg-row"><div class="leg-dot" style="background:#ff3b30"></div>Problem</div>
+      <hr style="border:none;border-top:1px solid #e0e0e0;margin:6px 0">
+      <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:.7rem">
+        <input type="checkbox" id="toggleGrenzen" onchange="toggleVerwaltungsgrenzen(this.checked)">
+        <span>Gemeindegrenzen</span>
+      </label>
     </div>
   </div>
 
@@ -1473,6 +1479,130 @@ function initMap(){
   map=L.map('map',{center:[50.94,12.10],zoom:11,zoomControl:true});
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:19}).addTo(map); setTimeout(()=>map.invalidateSize(),200);
   drawPolygons();
+}
+
+// ============================================================
+// VERWALTUNGSGRENZEN (Gemeindegrenzen via Overpass API)
+// ============================================================
+let grenzenLayer=null, grenzenData=null, grenzenLoading=false;
+
+async function toggleVerwaltungsgrenzen(show){
+  if(!map)return;
+  if(!show){
+    if(grenzenLayer){map.removeLayer(grenzenLayer);grenzenLayer=null;}
+    return;
+  }
+  // Already loaded?
+  if(grenzenData){
+    renderGrenzen();return;
+  }
+  // Fetch from Overpass API
+  if(grenzenLoading)return;
+  grenzenLoading=true;
+  toast('🗺️ Gemeindegrenzen werden geladen…');
+
+  try{
+    // Bounding box covering all regions (slightly enlarged)
+    // lat_min, lon_min, lat_max, lon_max for the area around Gera/Ronneburg/Bad Köstritz
+    const bbox='50.82,11.90,51.05,12.30';
+    const query=`[out:json][timeout:30];(relation["boundary"="administrative"]["admin_level"="8"](${bbox});relation["boundary"="administrative"]["admin_level"="6"](${bbox}););out geom;`;
+    const url='https://overpass-api.de/api/interpreter?data='+encodeURIComponent(query);
+
+    const resp=await fetch(url);
+    if(!resp.ok)throw new Error('Overpass API Fehler: '+resp.status);
+    const json=await resp.json();
+
+    // Convert to GeoJSON-like structure
+    grenzenData=[];
+    json.elements.forEach(el=>{
+      if(!el.members)return;
+      // Collect outer ways
+      const outerWays=el.members.filter(m=>m.type==='way'&&(m.role==='outer'||m.role===''));
+      if(outerWays.length===0)return;
+
+      // Build rings from way segments
+      const rings=buildRings(outerWays);
+      if(rings.length===0)return;
+
+      const name=el.tags?.name||'';
+      const level=el.tags?.admin_level||'8';
+      rings.forEach(ring=>{
+        grenzenData.push({name,level,coords:ring});
+      });
+    });
+
+    renderGrenzen();
+    toast('✅ '+grenzenData.length+' Gemeindegrenzen geladen');
+  }catch(e){
+    console.warn('Grenzen laden fehlgeschlagen:',e);
+    toast('⚠️ Gemeindegrenzen konnten nicht geladen werden');
+    document.getElementById('toggleGrenzen').checked=false;
+  }
+  grenzenLoading=false;
+}
+
+function buildRings(ways){
+  // Each way has geometry array [{lat,lon}]
+  const segments=ways.map(w=>w.geometry?w.geometry.map(p=>[p.lat,p.lon]):[]);
+  const rings=[];
+  const used=new Array(segments.length).fill(false);
+
+  while(true){
+    // Find unused segment to start
+    let startIdx=-1;
+    for(let i=0;i<segments.length;i++){if(!used[i]&&segments[i].length>0){startIdx=i;break;}}
+    if(startIdx===-1)break;
+
+    let ring=[...segments[startIdx]];
+    used[startIdx]=true;
+
+    // Try to close the ring by connecting segments
+    let changed=true;
+    while(changed){
+      changed=false;
+      const last=ring[ring.length-1];
+      const first=ring[0];
+      // Check if ring is closed
+      if(ring.length>3&&Math.abs(last[0]-first[0])<0.0001&&Math.abs(last[1]-first[1])<0.0001)break;
+
+      for(let i=0;i<segments.length;i++){
+        if(used[i]||segments[i].length===0)continue;
+        const sf=segments[i][0], sl=segments[i][segments[i].length-1];
+        // Connect end-to-start
+        if(Math.abs(last[0]-sf[0])<0.0001&&Math.abs(last[1]-sf[1])<0.0001){
+          ring.push(...segments[i].slice(1));used[i]=true;changed=true;break;
+        }
+        // Connect end-to-end (reverse)
+        if(Math.abs(last[0]-sl[0])<0.0001&&Math.abs(last[1]-sl[1])<0.0001){
+          ring.push(...segments[i].slice(0,-1).reverse());used[i]=true;changed=true;break;
+        }
+      }
+    }
+    if(ring.length>=4)rings.push(ring);
+  }
+  return rings;
+}
+
+function renderGrenzen(){
+  if(grenzenLayer){map.removeLayer(grenzenLayer);grenzenLayer=null;}
+  if(!grenzenData||grenzenData.length===0)return;
+
+  const layerGroup=L.layerGroup();
+  grenzenData.forEach(g=>{
+    const isVG=g.level==='6';
+    const poly=L.polyline(g.coords,{
+      color:isVG?'#6a1b9a':'#1565c0',
+      weight:isVG?2.5:1.8,
+      opacity:isVG?0.7:0.5,
+      dashArray:isVG?'':'5,5',
+      fill:false,
+      interactive:true
+    });
+    if(g.name)poly.bindTooltip(g.name,{sticky:true,className:'grenzen-tooltip'});
+    layerGroup.addLayer(poly);
+  });
+  grenzenLayer=layerGroup;
+  grenzenLayer.addTo(map);
 }
 
 function drawPolygons(){
