@@ -1137,10 +1137,10 @@ async function doInviteUser() {
   const name   = document.getElementById('inviteName').value.trim();
   const rolle  = document.getElementById('inviteRolle').value;
   const btn    = document.getElementById('inviteBtn');
-  const status = document.getElementById('inviteStatus');
+  const statusEl = document.getElementById('inviteStatus');
 
-  if (!email) { status.style.color = 'var(--red)'; status.textContent = '⚠️ Bitte E-Mail eingeben'; return; }
-  if (!name)  { status.style.color = 'var(--red)'; status.textContent = '⚠️ Bitte Name eingeben'; return; }
+  if (!email) { statusEl.style.color = 'var(--red)'; statusEl.textContent = '⚠️ Bitte E-Mail eingeben'; return; }
+  if (!name)  { statusEl.style.color = 'var(--red)'; statusEl.textContent = '⚠️ Bitte Name eingeben'; return; }
 
   const verwaltete_regionen = rolle === 'verwalter'
     ? Object.keys(regionen).filter(k => document.getElementById(`invReg_${k}`)?.checked)
@@ -1150,61 +1150,108 @@ async function doInviteUser() {
     : null;
 
   btn.disabled = true;
-  status.style.color = 'var(--text3)';
-  status.textContent = '⏳ Einladung wird gesendet…';
+  statusEl.style.color = 'var(--text3)';
+  statusEl.textContent = '⏳ Einladung wird vorbereitet…';
 
   try {
-    // Edge Function aufrufen (nutzt Service-Role-Key serverseitig)
-    const { data, error } = await sb.functions.invoke('invite-user', {
-      body: { email, name, rolle, verwaltete_regionen, verwalteter_landkreis }
-    });
+    const APP_URL = window.location.origin + window.location.pathname;
 
-    if (error) throw error;
-    if (data?.error) throw new Error(data.error);
-
-    const hinweis = data?.alreadyRegistered
-      ? ` (war bereits registriert – Profil aktualisiert)`
-      : '';
-
-    status.style.color = 'var(--green)';
-    status.textContent = `✅ Einladung an ${email} gesendet${hinweis}`;
-
-    // Teilen-Buttons anzeigen wenn Einladungslink vorhanden
-    const shareWrap = document.getElementById('inviteShareWrap');
-    if (data?.inviteLink) {
-      const link = data.inviteLink;
-      const msg = encodeURIComponent(`Hallo ${name}! Du wurdest als ${rolle} zur FlyerOrg-App eingeladen. Klicke hier um dich anzumelden:\n${link}`);
-      shareWrap.innerHTML = `
-        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
-          <button onclick="navigator.clipboard.writeText('${link.replace(/'/g,"\\'")}');this.textContent='✅ Kopiert!';setTimeout(()=>this.textContent='📋 Link kopieren',2000)" style="padding:6px 12px;border:1px solid #ddd;border-radius:8px;background:#f5f5f5;cursor:pointer;font-size:.8rem">📋 Link kopieren</button>
-          <a href="https://wa.me/?text=${msg}" target="_blank" style="padding:6px 12px;border:1px solid #25D366;border-radius:8px;background:#25D366;color:#fff;text-decoration:none;font-size:.8rem;display:inline-flex;align-items:center;gap:4px">💬 WhatsApp</a>
-          <a href="https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(`Hallo ${name}! Du wurdest als ${rolle} zur FlyerOrg-App eingeladen.`)}" target="_blank" style="padding:6px 12px;border:1px solid #0088cc;border-radius:8px;background:#0088cc;color:#fff;text-decoration:none;font-size:.8rem;display:inline-flex;align-items:center;gap:4px">✈️ Telegram</a>
-        </div>`;
-    } else {
-      shareWrap.innerHTML = '';
+    // Versuche zuerst Edge Function (falls deployed)
+    let edgeFunctionWorked = false;
+    try {
+      const { data, error } = await sb.functions.invoke('invite-user', {
+        body: { email, name, rolle, verwaltete_regionen, verwalteter_landkreis }
+      });
+      if (!error && data && !data.error) {
+        edgeFunctionWorked = true;
+        const hinweis = data.alreadyRegistered ? ' (war bereits registriert – Profil aktualisiert)' : '';
+        statusEl.style.color = 'var(--green)';
+        statusEl.textContent = `✅ Einladung an ${email} gesendet${hinweis}`;
+      }
+    } catch(efErr) {
+      console.log('Edge Function nicht verfügbar, nutze Fallback:', efErr.message);
     }
+
+    // Fallback: Nutzer vorab in user_profiles anlegen + Passwort-Reset-Mail
+    if (!edgeFunctionWorked) {
+      // Prüfe ob E-Mail schon existiert
+      const {data:existing} = await sb.from('user_profiles').select('id').eq('email', email).maybeSingle();
+
+      if (existing) {
+        // User existiert → Profil aktualisieren
+        const upd = { name, rolle };
+        if (rolle === 'verwalter' && verwaltete_regionen.length > 0) {
+          upd.verwaltete_regionen = verwaltete_regionen;
+          upd.verwaltete_gebietsverbaende = verwaltete_regionen;
+        }
+        if (rolle === 'kreisverwalter' && verwalteter_landkreis) {
+          upd.verwalteter_landkreis = verwalteter_landkreis;
+        }
+        await sb.from('user_profiles').update(upd).eq('id', existing.id);
+        statusEl.style.color = 'var(--green)';
+        statusEl.textContent = `✅ Profil von ${email} aktualisiert (war bereits registriert)`;
+      } else {
+        // Neuer Nutzer: Account anlegen per signUp
+        const tempPw = 'Temp!' + crypto.randomUUID().slice(0,12);
+        const { data: signUpData, error: signUpErr } = await sb.auth.signUp({
+          email,
+          password: tempPw,
+          options: { data: { name, rolle } }
+        });
+
+        if (signUpErr) throw signUpErr;
+
+        const userId = signUpData?.user?.id;
+        if (userId) {
+          const profileData = { id: userId, name, email, rolle };
+          if (rolle === 'verwalter' && verwaltete_regionen.length > 0) {
+            profileData.verwaltete_regionen = verwaltete_regionen;
+            profileData.verwaltete_gebietsverbaende = verwaltete_regionen;
+          }
+          if (rolle === 'kreisverwalter' && verwalteter_landkreis) {
+            profileData.verwalteter_landkreis = verwalteter_landkreis;
+          }
+          await sb.from('user_profiles').upsert(profileData, { onConflict: 'id' });
+        }
+
+        // Passwort-Reset senden damit Nutzer eigenes Passwort setzen kann
+        await sb.auth.resetPasswordForEmail(email, { redirectTo: APP_URL });
+        statusEl.style.color = 'var(--green)';
+        statusEl.textContent = `✅ Einladung an ${email} gesendet – E-Mail mit Login-Link verschickt`;
+      }
+    }
+
+    // Teilen-Buttons anzeigen
+    const shareWrap = document.getElementById('inviteShareWrap');
+    const rolleLabel = {verteiler:'Verteiler',verwalter:'Gebietsverwalter',kreisverwalter:'Kreisverwalter',admin:'Admin'}[rolle]||rolle;
+    const shareText = `Hallo ${name}! Du wurdest als ${rolleLabel} zur FlyerOrg-App eingeladen. Bitte prüfe deine E-Mails (${email}) für den Login-Link. Die App findest du hier:\n${APP_URL}`;
+    const shareEnc = encodeURIComponent(shareText);
+    shareWrap.innerHTML = `
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+        <button onclick="navigator.clipboard.writeText(decodeURIComponent('${shareEnc}'));this.textContent='✅ Kopiert!';setTimeout(()=>this.textContent='📋 Link kopieren',2000)" style="padding:6px 12px;border:1px solid #ddd;border-radius:8px;background:#f5f5f5;cursor:pointer;font-size:.8rem">📋 Link kopieren</button>
+        <a href="https://wa.me/?text=${shareEnc}" target="_blank" style="padding:6px 12px;border:1px solid #25D366;border-radius:8px;background:#25D366;color:#fff;text-decoration:none;font-size:.8rem;display:inline-flex;align-items:center;gap:4px">💬 WhatsApp</a>
+        <a href="https://t.me/share/url?url=${encodeURIComponent(APP_URL)}&text=${encodeURIComponent(`Hallo ${name}! Du wurdest als ${rolleLabel} eingeladen. Prüfe deine E-Mails für den Login-Link.`)}" target="_blank" style="padding:6px 12px;border:1px solid #0088cc;border-radius:8px;background:#0088cc;color:#fff;text-decoration:none;font-size:.8rem;display:inline-flex;align-items:center;gap:4px">✈️ Telegram</a>
+      </div>`;
 
     document.getElementById('inviteEmail').value = '';
     document.getElementById('inviteName').value = '';
-    // Regionen-Checkboxen zurücksetzen
     Object.keys(regionen).forEach(k => {
       const cb = document.getElementById(`invReg_${k}`);
       if (cb) cb.checked = false;
     });
 
-    // Nutzerliste neu laden
     await loadAllUsers();
     renderUserList();
 
   } catch(e) {
     console.error('Invite failed:', e);
-    status.style.color = 'var(--red)';
-    if (e.message?.includes('already registered')) {
-      status.textContent = '⚠️ Diese E-Mail ist bereits registriert';
-    } else if (e.message?.includes('Edge Function') || e.message?.includes('Failed to send')) {
-      status.textContent = '⚠️ Edge Function nicht erreichbar – bitte deployen (siehe deploy-functions.sh)';
+    statusEl.style.color = 'var(--red)';
+    if (e.message?.includes('already registered') || e.message?.includes('already been registered')) {
+      statusEl.textContent = '⚠️ Diese E-Mail ist bereits registriert';
+    } else if (e.message?.includes('Signups not allowed') || e.message?.includes('signups')) {
+      statusEl.textContent = '⚠️ Registrierung ist in Supabase deaktiviert. Bitte unter Authentication → Settings → "Enable sign ups" aktivieren.';
     } else {
-      status.textContent = `⚠️ ${e.message}`;
+      statusEl.textContent = `⚠️ ${e.message || 'Fehler bei der Einladung'}`;
     }
   }
 
