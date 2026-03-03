@@ -74,6 +74,7 @@ header{height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturate(18
 .role-badge{font-size:.58rem;font-weight:600;padding:1px 6px;border-radius:4px;text-transform:uppercase;letter-spacing:.04em}
 .rb-admin{background:rgba(255,59,48,.12);color:var(--red)}
 .rb-verwalter{background:rgba(0,158,224,.12);color:var(--blue)}
+.rb-kreisverwalter{background:#9c27b022;color:#9c27b0}
 .rb-verteiler{background:rgba(52,199,89,.12);color:var(--green)}
 .mob-btn{display:none;background:none;border:none;color:var(--blue);font-size:1.1rem;cursor:pointer;padding:4px 8px;border-radius:var(--r8)}
 
@@ -359,7 +360,7 @@ textarea{min-height:68px}
       <div class="leg-row"><div class="leg-dot" style="background:#ff3b30"></div>Problem</div>
       <hr style="border:none;border-top:1px solid #e0e0e0;margin:6px 0">
       <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:.7rem">
-        <input type="checkbox" id="toggleGrenzen" onchange="toggleVerwaltungsgrenzen(this.checked)">
+        <input type="checkbox" id="toggleGrenzen" checked onchange="toggleVerwaltungsgrenzen(this.checked)">
         <span>Gemeindegrenzen</span>
       </label>
     </div>
@@ -455,12 +456,17 @@ textarea{min-height:68px}
       <input type="text"  id="inviteName"  placeholder="Name (z.B. Max Mustermann)">
       <select id="inviteRolle">
         <option value="verteiler">Verteiler</option>
-        <option value="verwalter">Verwalter</option>
+        <option value="verwalter">Gebietsverwalter</option>
+        <option value="kreisverwalter">Kreisverwalter</option>
         <option value="admin">Admin</option>
       </select>
       <div id="inviteRegionenWrap" style="display:none">
-        <div style="font-size:.6rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:4px">Zugewiesene Regionen</div>
+        <div style="font-size:.6rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:4px">Zugewiesene Gebietsverbände</div>
         <div id="inviteRegionenList" style="display:flex;flex-direction:column;gap:4px"></div>
+      </div>
+      <div id="inviteLandkreisWrap" style="display:none">
+        <div style="font-size:.6rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:4px">Zugewiesener Landkreis</div>
+        <select id="inviteLandkreis" style="width:100%;padding:6px 10px;border:1px solid var(--sep);border-radius:var(--r8);font-size:.8rem"></select>
       </div>
     </div>
     <div id="inviteStatus" style="font-size:.78rem;margin-top:8px;min-height:18px"></div>
@@ -559,16 +565,16 @@ textarea{min-height:68px}
     <!-- Landkreise -->
     <div id="hPanelLK">
       <div id="hListLK" style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;margin-bottom:8px"></div>
-      <div style="display:flex;gap:4px"><input type="text" id="hNewLKName" placeholder="Neuer Landkreis" style="flex:1;padding:6px 10px;border:1px solid var(--sep);border-radius:var(--r8);font-size:.8rem">
-      <button class="btn btn-p" onclick="addLandkreis()" style="padding:6px 12px;font-size:.75rem">+</button></div>
+      <input type="text" id="hNewLKName" placeholder="Neuer Landkreis" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--sep);border-radius:var(--r8);font-size:.85rem;margin-bottom:4px">
+      <button class="btn btn-p" onclick="addLandkreis()" style="padding:8px 12px;font-size:.8rem;width:100%">+ Hinzufügen</button>
     </div>
     <!-- Gebietsverbände -->
     <div id="hPanelGV" style="display:none">
       <div id="hListGV" style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;margin-bottom:8px"></div>
       <div style="display:flex;flex-direction:column;gap:4px">
         <select id="hNewGVLK" style="padding:6px 10px;border:1px solid var(--sep);border-radius:var(--r8);font-size:.8rem"></select>
-        <div style="display:flex;gap:4px"><input type="text" id="hNewGVName" placeholder="Neuer Gebietsverband" style="flex:1;padding:6px 10px;border:1px solid var(--sep);border-radius:var(--r8);font-size:.8rem">
-        <button class="btn btn-p" onclick="addGebietsverband()" style="padding:6px 12px;font-size:.75rem">+</button></div>
+        <input type="text" id="hNewGVName" placeholder="Neuer Gebietsverband" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--sep);border-radius:var(--r8);font-size:.85rem">
+        <button class="btn btn-p" onclick="addGebietsverband()" style="padding:8px 12px;font-size:.8rem;width:100%">+ Hinzufügen</button>
       </div>
     </div>
     <!-- Regionen -->
@@ -576,11 +582,9 @@ textarea{min-height:68px}
       <div id="hListReg" style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;margin-bottom:8px"></div>
       <div style="display:flex;flex-direction:column;gap:4px">
         <select id="hNewRegGV" style="padding:6px 10px;border:1px solid var(--sep);border-radius:var(--r8);font-size:.8rem"></select>
-        <div style="display:flex;gap:4px">
-          <input type="text" id="hNewRegName" placeholder="Name" style="flex:1;padding:6px 10px;border:1px solid var(--sep);border-radius:var(--r8);font-size:.8rem">
-          <input type="text" id="hNewRegShort" placeholder="Kürzel" style="width:80px;padding:6px 10px;border:1px solid var(--sep);border-radius:var(--r8);font-size:.8rem">
-          <button class="btn btn-p" onclick="addRegion()" style="padding:6px 12px;font-size:.75rem">+</button>
-        </div>
+        <input type="text" id="hNewRegName" placeholder="Name der Region" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--sep);border-radius:var(--r8);font-size:.85rem">
+        <input type="text" id="hNewRegShort" placeholder="Kürzel (z.B. Ronneburg)" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--sep);border-radius:var(--r8);font-size:.85rem">
+        <button class="btn btn-p" onclick="addRegion()" style="padding:8px 12px;font-size:.8rem;width:100%">+ Hinzufügen</button>
       </div>
     </div>
     <div class="m-actions" style="margin-top:12px">
@@ -769,7 +773,7 @@ function renderKampagnenDropdown() {
   if (!sel) return;
 
   // Admin/Verwalter bekommen Verwalten-Button neben Dropdown
-  const isManager = curRole === 'admin' || curRole === 'verwalter';
+  const isManager = curRole === 'admin' || curRole === 'kreisverwalter' || curRole === 'verwalter';
   const wrap = sel.parentElement;
   // Entferne alten Verwalten-Button falls vorhanden
   const oldBtn = document.getElementById('kampagneVerwBtn');
@@ -858,18 +862,19 @@ function closeKampagnenModal() {
 
 function renderKampagnenList() {
   const isAdmin = curRole === 'admin';
+  const isKV = curRole === 'kreisverwalter';
   const verwalterRegionen = currentProfile?.verwaltete_regionen || [];
   const list = document.getElementById('kampagnenList');
 
-  // Verwalter sieht globale Kampagnen + eigene Kampagnen (erstellt von ihm)
-  const sichtbar = isAdmin ? kampagnen : kampagnen.filter(k =>
+  // Admin/Kreisverwalter sieht alle, Verwalter sieht globale + eigene
+  const sichtbar = (isAdmin || isKV) ? kampagnen : kampagnen.filter(k =>
     !k.region_keys || k.region_keys.length === 0 ||
     k.region_keys.some(r => verwalterRegionen.includes(r)) ||
     String(k.erstellt_von) === String(currentUser?.id)
   );
 
   list.innerHTML = sichtbar.map(k => {
-    const kannLoeschen = isAdmin || (String(k.erstellt_von) === String(currentUser?.id));
+    const kannLoeschen = isAdmin || isKV || (String(k.erstellt_von) === String(currentUser?.id));
     return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--sep)">
       <div style="flex:1">
         <div style="font-size:.85rem;font-weight:500">${k.name}</div>
@@ -893,10 +898,10 @@ async function createKampagne() {
   };
 
   // Verwalter: nur für zugewiesene Regionen
-  if (curRole === 'verwalter') {
+  if (curRole === 'verwalter' || curRole === 'kreisverwalter') {
     const regionen_ids = (currentProfile?.verwaltete_regionen || []);
-    if (regionen_ids.length === 0) { toast('⚠️ Keine zugewiesenen Regionen'); return; }
-    newK.region_keys = regionen_ids;
+    if (regionen_ids.length === 0 && curRole === 'verwalter') { toast('⚠️ Keine zugewiesenen Regionen'); return; }
+    if (regionen_ids.length > 0) newK.region_keys = regionen_ids;
   }
 
   try {
@@ -991,6 +996,7 @@ function openInviteModal() {
   document.getElementById('inviteName').value = '';
   document.getElementById('inviteRolle').value = 'verteiler';
   document.getElementById('inviteRegionenWrap').style.display = 'none';
+  document.getElementById('inviteLandkreisWrap').style.display = 'none';
   document.getElementById('inviteStatus').textContent = '';
   document.getElementById('inviteShareWrap').innerHTML = '';
   document.getElementById('inviteModalOv').classList.add('open');
@@ -1013,10 +1019,11 @@ function renderUserList() {
       ? `<span style="font-size:.65rem;font-weight:600;padding:2px 7px;border-radius:4px;background:var(--red)22;color:var(--red)">${u.rolle}</span>`
       : `<select onchange="changeRole('${u.id}',this.value)" style="font-size:.72rem;padding:2px 4px;border-radius:4px;border:1px solid var(--border);background:var(--surface1);cursor:pointer">
           <option value="verteiler" ${u.rolle==='verteiler'?'selected':''}>Verteiler</option>
-          <option value="verwalter" ${u.rolle==='verwalter'?'selected':''}>Verwalter</option>
+          <option value="verwalter" ${u.rolle==='verwalter'?'selected':''}>Gebietsverwalter</option>
+          <option value="kreisverwalter" ${u.rolle==='kreisverwalter'?'selected':''}>Kreisverwalter</option>
           <option value="admin" ${u.rolle==='admin'?'selected':''}>Admin</option>
         </select>`;
-    const regEdit = (u.rolle === 'verwalter' || u.rolle === 'admin')
+    const regEdit = (u.rolle === 'verwalter' || u.rolle === 'kreisverwalter' || u.rolle === 'admin')
       ? `<button onclick="openEditRegionenModal('${u.id}','${(u.name||'').replace(/'/g,"\\'")}',${JSON.stringify(u.verwaltete_regionen||[]).replace(/"/g,'&quot;')})" style="background:none;border:none;color:var(--blue);cursor:pointer;font-size:.8rem;padding:2px 4px;border-radius:4px" title="Regionen bearbeiten">🗺</button>`
       : '';
     return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--surface2);border-radius:var(--r8)">
@@ -1058,7 +1065,7 @@ function getRegionVerwalter(regionKey, excludeUserId) {
   if (!reg) return null;
   return allUsers.find(u =>
     u.id !== excludeUserId &&
-    (u.rolle === 'verwalter' || u.rolle === 'admin') &&
+    (u.rolle === 'verwalter' || u.rolle === 'kreisverwalter' || u.rolle === 'admin') &&
     (u.verwaltete_gebietsverbaende || u.verwaltete_regionen || []).includes(reg.gebietsverband_id)
   );
 }
@@ -1112,11 +1119,15 @@ function renderInviteRegionen() {
 
 // Rollen-Dropdown → Regionen-Auswahl nur bei Verwalter
 document.addEventListener('DOMContentLoaded', () => {
-  // Dynamisch nach DOM-Aufbau, also per Event-Delegation
   document.body.addEventListener('change', e => {
     if (e.target.id === 'inviteRolle') {
-      document.getElementById('inviteRegionenWrap').style.display =
-        e.target.value === 'verwalter' ? 'block' : 'none';
+      const v = e.target.value;
+      document.getElementById('inviteRegionenWrap').style.display = v === 'verwalter' ? 'block' : 'none';
+      document.getElementById('inviteLandkreisWrap').style.display = v === 'kreisverwalter' ? 'block' : 'none';
+      if (v === 'kreisverwalter') {
+        const sel = document.getElementById('inviteLandkreis');
+        sel.innerHTML = Object.entries(landkreise).map(([id,lk]) => `<option value="${id}">${lk.name}</option>`).join('');
+      }
     }
   });
 });
@@ -1134,6 +1145,9 @@ async function doInviteUser() {
   const verwaltete_regionen = rolle === 'verwalter'
     ? Object.keys(regionen).filter(k => document.getElementById(`invReg_${k}`)?.checked)
     : [];
+  const verwalteter_landkreis = rolle === 'kreisverwalter'
+    ? document.getElementById('inviteLandkreis')?.value || null
+    : null;
 
   btn.disabled = true;
   status.style.color = 'var(--text3)';
@@ -1142,7 +1156,7 @@ async function doInviteUser() {
   try {
     // Edge Function aufrufen (nutzt Service-Role-Key serverseitig)
     const { data, error } = await sb.functions.invoke('invite-user', {
-      body: { email, name, rolle, verwaltete_regionen }
+      body: { email, name, rolle, verwaltete_regionen, verwalteter_landkreis }
     });
 
     if (error) throw error;
@@ -1281,12 +1295,13 @@ async function showApp() {
   document.getElementById('userAvatar').textContent  = name.charAt(0).toUpperCase();
   document.getElementById('userName').textContent    = name;
   const badge = document.getElementById('roleBadge');
-  badge.textContent  = rolle.charAt(0).toUpperCase() + rolle.slice(1);
+  const rolleLabels = {verteiler:'Verteiler',verwalter:'Gebietsverwalter',kreisverwalter:'Kreisverwalter',admin:'Admin'};
+  badge.textContent  = rolleLabels[rolle] || rolle;
   badge.className    = `role-badge rb-${rolle}`;
 
   curRole = rolle;
   // Admin-Buttons: Nutzer einladen + Nutzerverwaltung
-  if (rolle === 'admin') {
+  if (rolle === 'admin' || rolle === 'kreisverwalter') {
     document.getElementById('inviteUserBtn').style.display = 'block';
     document.getElementById('manageUsersBtn').style.display = 'block';
     document.getElementById('hierarchyBtn').style.display = 'block';
@@ -1391,7 +1406,7 @@ function updateAnfragenBadge() {
   let count = 0;
   if (curRole === 'admin') {
     count = alleAnfragen.length;
-  } else if (curRole === 'verwalter') {
+  } else if (curRole === 'verwalter' || curRole === 'kreisverwalter') {
     count = alleAnfragen.filter(a => verwalterHatGebietZugriff(a.gebiet_id)).length;
   }
   // Verteiler (und alle Rollen): eigene Rückmeldungen zählen
@@ -1446,7 +1461,7 @@ function renderAnfragenList() {
   let sichtbar = [];
   if (curRole === 'admin') {
     sichtbar = alleAnfragen;
-  } else if (curRole === 'verwalter') {
+  } else if (curRole === 'verwalter' || curRole === 'kreisverwalter') {
     sichtbar = alleAnfragen.filter(a => verwalterHatGebietZugriff(a.gebiet_id));
   }
 
@@ -1564,6 +1579,8 @@ function initMap(){
   map=L.map('map',{center:[50.94,12.10],zoom:11,zoomControl:true});
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:19}).addTo(map); setTimeout(()=>map.invalidateSize(),200);
   drawPolygons();
+  // Gemeindegrenzen standardmäßig laden
+  toggleVerwaltungsgrenzen(true);
 }
 
 // ============================================================
@@ -1584,13 +1601,11 @@ async function toggleVerwaltungsgrenzen(show){
   // Fetch from Overpass API
   if(grenzenLoading)return;
   grenzenLoading=true;
-  toast('🗺️ Gemeindegrenzen werden geladen…');
+  toast('🗺️ Gemeindegrenzen für Thüringen werden geladen…');
 
   try{
-    // Bounding box covering all regions (slightly enlarged)
-    // lat_min, lon_min, lat_max, lon_max for the area around Gera/Ronneburg/Bad Köstritz
-    const bbox='50.82,11.90,51.05,12.30';
-    const query=`[out:json][timeout:30];(relation["boundary"="administrative"]["admin_level"="8"](${bbox});relation["boundary"="administrative"]["admin_level"="6"](${bbox}););out geom;`;
+    // Ganz Thüringen über area-Filter (genauer als Bounding Box)
+    const query=`[out:json][timeout:90];area["name"="Thüringen"]["admin_level"="4"]->.th;(relation["boundary"="administrative"]["admin_level"="8"](area.th);relation["boundary"="administrative"]["admin_level"="6"](area.th););out geom;`;
     const url='https://overpass-api.de/api/interpreter?data='+encodeURIComponent(query);
 
     const resp=await fetch(url);
@@ -1711,14 +1726,14 @@ function drawPolygons(){
     layers[g.id]=poly;
     allBounds.push(...c);
   });
-  // Fly to appropriate view
-  if(curReg!=='alle'&&regionen[curReg]){
-    map.flyTo(regionen[curReg].center,regionen[curReg].zoom,{duration:.8});
+  // Fly to appropriate view — immer auf tatsächliche Polygon-Bounds fitten
+  if(allBounds.length>0){
+    map.flyToBounds(L.latLngBounds(allBounds).pad(0.1),{duration:.8});
+  } else if(curReg!=='alle'&&regionen[curReg]&&regionen[curReg].center_lat){
+    map.flyTo([regionen[curReg].center_lat,regionen[curReg].center_lng],regionen[curReg].zoom||13,{duration:.8});
   } else if(curGV!=='alle'&&gebietsverbaende[curGV]){
     const gv=gebietsverbaende[curGV];
     map.flyTo([gv.center_lat,gv.center_lng],gv.zoom||11,{duration:.8});
-  } else if(allBounds.length>0){
-    map.flyToBounds(L.latLngBounds(allBounds).pad(0.1),{duration:.8});
   }
 }
 
@@ -1827,7 +1842,7 @@ function openDetail(id){
   document.getElementById('detailId').textContent=g.id;
   document.getElementById('detailTitle').textContent=g.name;
   const isAdmin=curRole==='admin';
-  const isM=(curRole==='verwalter'&&verwalterHatGebietZugriff(id))||isAdmin;
+  const isM=(curRole==='verwalter'&&verwalterHatGebietZugriff(id))||(curRole==='kreisverwalter'&&verwalterHatGebietZugriff(id))||isAdmin;
   // isV: nur wenn der aktuelle Nutzer diesem Gebiet als Verteiler zugewiesen ist
   const isV=g.verteilerId&&g.verteilerId===currentUser?.id;
   // Darf dieser Nutzer den Verteiler-Status (Fertig/Problem) setzen?
@@ -1856,10 +1871,10 @@ function openDetail(id){
   }
 
   if (curRole === 'verteiler') {
-    // Verteiler sieht: Verwalter seiner Region
-    allUsers.filter(u => u.rolle === 'verwalter' && u.verwaltete_regionen && u.verwaltete_regionen.includes(gebietRegion))
-      .forEach(u => kontakte.push({ ...u, label: 'Verwalter' }));
-  } else if (curRole === 'verwalter') {
+    // Verteiler sieht: Gebietsverwalter seiner Region + Kreisverwalter
+    allUsers.filter(u => (u.rolle === 'verwalter' || u.rolle === 'kreisverwalter') && u.verwaltete_regionen && u.verwaltete_regionen.includes(gebietRegion))
+      .forEach(u => kontakte.push({ ...u, label: 'Gebietsverwalter' }));
+  } else if (curRole === 'verwalter' || curRole === 'kreisverwalter') {
     // Verwalter sieht: Verteiler dieses Gebiets + Admins
     if (g.verteilerId) {
       const vt = allUsers.find(u => u.id === g.verteilerId);
@@ -1872,8 +1887,8 @@ function openDetail(id){
       const vt = allUsers.find(u => u.id === g.verteilerId);
       if (vt) kontakte.push({ ...vt, label: 'Verteiler' });
     }
-    allUsers.filter(u => u.rolle === 'verwalter' && u.verwaltete_regionen && u.verwaltete_regionen.includes(gebietRegion))
-      .forEach(u => kontakte.push({ ...u, label: 'Verwalter' }));
+    allUsers.filter(u => (u.rolle === 'verwalter' || u.rolle === 'kreisverwalter') && u.verwaltete_regionen && u.verwaltete_regionen.includes(gebietRegion))
+      .forEach(u => kontakte.push({ ...u, label: 'Gebietsverwalter' }));
   }
 
   if (kontakte.length > 0) {
@@ -1896,7 +1911,7 @@ function openDetail(id){
   if(isM){
     const userOptions = `<option value="">— nicht zugeteilt</option>` +
       allUsers.map(u=>
-        `<option value="${u.id}" data-name="${u.name}" ${g.verteilerId===u.id?'selected':''}>${u.name}${u.rolle==='verwalter'?' (Verwalter)':u.rolle==='admin'?' (Admin)':''}</option>`
+        `<option value="${u.id}" data-name="${u.name}" ${g.verteilerId===u.id?'selected':''}>${u.name}${u.rolle==='verwalter'?' (Gebietsverwalter)':u.rolle==='kreisverwalter'?' (Kreisverwalter)':u.rolle==='admin'?' (Admin)':''}</option>`
       ).join('');
     h+=`<div class="d-sec"><div class="sec-hd">Verteiler zuweisen</div><div class="f-stack">
       <select id="inpV">${userOptions}</select>
@@ -1946,7 +1961,7 @@ function openDetail(id){
       const autorName = autor ? autor.name : 'Unbekannt';
       const datum = new Date(hw.created_at).toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
       // Löschen: Admin immer, Verwalter in seiner Region, Verteiler nur eigene
-      const darfLoeschen = isAdmin || (isM && curRole==='verwalter') || (hw.user_id === currentUser?.id);
+      const darfLoeschen = isAdmin || (isM && (curRole==='verwalter'||curRole==='kreisverwalter')) || (hw.user_id === currentUser?.id);
       h+=`<div style="background:var(--surface2);border-radius:var(--r8);padding:8px;display:flex;align-items:flex-start;gap:8px">
         <div style="flex:1">
           <div style="font-size:.78rem">💬 ${hw.text}</div>
@@ -1957,14 +1972,14 @@ function openDetail(id){
     });
     h+=`</div></div>`;
   }
-  if(curRole==='admin'){
+  if(curRole==='admin'||(curRole==='kreisverwalter'&&verwalterHatGebietZugriff(g.id))){
     h+=`<div class="d-sec"><div class="sec-hd">Admin – Geodaten</div><div class="f-stack">
       <label class="btn-f">📂 KML hochladen<input type="file" accept=".kml" style="display:none" onchange="handleKML(event)"></label>
       ${kmlP[g.id]?`<button class="btn btn-g" onclick="editPolygon('${g.id}')">✏️ Polygon bearbeiten</button>`:''}
       ${window.innerWidth>=768?`<button class="btn btn-g" onclick="redrawGebiet('${g.id}')">🔄 Polygon neu zeichnen</button>`:''}
       <button class="btn btn-d" onclick="deleteGebiet('${g.id}')">Gebiet löschen</button>
     </div></div>`;
-  } else if(curRole==='verwalter' && window.innerWidth>=768 && verwalterHatGebietZugriff(g.id)){
+  } else if((curRole==='verwalter'||curRole==='kreisverwalter') && window.innerWidth>=768 && verwalterHatGebietZugriff(g.id)){
     h+=`<div class="d-sec"><div class="sec-hd">Geodaten</div><div class="f-stack">
       ${kmlP[g.id]?`<button class="btn btn-g" onclick="editPolygon('${g.id}')">✏️ Polygon bearbeiten</button>`:''}
       <button class="btn btn-g" onclick="redrawGebiet('${g.id}')">🔄 Polygon neu zeichnen</button>
@@ -1984,7 +1999,7 @@ function closeDetail(){
 // ============================================================
 async function setSt(id,s){
   // Zugriffsprüfung
-  if (curRole === 'verwalter' && !verwalterHatGebietZugriff(id)) {
+  if ((curRole === 'verwalter' || curRole === 'kreisverwalter') && !verwalterHatGebietZugriff(id)) {
     toast('⚠️ Kein Zugriff auf dieses Gebiet'); return;
   }
   if (curRole === 'verteiler') {
@@ -2016,7 +2031,7 @@ async function setSt(id,s){
 
 async function saveZ(id){
   // Zugriffsprüfung: nur Admin oder Verwalter mit Regionszugriff
-  if (curRole === 'verwalter' && !verwalterHatGebietZugriff(id)) {
+  if ((curRole === 'verwalter' || curRole === 'kreisverwalter') && !verwalterHatGebietZugriff(id)) {
     toast('⚠️ Kein Zugriff auf dieses Gebiet'); return;
   }
   if (curRole === 'verteiler') { toast('⚠️ Keine Berechtigung'); return; }
@@ -2046,7 +2061,7 @@ async function saveZ(id){
 
 async function saveSt2(id){
   // Zugriffsprüfung: nur Admin oder Verwalter mit Regionszugriff
-  if (curRole === 'verwalter' && !verwalterHatGebietZugriff(id)) {
+  if ((curRole === 'verwalter' || curRole === 'kreisverwalter') && !verwalterHatGebietZugriff(id)) {
     toast('⚠️ Kein Zugriff auf dieses Gebiet'); return;
   }
   if (curRole === 'verteiler') { toast('⚠️ Keine Berechtigung'); return; }
@@ -2079,7 +2094,7 @@ async function saveH(id){
   if (curRole === 'verteiler' && (!g.verteilerId || g.verteilerId !== currentUser?.id)) {
     toast('⚠️ Du bist diesem Gebiet nicht zugewiesen'); return;
   }
-  if (curRole === 'verwalter' && !verwalterHatGebietZugriff(id)) {
+  if ((curRole === 'verwalter' || curRole === 'kreisverwalter') && !verwalterHatGebietZugriff(id)) {
     toast('⚠️ Kein Zugriff auf dieses Gebiet'); return;
   }
   const {error}=await sb.from('hinweise').insert({gebiet_id:id,user_id:currentUser.id,text:t});
@@ -2099,7 +2114,7 @@ async function deleteHinweis(hinweisId, gebietId) {
 }
 
 async function deleteGebiet(id){
-  if (curRole !== 'admin') { toast('⚠️ Nur Admins dürfen Gebiete löschen'); return; }
+  if (curRole !== 'admin' && !(curRole === 'kreisverwalter' && verwalterHatGebietZugriff(id))) { toast('⚠️ Keine Berechtigung zum Löschen'); return; }
   if(!confirm(`Gebiet ${id} wirklich löschen?`)) return;
 
   // Zuerst aus DB löschen (gebiet_status + gebiete)
@@ -2252,12 +2267,17 @@ function switchHTab(tab){
   renderHierarchyLists();
 }
 function renderHierarchyLists(){
+  const itemStyle='display:flex;align-items:center;justify-content:space-between;padding:6px 8px;background:var(--surface);border-radius:var(--r8)';
+  const btnStyle='background:none;border:none;cursor:pointer;font-size:.75rem;padding:2px 4px';
   // Landkreise
   const lkList=document.getElementById('hListLK');
   if(lkList) lkList.innerHTML=Object.entries(landkreise).map(([id,lk])=>`
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 8px;background:var(--surface);border-radius:var(--r8)">
-      <span style="font-size:.82rem;font-weight:500">${lk.name}</span>
-      <button onclick="deleteLandkreis('${id}')" style="background:none;border:none;cursor:pointer;font-size:.75rem;color:var(--red)" title="Löschen">🗑</button>
+    <div style="${itemStyle}">
+      <span id="hName_lk_${id}" style="font-size:.82rem;font-weight:500">${lk.name}</span>
+      <div style="display:flex;gap:2px">
+        <button onclick="startRename('landkreise','${id}','${lk.name.replace(/'/g,"\\'")}')" style="${btnStyle}" title="Umbenennen">✏️</button>
+        <button onclick="deleteLandkreis('${id}')" style="${btnStyle};color:var(--red)" title="Löschen">🗑</button>
+      </div>
     </div>`).join('')||'<div style="font-size:.78rem;color:var(--text4);text-align:center;padding:10px">Keine Landkreise</div>';
 
   // Gebietsverbände
@@ -2265,12 +2285,14 @@ function renderHierarchyLists(){
   if(gvList){
     gvList.innerHTML=Object.entries(gebietsverbaende).map(([id,gv])=>{
       const lk=landkreise[gv.landkreis_id];
-      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 8px;background:var(--surface);border-radius:var(--r8)">
-        <div><span style="font-size:.82rem;font-weight:500">${gv.name}</span><span style="font-size:.65rem;color:var(--text4);margin-left:6px">${lk?.name||''}</span></div>
-        <button onclick="deleteGebietsverband('${id}')" style="background:none;border:none;cursor:pointer;font-size:.75rem;color:var(--red)" title="Löschen">🗑</button>
+      return `<div style="${itemStyle}">
+        <div><span id="hName_gv_${id}" style="font-size:.82rem;font-weight:500">${gv.name}</span><span style="font-size:.65rem;color:var(--text4);margin-left:6px">${lk?.name||''}</span></div>
+        <div style="display:flex;gap:2px">
+          <button onclick="startRename('gebietsverbaende','${id}','${gv.name.replace(/'/g,"\\'")}')" style="${btnStyle}" title="Umbenennen">✏️</button>
+          <button onclick="deleteGebietsverband('${id}')" style="${btnStyle};color:var(--red)" title="Löschen">🗑</button>
+        </div>
       </div>`;
     }).join('')||'<div style="font-size:.78rem;color:var(--text4);text-align:center;padding:10px">Keine Gebietsverbände</div>';
-    // LK-Dropdown befüllen
     const sel=document.getElementById('hNewGVLK');
     if(sel) sel.innerHTML=Object.entries(landkreise).map(([id,lk])=>`<option value="${id}">${lk.name}</option>`).join('');
   }
@@ -2280,15 +2302,44 @@ function renderHierarchyLists(){
   if(regList){
     regList.innerHTML=Object.entries(regionen).map(([id,r])=>{
       const gv=gebietsverbaende[r.gebietsverband_id];
-      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 8px;background:var(--surface);border-radius:var(--r8)">
-        <div><span style="font-size:.82rem;font-weight:500">${r.name}</span><span style="font-size:.65rem;color:var(--text4);margin-left:4px">(${r.short||''})</span><span style="font-size:.62rem;color:var(--text4);margin-left:6px">${gv?.name||''}</span></div>
-        <button onclick="deleteRegion('${id}')" style="background:none;border:none;cursor:pointer;font-size:.75rem;color:var(--red)" title="Löschen">🗑</button>
+      return `<div style="${itemStyle}">
+        <div><span id="hName_reg_${id}" style="font-size:.82rem;font-weight:500">${r.name}</span><span style="font-size:.65rem;color:var(--text4);margin-left:4px">(${r.short||''})</span><span style="font-size:.62rem;color:var(--text4);margin-left:6px">${gv?.name||''}</span></div>
+        <div style="display:flex;gap:2px">
+          <button onclick="startRename('regionen','${id}','${r.name.replace(/'/g,"\\'")}')" style="${btnStyle}" title="Umbenennen">✏️</button>
+          <button onclick="deleteRegion('${id}')" style="${btnStyle};color:var(--red)" title="Löschen">🗑</button>
+        </div>
       </div>`;
     }).join('')||'<div style="font-size:.78rem;color:var(--text4);text-align:center;padding:10px">Keine Regionen</div>';
-    // GV-Dropdown befüllen
     const sel=document.getElementById('hNewRegGV');
     if(sel) sel.innerHTML=Object.entries(gebietsverbaende).map(([id,gv])=>`<option value="${id}">${gv.name}</option>`).join('');
   }
+}
+
+function startRename(table, id, currentName){
+  const newName=prompt('Neuer Name:', currentName);
+  if(!newName||newName.trim()===''||newName.trim()===currentName)return;
+  doRename(table, id, newName.trim());
+}
+async function doRename(table, id, newName){
+  const updateObj={name:newName};
+  // Bei Regionen auch short aktualisieren falls es dem alten Namen entsprach
+  if(table==='regionen'){
+    const reg=regionen[id];
+    if(reg && (reg.short===reg.name || !reg.short)){
+      updateObj.short=newName;
+    }
+  }
+  const {error}=await sb.from(table).update(updateObj).eq('id',id);
+  if(error){toast('⚠️ '+error.message);return;}
+  // Lokal aktualisieren
+  if(table==='landkreise'&&landkreise[id]) landkreise[id].name=newName;
+  if(table==='gebietsverbaende'&&gebietsverbaende[id]) gebietsverbaende[id].name=newName;
+  if(table==='regionen'&&regionen[id]){
+    regionen[id].name=newName;
+    if(updateObj.short) regionen[id].short=updateObj.short;
+  }
+  renderHierarchyLists();renderBreadcrumb();renderList();
+  toast('✅ Umbenannt');
 }
 
 async function addLandkreis(){
@@ -2370,7 +2421,7 @@ function showDrawToolbar(){
   if(curReg==='alle'){document.getElementById('drawToolbar').classList.remove('visible');return;}
   const isAdmin = curRole === 'admin';
   const reg=regionen[curReg];
-  const isVerwalterWithAccess = curRole === 'verwalter' && reg && verwalterHatGebietsverbandZugriff(reg.gebietsverband_id);
+  const isVerwalterWithAccess = (curRole === 'verwalter' || curRole === 'kreisverwalter') && reg && verwalterHatGebietsverbandZugriff(reg.gebietsverband_id);
   if((isAdmin || isVerwalterWithAccess) && window.innerWidth >= 768){
     document.getElementById('drawToolbar').classList.add('visible');
   } else {
@@ -2378,27 +2429,39 @@ function showDrawToolbar(){
   }
 }
 
-// Prüft ob der aktuelle Verwalter Zugriff auf eine Region hat
+function kreisverwalterHatLandkreisZugriff(lkId) {
+  if (curRole === 'admin') return true;
+  if (curRole !== 'kreisverwalter') return false;
+  return currentProfile?.verwalteter_landkreis === lkId;
+}
+
 function verwalterHatRegionZugriff(regionId) {
   if (curRole === 'admin') return true;
-  if (curRole !== 'verwalter') return false;
   const reg = regionen[regionId];
   if (!reg) return false;
+  if (curRole === 'kreisverwalter') {
+    const gv = gebietsverbaende[reg.gebietsverband_id];
+    return gv ? kreisverwalterHatLandkreisZugriff(gv.landkreis_id) : false;
+  }
+  if (curRole !== 'verwalter') return false;
   return verwalterHatGebietsverbandZugriff(reg.gebietsverband_id);
 }
 
 function verwalterHatGebietsverbandZugriff(gvId) {
   if (curRole === 'admin') return true;
+  if (curRole === 'kreisverwalter') {
+    const gv = gebietsverbaende[gvId];
+    return gv ? kreisverwalterHatLandkreisZugriff(gv.landkreis_id) : false;
+  }
   if (curRole !== 'verwalter') return false;
   const verwGV = currentProfile?.verwaltete_gebietsverbaende || currentProfile?.verwaltete_regionen || [];
   return verwGV.includes(gvId);
 }
 
-// Prüft ob Verwalter Zugriff auf ein Gebiet hat (anhand Region)
+// Prüft ob Verwalter/Kreisverwalter Zugriff auf ein Gebiet hat (anhand Region)
 function verwalterHatGebietZugriff(gebietId) {
   if (curRole === 'admin') return true;
-  if (curRole !== 'verwalter') return false;
-  // Region des Gebiets ermitteln
+  if (curRole !== 'verwalter' && curRole !== 'kreisverwalter') return false;
   for (const [rk, r] of Object.entries(regionen)) {
     if (r.gebiete.find(g => g.id === gebietId)) {
       return verwalterHatRegionZugriff(rk);
@@ -2410,7 +2473,7 @@ function verwalterHatGebietZugriff(gebietId) {
 function toggleDraw(){
   if(drawMode){drawCancel();return}
   if(curReg==='alle'){toast('⚠️ Bitte zuerst eine Region wählen');return;}
-  if(curRole==='verwalter' && !verwalterHatRegionZugriff(curReg)){
+  if((curRole==='verwalter'||curRole==='kreisverwalter') && !verwalterHatRegionZugriff(curReg)){
     toast('⚠️ Kein Zugriff auf diese Region');return;
   }
   drawMode=true;
