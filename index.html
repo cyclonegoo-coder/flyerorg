@@ -740,8 +740,20 @@ async function loadProfile() {
 let allUsers = [];
 async function loadAllUsers() {
   try {
-    const { data, error } = await sb.from('user_profiles').select('id, name, rolle, telefon, email, verwaltete_regionen, verwaltete_gebietsverbaende').order('name');
-    if (!error) allUsers = data || [];
+    // Versuche alle Spalten inkl. neuer Hierarchie-Felder
+    let { data, error } = await sb.from('user_profiles').select('id, name, rolle, telefon, email, verwaltete_regionen, verwaltete_gebietsverbaende, verwalteter_landkreis').order('name');
+    if (error) {
+      // Fallback: Nur Basis-Spalten wenn neue Spalten noch nicht existieren
+      console.warn('loadAllUsers mit allen Spalten fehlgeschlagen, versuche Fallback:', error.message);
+      const res = await sb.from('user_profiles').select('id, name, rolle, telefon, email, verwaltete_regionen').order('name');
+      if (!res.error) data = res.data;
+      else {
+        // Minimal-Fallback
+        const res2 = await sb.from('user_profiles').select('*').order('name');
+        if (!res2.error) data = res2.data;
+      }
+    }
+    allUsers = data || [];
   } catch(e) {
     console.warn('loadAllUsers failed:', e);
   }
