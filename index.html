@@ -627,7 +627,7 @@ textarea{min-height:68px}
 
 <!-- KAMPAGNEN VERWALTEN MODAL -->
 <div class="modal-ov" id="kampagnenModalOv" onclick="if(event.target===this)closeKampagnenModal()">
-  <div class="modal">
+  <div class="modal" style="max-width:460px">
     <div class="m-handle"></div>
     <div class="m-title">📋 Kampagnen verwalten</div>
     <div id="kampagnenList" style="max-height:200px;overflow-y:auto;margin-bottom:12px"></div>
@@ -635,6 +635,30 @@ textarea{min-height:68px}
     <div style="display:flex;flex-direction:column;gap:7px">
       <input type="text" id="newKampName" placeholder="Name der Kampagne">
       <input type="text" id="newKampBeschr" placeholder="Beschreibung (optional)">
+      <div style="display:flex;gap:6px">
+        <div style="flex:1;display:flex;flex-direction:column;gap:2px">
+          <label style="font-size:.65rem;font-weight:600;color:var(--text3)">Optimaler Verteilzeitraum</label>
+          <div style="display:flex;gap:4px">
+            <input type="date" id="newKampVerteilVon" style="flex:1;font-size:.75rem">
+            <span style="font-size:.75rem;color:var(--text4);align-self:center">–</span>
+            <input type="date" id="newKampVerteilBis" style="flex:1;font-size:.75rem">
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:2px">
+        <label style="font-size:.65rem;font-weight:600;color:var(--text3)">Spätester Zustellzeitpunkt</label>
+        <input type="date" id="newKampDeadline" style="font-size:.75rem">
+      </div>
+      <div style="display:flex;flex-direction:column;gap:2px">
+        <label style="font-size:.65rem;font-weight:600;color:var(--text3)">Geltungsbereich</label>
+        <select id="newKampBereichTyp" onchange="updateKampBereichAuswahl()" style="font-size:.78rem">
+          <option value="alle">Alle (gesamter Bereich)</option>
+          <option value="landkreis">Landkreis</option>
+          <option value="gebietsverband">Gebietsverband</option>
+          <option value="region">Region</option>
+        </select>
+        <div id="newKampBereichAuswahl" style="display:none;max-height:120px;overflow-y:auto;margin-top:4px"></div>
+      </div>
     </div>
     <div class="m-actions" style="margin-top:12px">
       <button class="btn btn-g" onclick="closeKampagnenModal()">Schließen</button>
@@ -1035,14 +1059,54 @@ function renderKampagnenList() {
 
   list.innerHTML = sichtbar.map(k => {
     const kannLoeschen = isAdmin || isKV || (String(k.erstellt_von) === String(currentUser?.id));
+    // Zeitraum-Info zusammenbauen
+    let zeitInfo = '';
+    if (k.verteil_von || k.verteil_bis) {
+      const von = k.verteil_von ? new Date(k.verteil_von).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}) : '?';
+      const bis = k.verteil_bis ? new Date(k.verteil_bis).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}) : '?';
+      zeitInfo += `📅 ${von} – ${bis}`;
+    }
+    if (k.deadline) {
+      const dl = new Date(k.deadline).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'2-digit'});
+      zeitInfo += (zeitInfo ? ' · ' : '') + `⏰ bis ${dl}`;
+    }
+    // Bereich-Info
+    let bereichInfo = '';
+    if (k.bereich_typ && k.bereich_ids?.length > 0) {
+      const typLabel = {landkreis:'LK',gebietsverband:'GV',region:'Reg.'}[k.bereich_typ] || k.bereich_typ;
+      bereichInfo = `🗺 ${typLabel}: ${k.bereich_ids.length}`;
+    }
+    const metaLine = [zeitInfo, bereichInfo].filter(Boolean).join(' · ');
     return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--sep)">
       <div style="flex:1">
         <div style="font-size:.85rem;font-weight:500">${k.name}</div>
         ${k.beschreibung ? `<div style="font-size:.7rem;color:var(--text3)">${k.beschreibung}</div>` : ''}
+        ${metaLine ? `<div style="font-size:.65rem;color:var(--text4);margin-top:2px">${metaLine}</div>` : ''}
       </div>
       ${kannLoeschen ? `<button class="btn btn-d" style="width:auto;padding:5px 10px;font-size:.75rem" onclick="deleteKampagne('${k.id}')">Löschen</button>` : ''}
     </div>`;
   }).join('') || '<div style="color:var(--text3);font-size:.85rem;padding:8px 0">Keine Kampagnen vorhanden.</div>';
+}
+
+// Bereichsauswahl im Kampagnen-Modal dynamisch rendern
+function updateKampBereichAuswahl() {
+  const typ = document.getElementById('newKampBereichTyp').value;
+  const container = document.getElementById('newKampBereichAuswahl');
+  if (typ === 'alle') { container.style.display = 'none'; container.innerHTML = ''; return; }
+  container.style.display = 'block';
+  let items = [];
+  if (typ === 'landkreis') {
+    items = Object.entries(landkreise).map(([id, lk]) => ({ id, name: lk.name }));
+  } else if (typ === 'gebietsverband') {
+    items = Object.entries(gebietsverbaende).map(([id, gv]) => ({ id, name: gv.name }));
+  } else if (typ === 'region') {
+    items = Object.entries(regionen).map(([id, r]) => ({ id, name: r.short || r.name }));
+  }
+  container.innerHTML = items.map(i =>
+    `<label style="display:flex;align-items:center;gap:6px;padding:3px 4px;font-size:.75rem;cursor:pointer">
+      <input type="checkbox" class="kampBereichCb" value="${i.id}"> ${i.name}
+    </label>`
+  ).join('');
 }
 
 async function createKampagne() {
@@ -1050,15 +1114,30 @@ async function createKampagne() {
   const beschr = document.getElementById('newKampBeschr').value.trim();
   if (!name) { toast('⚠️ Bitte Namen eingeben'); return; }
 
+  const verteilVon = document.getElementById('newKampVerteilVon').value || null;
+  const verteilBis = document.getElementById('newKampVerteilBis').value || null;
+  const deadline = document.getElementById('newKampDeadline').value || null;
+  const bereichTyp = document.getElementById('newKampBereichTyp').value;
+
+  // Ausgewählte Bereiche sammeln
+  const bereichIds = [...document.querySelectorAll('.kampBereichCb:checked')].map(cb => cb.value);
+
   const newK = {
     name,
     beschreibung: beschr,
     erstellt_von: currentUser.id,
-    created_at: new Date()
+    created_at: new Date(),
+    verteil_von: verteilVon,
+    verteil_bis: verteilBis,
+    deadline: deadline,
+    bereich_typ: bereichTyp !== 'alle' ? bereichTyp : null,
+    bereich_ids: bereichIds.length > 0 ? bereichIds : null
   };
 
-  // Verwalter: nur für zugewiesene Regionen
-  if (istVerwalterOderKreisverwalter()) {
+  // Verwalter: region_keys aus Bereichsauswahl oder verwalteten Regionen ableiten
+  if (bereichTyp === 'region' && bereichIds.length > 0) {
+    newK.region_keys = bereichIds;
+  } else if (istVerwalterOderKreisverwalter()) {
     const regionen_ids = (currentProfile?.verwaltete_regionen || []);
     if (regionen_ids.length === 0 && curRole === 'verwalter') { toast('⚠️ Keine zugewiesenen Regionen'); return; }
     if (regionen_ids.length > 0) newK.region_keys = regionen_ids;
@@ -1069,13 +1148,19 @@ async function createKampagne() {
     if (error) throw error;
     kampagnen.unshift(data || { ...newK, id: Date.now() });
   } catch(e) {
-    // Fallback lokal
     kampagnen.unshift({ ...newK, id: Date.now().toString() });
     console.warn('DB insert kampagne failed:', e);
   }
 
+  // Felder zurücksetzen
   document.getElementById('newKampName').value = '';
   document.getElementById('newKampBeschr').value = '';
+  document.getElementById('newKampVerteilVon').value = '';
+  document.getElementById('newKampVerteilBis').value = '';
+  document.getElementById('newKampDeadline').value = '';
+  document.getElementById('newKampBereichTyp').value = 'alle';
+  updateKampBereichAuswahl();
+
   renderKampagnenList();
   renderKampagnenDropdown();
   toast(`✅ Kampagne „${name}" erstellt`);
@@ -2611,7 +2696,12 @@ async function setSt(id,s){
       toast('⚠️ Du darfst nur Fertig oder Problem setzen'); return;
     }
   }
-  const g=getG(id); g.status=s;
+  const g=getG(id);
+  // Bestätigungsabfrage bevor Status geändert wird
+  const statusLabels = {offen:'Offen',zugeteilt:'Zugeteilt',fertig:'Fertig ✓',problem:'Problem !'};
+  if (g.status === s) return; // Gleicher Status, nichts zu tun
+  if (!confirm(`Status von „${g.name}" wirklich auf „${statusLabels[s]||s}" ändern?`)) return;
+  g.status=s;
   const col=scol[s];
   if(layers[id])layers[id].setStyle({fillColor:col.f,color:col.s,fillOpacity:.6});
   renderList();renderStats();openDetail(id);
