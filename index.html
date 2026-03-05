@@ -124,7 +124,7 @@ header{height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturate(18
 .c-zugeteilt{background:rgba(255,149,0,.12);color:var(--orange)}
 .c-fertig{background:rgba(52,199,89,.12);color:var(--green)}
 .c-problem{background:rgba(255,59,48,.12);color:var(--red)}
-.g-name{font-size:.85rem;font-weight:500;margin-bottom:3px}
+.g-name{font-size:.82rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;margin-right:6px}
 .g-meta{display:flex;gap:9px;font-size:.7rem;color:var(--text3)}
 .wa{font-size:.6rem;font-weight:600;color:#25d366;background:rgba(37,211,102,.1);padding:1px 5px;border-radius:4px}
 
@@ -373,9 +373,9 @@ textarea{min-height:68px}
     <div class="map-legend">
       <div class="leg-title">Status</div>
       <div class="leg-row"><div class="leg-dot" style="background:#aeaeb2"></div>Offen</div>
-      <div class="leg-row"><div class="leg-dot" style="background:#ff9500"></div>Zugeteilt</div>
-      <div class="leg-row"><div class="leg-dot" style="background:#34c759"></div>Fertig</div>
-      <div class="leg-row"><div class="leg-dot" style="background:#ff3b30"></div>Problem</div>
+      <div class="leg-row"><div class="leg-dot" style="background:#ff9500"></div>Zugestellt</div>
+      <div class="leg-row"><div class="leg-dot" style="background:#34c759"></div>Verteilt</div>
+      <div class="leg-row"><div class="leg-dot" style="background:#ff3b30"></div>Verteiler fehlt</div>
       <hr style="border:none;border-top:1px solid #e0e0e0;margin:6px 0">
       <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:.7rem">
         <input type="checkbox" id="toggleGrenzen" checked onchange="toggleVerwaltungsgrenzen(this.checked)">
@@ -1992,14 +1992,14 @@ async function handleUebernahmeAnfrage(anfrageId, entscheidung, gebietId, vertei
     if (g) {
       g.verteilerId = verteilerId;
       g.verteiler = verteiler?.name || '';
-      g.status = 'zugeteilt';
+      // Status bleibt unverändert – Verteiler-Zuweisung ändert nicht den Status
       // In DB aktualisieren
       const kampId = curKampagne?.id || null;
       if (kampId) {
         await sb.from('gebiet_status').upsert({
           gebiet_id: gebietId, kampagne_id: kampId,
           verteiler_id: verteilerId, verteiler_name: g.verteiler,
-          status: 'zugeteilt', stueckzahl: g.stueckzahl,
+          status: g.status, stueckzahl: g.stueckzahl,
           updated_at: new Date().toISOString()
         }, { onConflict: 'gebiet_id,kampagne_id' });
       }
@@ -2027,14 +2027,14 @@ async function handleZuweisungAnfrage(anfrageId, entscheidung, gebietId) {
     if (g) {
       g.verteilerId = currentUser.id;
       g.verteiler = currentProfile?.name || '';
-      g.status = 'zugeteilt';
+      // Status bleibt unverändert – Verteiler-Zuweisung ändert nicht den Status
       // In DB aktualisieren
       const kampId = curKampagne?.id || null;
       if (kampId) {
         await sb.from('gebiet_status').upsert({
           gebiet_id: gebietId, kampagne_id: kampId,
           verteiler_id: currentUser.id, verteiler_name: g.verteiler,
-          status: 'zugeteilt', stueckzahl: g.stueckzahl,
+          status: g.status, stueckzahl: g.stueckzahl,
           updated_at: new Date().toISOString()
         }, { onConflict: 'gebiet_id,kampagne_id' });
       }
@@ -2353,7 +2353,7 @@ function drawPolygons(){
     const c=getCoords(rKey,idx,rObj?rObj.gebiete.length:1,g.id);
     const col=scol[g.status]||scol.offen;
     const poly=L.polygon(c,{color:col.s,fillColor:col.f,fillOpacity:.35,weight:2}).addTo(map);
-    const verteilerAnzeige = curRole==='verteiler' ? (g.verteilerId ? (g.verteilerId===currentUser?.id ? g.verteiler : 'Zugeteilt') : 'Nicht zugeteilt') : (g.verteiler||'Nicht zugeteilt');
+    const verteilerAnzeige = curRole==='verteiler' ? (g.verteilerId ? (g.verteilerId===currentUser?.id ? g.verteiler : 'Zugewiesen') : 'Nicht zugewiesen') : (g.verteiler||'Nicht zugewiesen');
     poly.bindPopup(`<div class="popup-name">${g.name}</div><div class="popup-meta">📦 ${g.stueckzahl} · ${verteilerAnzeige}</div>`);
     poly.on('click',()=>{selGebiet(g.id);if(window.innerWidth<=768)document.getElementById('sidebar').classList.remove('open')});
     poly.on('mouseover',()=>poly.setStyle({fillOpacity:.55}));
@@ -2480,15 +2480,14 @@ function renderList(){
   document.getElementById('gebietList').innerHTML=gs.map(g=>{
     const istProblemgebietFremdes = curRole==='verteiler' && g.status==='problem' && g.verteilerId!==currentUser?.id;
     const statusLabel = istProblemgebietFremdes ? '🆘 Hilfe gesucht' : sl(g.status);
-    const verteilerInfo = g.verteiler?(curRole==='verteiler'?(g.verteilerId===currentUser?.id?'👤 Du':'👤 Zugeteilt'):'👤 '+g.verteiler.split(' ')[0]):'— offen';
+    const verteilerInfo = g.verteiler?(curRole==='verteiler'?(g.verteilerId===currentUser?.id?'👤 Du':'👤 Zugewiesen'):'👤 '+g.verteiler.split(' ')[0]):'— offen';
     return `<div class="g-card status-${g.status} ${selId===g.id?'sel':''}" onclick="selGebiet('${g.id}')">
-      <div class="g-top"><span class="s-chip c-${g.status}">${statusLabel}</span></div>
-      <div class="g-name">${g.name}</div>
+      <div class="g-top"><span class="g-name">${g.name}</span><span class="s-chip c-${g.status}">${statusLabel}</span></div>
       <div class="g-meta"><span>📦 ${g.stueckzahl}</span><span>${verteilerInfo}</span>${g.whatsapp?'<span class="wa">WA</span>':''}</div>
     </div>`;
   }).join('');
 }
-function sl(s){return{offen:'Offen',zugeteilt:'Zugeteilt',fertig:'Fertig ✓',problem:'Problem !'}[s]||s}
+function sl(s){return{offen:'Offen',zugeteilt:'Zugestellt',fertig:'Verteilt ✓',problem:'Verteiler fehlt!'}[s]||s}
 function renderStats(){
   const gs=getVisibleGebiete();
   const tot=gs.reduce((a,g)=>a+g.stueckzahl,0),
@@ -2524,14 +2523,14 @@ function openDetail(id){
   h+=`<div class="d-sec"><div class="info-g">
     <div><div class="ii-label">Stückzahl</div><div class="ii-val" style="color:var(--blue)">${g.stueckzahl}</div></div>
     <div><div class="ii-label">Status</div><div class="ii-val">${sl(g.status)}</div></div>
-    <div class="ii-full"><div class="ii-label">Verteiler</div><div class="ii-val">${curRole==='verteiler'?(g.verteilerId?(g.verteilerId===currentUser?.id?g.verteiler:'Zugeteilt'):'— nicht zugeteilt'):(g.verteiler||'— nicht zugeteilt')}</div></div>
+    <div class="ii-full"><div class="ii-label">Verteiler</div><div class="ii-val">${curRole==='verteiler'?(g.verteilerId?(g.verteilerId===currentUser?.id?g.verteiler:'Zugewiesen'):'— nicht zugewiesen'):(g.verteiler||'— nicht zugewiesen')}</div></div>
   </div></div>`;
 
   h+=`<div class="d-sec"><div class="sec-hd">Status</div><div class="s-grid">
     ${isM?`<button class="s-btn ${g.status==='offen'?'ao':''}" onclick="setSt('${g.id}','offen')">Offen</button>`:''}
-    ${isM?`<button class="s-btn ${g.status==='zugeteilt'?'az':''}" onclick="setSt('${g.id}','zugeteilt')">Zugeteilt</button>`:''}
-    ${darfVerteilerStatus?`<button class="s-btn ${g.status==='fertig'?'af':''}" onclick="setSt('${g.id}','fertig')">Fertig ✓</button>`:''}
-    ${darfVerteilerStatus?`<button class="s-btn ${g.status==='problem'?'ap':''}" onclick="setSt('${g.id}','problem')">Problem !</button>`:''}
+    ${isM?`<button class="s-btn ${g.status==='zugeteilt'?'az':''}" onclick="setSt('${g.id}','zugeteilt')">Zugestellt</button>`:''}
+    ${darfVerteilerStatus?`<button class="s-btn ${g.status==='fertig'?'af':''}" onclick="setSt('${g.id}','fertig')">Verteilt ✓</button>`:''}
+    ${darfVerteilerStatus?`<button class="s-btn ${g.status==='problem'?'ap':''}" onclick="setSt('${g.id}','problem')">Verteiler fehlt!</button>`:''}
   </div></div>`;
 
   // Kontakt-Sektion
@@ -2704,12 +2703,12 @@ async function setSt(id,s){
       toast('⚠️ Du bist diesem Gebiet nicht zugewiesen'); return;
     }
     if (s !== 'fertig' && s !== 'problem') {
-      toast('⚠️ Du darfst nur Fertig oder Problem setzen'); return;
+      toast('⚠️ Du darfst nur Verteilt oder Verteiler fehlt setzen'); return;
     }
   }
   const g=getG(id);
   // Bestätigungsabfrage bevor Status geändert wird
-  const statusLabels = {offen:'Offen',zugeteilt:'Zugeteilt',fertig:'Fertig ✓',problem:'Problem !'};
+  const statusLabels = {offen:'Offen',zugeteilt:'Zugestellt',fertig:'Verteilt ✓',problem:'Verteiler fehlt!'};
   if (g.status === s) return; // Gleicher Status, nichts zu tun
   if (!confirm(`Status von „${g.name}" wirklich auf „${statusLabels[s]||s}" ändern?`)) return;
   g.status=s;
@@ -2727,7 +2726,7 @@ async function setSt(id,s){
     updated_at: new Date().toISOString()
   }, { onConflict: 'gebiet_id,kampagne_id' });
   if (error) console.error('setSt error:', JSON.stringify(error));
-  toast(error ? `⚠️ DB-Fehler: ${error.message||error.code||'unbekannt'}` : `${id} → ${sl(s)}`);
+  toast(error ? `⚠️ DB-Fehler: ${error.message||error.code||'unbekannt'}` : `✅ Status → ${sl(s)}`);
 }
 
 async function saveZ(id){
@@ -2737,7 +2736,7 @@ async function saveZ(id){
   const sel=document.getElementById('inpV');
   const userId=sel.value;
   const userName=sel.options[sel.selectedIndex]?.dataset?.name||'';
-  g.verteiler=userName; g.verteilerId=userId; g.status=userId?'zugeteilt':'offen';
+  g.verteiler=userName; g.verteilerId=userId;
   const col=scol[g.status];
   if(layers[id])layers[id].setStyle({fillColor:col.f,color:col.s});
   renderList();renderStats();openDetail(id);
@@ -2754,7 +2753,7 @@ async function saveZ(id){
     updated_at: new Date().toISOString()
   }, { onConflict: 'gebiet_id,kampagne_id' });
   if (error) console.error('saveZ error:', JSON.stringify(error));
-  toast(error ? `⚠️ DB-Fehler: ${error.message||error.code||'unbekannt'}` : `${id} → ${userName||'nicht zugeteilt'}`);
+  toast(error ? `⚠️ DB-Fehler: ${error.message||error.code||'unbekannt'}` : `✅ Verteiler ${userName?'zugewiesen':'entfernt'}`);
 }
 
 async function saveSt2(id){
