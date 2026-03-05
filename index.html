@@ -254,8 +254,9 @@ textarea{min-height:68px}
     <button class="login-btn" id="loginBtn" onclick="doLogin()">Anmelden</button>
     <div class="login-error" id="loginError"></div>
 
-    <div id="resetWrap" style="margin-top:12px;text-align:center">
+    <div id="loginLinks" style="margin-top:12px;text-align:center;display:flex;justify-content:center;gap:16px">
       <a href="#" onclick="showResetForm();return false" style="font-size:.78rem;color:var(--blue);text-decoration:none">Passwort vergessen?</a>
+      <a href="#" onclick="showRegisterForm();return false" style="font-size:.78rem;color:var(--green);text-decoration:none;font-weight:500">Registrieren</a>
     </div>
     <div id="resetForm" style="display:none;margin-top:12px">
       <div class="login-field">
@@ -268,8 +269,27 @@ textarea{min-height:68px}
         <a href="#" onclick="hideResetForm();return false" style="font-size:.78rem;color:var(--text3);text-decoration:none">← Zurück zum Login</a>
       </div>
     </div>
+    <div id="registerForm" style="display:none;margin-top:12px">
+      <div class="login-field">
+        <label class="login-label">Name</label>
+        <input class="login-input" type="text" id="regName" placeholder="Max Mustermann" autocomplete="name">
+      </div>
+      <div class="login-field">
+        <label class="login-label">E-Mail</label>
+        <input class="login-input" type="email" id="regEmail" placeholder="deine@email.de" autocomplete="email">
+      </div>
+      <div class="login-field">
+        <label class="login-label">Passwort</label>
+        <input class="login-input" type="password" id="regPassword" placeholder="Mind. 6 Zeichen" autocomplete="new-password">
+      </div>
+      <button class="login-btn" id="regBtn" onclick="doRegister()" style="background:var(--green)">Registrieren</button>
+      <div id="regStatus" style="font-size:.78rem;margin-top:6px;min-height:18px;text-align:center"></div>
+      <div style="text-align:center;margin-top:8px">
+        <a href="#" onclick="hideRegisterForm();return false" style="font-size:.78rem;color:var(--text3);text-decoration:none">← Zurück zum Login</a>
+      </div>
+    </div>
 
-    <div class="login-footer">Zugang nur für autorisierte Mitglieder</div>
+    <div class="login-footer">Zugang nur für eingeladene Mitglieder</div>
   </div>
 </div>
 
@@ -454,6 +474,7 @@ textarea{min-height:68px}
     <div style="display:flex;flex-direction:column;gap:7px">
       <input type="email" id="inviteEmail" placeholder="E-Mail-Adresse">
       <input type="text"  id="inviteName"  placeholder="Name (z.B. Max Mustermann)">
+      <input type="tel"   id="inviteTelefon" placeholder="Telefon (z.B. +49 176 12345678)">
       <select id="inviteRolle">
         <option value="verteiler">Verteiler</option>
         <option value="verwalter">Gebietsverwalter</option>
@@ -470,10 +491,21 @@ textarea{min-height:68px}
       </div>
     </div>
     <div id="inviteStatus" style="font-size:.78rem;margin-top:8px;min-height:18px"></div>
-    <div id="inviteShareWrap"></div>
+
+    <div style="margin-top:10px;padding:8px 10px;background:var(--surface2);border-radius:var(--r8);font-size:.72rem;color:var(--text3)">
+      Einladung versenden per:
+    </div>
+    <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
+      <button onclick="sendInvite('email')" style="flex:1;min-width:80px;padding:10px 12px;border:1px solid #4285F4;border-radius:8px;background:#4285F4;color:#fff;cursor:pointer;font-size:.8rem;font-weight:600;display:flex;align-items:center;justify-content:center;gap:4px" id="invBtnEmail">📧 E-Mail</button>
+      <button onclick="sendInvite('whatsapp')" style="flex:1;min-width:80px;padding:10px 12px;border:1px solid #25D366;border-radius:8px;background:#25D366;color:#fff;cursor:pointer;font-size:.8rem;font-weight:600;display:flex;align-items:center;justify-content:center;gap:4px" id="invBtnWA">💬 WhatsApp</button>
+      <button onclick="sendInvite('telegram')" style="flex:1;min-width:80px;padding:10px 12px;border:1px solid #0088cc;border-radius:8px;background:#0088cc;color:#fff;cursor:pointer;font-size:.8rem;font-weight:600;display:flex;align-items:center;justify-content:center;gap:4px" id="invBtnTG">✈️ Telegram</button>
+    </div>
+    <div style="display:flex;gap:6px;margin-top:4px">
+      <button onclick="sendInvite('copy')" style="flex:1;padding:8px 12px;border:1px solid #ddd;border-radius:8px;background:#f5f5f5;cursor:pointer;font-size:.78rem;color:var(--text2)" id="invBtnCopy">📋 Einladung kopieren</button>
+    </div>
+
     <div class="m-actions" style="margin-top:10px">
       <button class="btn btn-g" onclick="closeInviteModal()">Schließen</button>
-      <button class="btn btn-p" id="inviteBtn" onclick="doInviteUser()">Einladung senden</button>
     </div>
   </div>
 </div>
@@ -648,20 +680,96 @@ async function doLogin() {
   }
 
   currentUser = data.user;
+  await pruefePendingInviteBeiLogin(data.user);
   await loadProfile();
   showApp();
 }
 
 // Passwort vergessen
 function showResetForm() {
-  document.getElementById('resetWrap').style.display = 'none';
+  document.getElementById('loginLinks').style.display = 'none';
+  document.getElementById('registerForm').style.display = 'none';
   document.getElementById('resetForm').style.display = 'block';
   document.getElementById('resetEmail').value = document.getElementById('loginEmail').value || '';
   document.getElementById('resetStatus').textContent = '';
 }
 function hideResetForm() {
   document.getElementById('resetForm').style.display = 'none';
-  document.getElementById('resetWrap').style.display = 'block';
+  document.getElementById('loginLinks').style.display = 'flex';
+}
+function showRegisterForm() {
+  document.getElementById('loginLinks').style.display = 'none';
+  document.getElementById('resetForm').style.display = 'none';
+  document.getElementById('registerForm').style.display = 'block';
+  document.getElementById('regStatus').textContent = '';
+  // Hash-Parameter auswerten (#register)
+  const regEmail = document.getElementById('regEmail');
+  if (!regEmail.value) regEmail.value = document.getElementById('loginEmail').value || '';
+}
+function hideRegisterForm() {
+  document.getElementById('registerForm').style.display = 'none';
+  document.getElementById('loginLinks').style.display = 'flex';
+}
+async function doRegister() {
+  const name = document.getElementById('regName').value.trim();
+  const email = document.getElementById('regEmail').value.trim();
+  const pass = document.getElementById('regPassword').value;
+  const btn = document.getElementById('regBtn');
+  const status = document.getElementById('regStatus');
+
+  if (!name) { status.style.color='var(--red)'; status.textContent='⚠️ Bitte Name eingeben'; return; }
+  if (!email) { status.style.color='var(--red)'; status.textContent='⚠️ Bitte E-Mail eingeben'; return; }
+  if (!pass || pass.length<6) { status.style.color='var(--red)'; status.textContent='⚠️ Passwort muss mind. 6 Zeichen haben'; return; }
+
+  btn.disabled = true;
+  status.style.color='var(--text3)';
+  status.textContent='⏳ Registrierung…';
+
+  try {
+    const { data, error } = await sb.auth.signUp({
+      email, password: pass,
+      options: { data: { name, rolle: 'verteiler' } }
+    });
+    if (error) throw error;
+
+    // Profil anlegen/aktualisieren
+    if (data?.user?.id) {
+      const profileData = { id: data.user.id, name, email, rolle: 'verteiler' };
+      // Prüfe ob Einladung mit vordefinierten Daten existiert (in DB)
+      const invite = await ladePendingInvite(email);
+      if (invite) {
+        profileData.name = invite.name || name;
+        profileData.rolle = invite.rolle || 'verteiler';
+        if (invite.verwaltete_regionen?.length > 0) {
+          profileData.verwaltete_regionen = invite.verwaltete_regionen;
+          profileData.verwaltete_gebietsverbaende = invite.verwaltete_regionen;
+        }
+        if (invite.verwalteter_landkreis) {
+          profileData.verwalteter_landkreis = invite.verwalteter_landkreis;
+        }
+        // Invite aus DB löschen (verbraucht)
+        await sb.from('pending_invites').delete().eq('email', email.toLowerCase());
+      }
+      await sb.from('user_profiles').upsert(profileData, { onConflict: 'id' });
+    }
+
+    status.style.color='var(--green)';
+    if (data?.user?.identities?.length === 0) {
+      status.textContent='⚠️ Diese E-Mail ist bereits registriert. Bitte anmelden.';
+    } else if (data?.session) {
+      status.textContent='✅ Registrierung erfolgreich!';
+      currentUser = data.user;
+      await loadProfile();
+      showApp();
+    } else {
+      status.textContent='✅ Registrierung erfolgreich! Bitte bestätige deine E-Mail und melde dich dann an.';
+    }
+  } catch(e) {
+    console.error('Register failed:', e);
+    status.style.color='var(--red)';
+    status.textContent = `⚠️ ${e.message || 'Registrierung fehlgeschlagen'}`;
+  }
+  btn.disabled = false;
 }
 async function doResetPassword() {
   const email = document.getElementById('resetEmail').value.trim();
@@ -733,8 +841,45 @@ async function doSetPassword() {
 async function loadProfile() {
   const { data, error } = await sb.from('user_profiles').select('*').eq('id', currentUser.id).single();
   if (error) console.error('loadProfile error:', error);
-  console.log('loadProfile result:', data);
   currentProfile = data;
+}
+
+// Hilfsfunktion: Pending Invite aus DB laden (falls vorhanden)
+async function ladePendingInvite(email) {
+  if (!email) return null;
+  try {
+    const { data, error } = await sb.from('pending_invites').select('*').eq('email', email.toLowerCase()).maybeSingle();
+    if (error) { console.warn('pending_invites Abfrage fehlgeschlagen:', error.message); return null; }
+    return data;
+  } catch(e) {
+    console.warn('ladePendingInvite failed:', e);
+    return null;
+  }
+}
+
+// Beim normalen Login: Prüfe ob ein pending_invite existiert und wende ihn an
+async function pruefePendingInviteBeiLogin(user) {
+  try {
+    const invite = await ladePendingInvite(user.email);
+    if (!invite) return;
+    // Invite gefunden → Profil aktualisieren
+    const upd = { rolle: invite.rolle };
+    if (invite.name) upd.name = invite.name;
+    if (invite.telefon) upd.telefon = invite.telefon;
+    if (invite.verwaltete_regionen?.length > 0) {
+      upd.verwaltete_regionen = invite.verwaltete_regionen;
+      upd.verwaltete_gebietsverbaende = invite.verwaltete_regionen;
+    }
+    if (invite.verwalteter_landkreis) {
+      upd.verwalteter_landkreis = invite.verwalteter_landkreis;
+    }
+    await sb.from('user_profiles').update(upd).eq('id', user.id);
+    // Invite verbraucht → löschen
+    await sb.from('pending_invites').delete().eq('email', user.email.toLowerCase());
+    console.log('Pending invite angewendet für:', user.email);
+  } catch(e) {
+    console.warn('pruefePendingInviteBeiLogin failed:', e);
+  }
 }
 
 let allUsers = [];
@@ -784,8 +929,7 @@ function renderKampagnenDropdown() {
   const sel = document.getElementById('kampagneSelect');
   if (!sel) return;
 
-  // Admin/Verwalter bekommen Verwalten-Button neben Dropdown
-  const isManager = curRole === 'admin' || curRole === 'kreisverwalter' || curRole === 'verwalter';
+  const isManager = istManager();
   const wrap = sel.parentElement;
   // Entferne alten Verwalten-Button falls vorhanden
   const oldBtn = document.getElementById('kampagneVerwBtn');
@@ -910,7 +1054,7 @@ async function createKampagne() {
   };
 
   // Verwalter: nur für zugewiesene Regionen
-  if (curRole === 'verwalter' || curRole === 'kreisverwalter') {
+  if (istVerwalterOderKreisverwalter()) {
     const regionen_ids = (currentProfile?.verwaltete_regionen || []);
     if (regionen_ids.length === 0 && curRole === 'verwalter') { toast('⚠️ Keine zugewiesenen Regionen'); return; }
     if (regionen_ids.length > 0) newK.region_keys = regionen_ids;
@@ -1006,11 +1150,11 @@ function openInviteModal() {
   renderInviteRegionen();
   document.getElementById('inviteEmail').value = '';
   document.getElementById('inviteName').value = '';
+  document.getElementById('inviteTelefon').value = '';
   document.getElementById('inviteRolle').value = 'verteiler';
   document.getElementById('inviteRegionenWrap').style.display = 'none';
   document.getElementById('inviteLandkreisWrap').style.display = 'none';
   document.getElementById('inviteStatus').textContent = '';
-  document.getElementById('inviteShareWrap').innerHTML = '';
   document.getElementById('inviteModalOv').classList.add('open');
 }
 
@@ -1144,15 +1288,20 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
-async function doInviteUser() {
+async function sendInvite(channel) {
   const email  = document.getElementById('inviteEmail').value.trim();
   const name   = document.getElementById('inviteName').value.trim();
+  const telefon = document.getElementById('inviteTelefon').value.trim();
   const rolle  = document.getElementById('inviteRolle').value;
-  const btn    = document.getElementById('inviteBtn');
   const statusEl = document.getElementById('inviteStatus');
 
   if (!email) { statusEl.style.color = 'var(--red)'; statusEl.textContent = '⚠️ Bitte E-Mail eingeben'; return; }
   if (!name)  { statusEl.style.color = 'var(--red)'; statusEl.textContent = '⚠️ Bitte Name eingeben'; return; }
+  if ((channel === 'whatsapp' || channel === 'telegram') && !telefon) {
+    statusEl.style.color = 'var(--red)';
+    statusEl.textContent = `⚠️ Bitte Telefonnummer eingeben für ${channel === 'whatsapp' ? 'WhatsApp' : 'Telegram'}`;
+    return;
+  }
 
   const verwaltete_regionen = rolle === 'verwalter'
     ? Object.keys(regionen).filter(k => document.getElementById(`invReg_${k}`)?.checked)
@@ -1161,96 +1310,102 @@ async function doInviteUser() {
     ? document.getElementById('inviteLandkreis')?.value || null
     : null;
 
-  btn.disabled = true;
+  // Alle Buttons kurz deaktivieren
+  ['invBtnEmail','invBtnWA','invBtnTG','invBtnCopy'].forEach(id => { const b=document.getElementById(id); if(b) b.disabled=true; });
   statusEl.style.color = 'var(--text3)';
   statusEl.textContent = '⏳ Einladung wird vorbereitet…';
 
   try {
     const APP_URL = window.location.origin + window.location.pathname;
-
-    // Versuche zuerst Edge Function (falls deployed)
-    let edgeFunctionWorked = false;
-    try {
-      const { data, error } = await sb.functions.invoke('invite-user', {
-        body: { email, name, rolle, verwaltete_regionen, verwalteter_landkreis }
-      });
-      if (!error && data && !data.error) {
-        edgeFunctionWorked = true;
-        const hinweis = data.alreadyRegistered ? ' (war bereits registriert – Profil aktualisiert)' : '';
-        statusEl.style.color = 'var(--green)';
-        statusEl.textContent = `✅ Einladung an ${email} gesendet${hinweis}`;
-      }
-    } catch(efErr) {
-      console.log('Edge Function nicht verfügbar, nutze Fallback:', efErr.message);
-    }
-
-    // Fallback: Nutzer vorab in user_profiles anlegen + Passwort-Reset-Mail
-    if (!edgeFunctionWorked) {
-      // Prüfe ob E-Mail schon existiert
-      const {data:existing} = await sb.from('user_profiles').select('id').eq('email', email).maybeSingle();
-
-      if (existing) {
-        // User existiert → Profil aktualisieren
-        const upd = { name, rolle };
-        if (rolle === 'verwalter' && verwaltete_regionen.length > 0) {
-          upd.verwaltete_regionen = verwaltete_regionen;
-          upd.verwaltete_gebietsverbaende = verwaltete_regionen;
-        }
-        if (rolle === 'kreisverwalter' && verwalteter_landkreis) {
-          upd.verwalteter_landkreis = verwalteter_landkreis;
-        }
-        await sb.from('user_profiles').update(upd).eq('id', existing.id);
-        statusEl.style.color = 'var(--green)';
-        statusEl.textContent = `✅ Profil von ${email} aktualisiert (war bereits registriert)`;
-      } else {
-        // Neuer Nutzer: Account anlegen per signUp
-        const tempPw = 'Temp!' + crypto.randomUUID().slice(0,12);
-        const { data: signUpData, error: signUpErr } = await sb.auth.signUp({
-          email,
-          password: tempPw,
-          options: { data: { name, rolle } }
-        });
-
-        if (signUpErr) throw signUpErr;
-
-        const userId = signUpData?.user?.id;
-        if (userId) {
-          const profileData = { id: userId, name, email, rolle };
-          if (rolle === 'verwalter' && verwaltete_regionen.length > 0) {
-            profileData.verwaltete_regionen = verwaltete_regionen;
-            profileData.verwaltete_gebietsverbaende = verwaltete_regionen;
-          }
-          if (rolle === 'kreisverwalter' && verwalteter_landkreis) {
-            profileData.verwalteter_landkreis = verwalteter_landkreis;
-          }
-          await sb.from('user_profiles').upsert(profileData, { onConflict: 'id' });
-        }
-
-        // Passwort-Reset senden damit Nutzer eigenes Passwort setzen kann
-        await sb.auth.resetPasswordForEmail(email, { redirectTo: APP_URL });
-        statusEl.style.color = 'var(--green)';
-        statusEl.textContent = `✅ Einladung an ${email} gesendet – E-Mail mit Login-Link verschickt`;
-      }
-    }
-
-    // Teilen-Buttons anzeigen
-    const shareWrap = document.getElementById('inviteShareWrap');
     const rolleLabel = {verteiler:'Verteiler',verwalter:'Gebietsverwalter',kreisverwalter:'Kreisverwalter',admin:'Admin'}[rolle]||rolle;
-    const shareText = `Hallo ${name}! Du wurdest als ${rolleLabel} zur FlyerOrg-App eingeladen. Bitte prüfe deine E-Mails (${email}) für den Login-Link. Die App findest du hier:\n${APP_URL}`;
-    const shareEnc = encodeURIComponent(shareText);
-    shareWrap.innerHTML = `
-      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
-        <button onclick="navigator.clipboard.writeText(decodeURIComponent('${shareEnc}'));this.textContent='✅ Kopiert!';setTimeout(()=>this.textContent='📋 Link kopieren',2000)" style="padding:6px 12px;border:1px solid #ddd;border-radius:8px;background:#f5f5f5;cursor:pointer;font-size:.8rem">📋 Link kopieren</button>
-        <a href="https://wa.me/?text=${shareEnc}" target="_blank" style="padding:6px 12px;border:1px solid #25D366;border-radius:8px;background:#25D366;color:#fff;text-decoration:none;font-size:.8rem;display:inline-flex;align-items:center;gap:4px">💬 WhatsApp</a>
-        <a href="https://t.me/share/url?url=${encodeURIComponent(APP_URL)}&text=${encodeURIComponent(`Hallo ${name}! Du wurdest als ${rolleLabel} eingeladen. Prüfe deine E-Mails für den Login-Link.`)}" target="_blank" style="padding:6px 12px;border:1px solid #0088cc;border-radius:8px;background:#0088cc;color:#fff;text-decoration:none;font-size:.8rem;display:inline-flex;align-items:center;gap:4px">✈️ Telegram</a>
-      </div>`;
 
-    document.getElementById('inviteEmail').value = '';
-    document.getElementById('inviteName').value = '';
-    Object.keys(regionen).forEach(k => {
-      const cb = document.getElementById(`invReg_${k}`);
-      if (cb) cb.checked = false;
-    });
+    // Telefonnummer normalisieren für WhatsApp/Telegram (nur Ziffern, mit Ländervorwahl)
+    const telefonClean = telefon.replace(/[\s\-\(\)\/]/g, '').replace(/^00/, '+').replace(/^0/, '+49');
+
+    // Einladungsdaten in DB speichern (serverseitig, damit der neue Nutzer sie auf seinem Gerät findet)
+    const { error: piErr } = await sb.from('pending_invites').upsert({
+      email: email.toLowerCase(),
+      name,
+      rolle,
+      telefon: telefon || null,
+      verwaltete_regionen: verwaltete_regionen.length > 0 ? verwaltete_regionen : null,
+      verwalteter_landkreis: verwalteter_landkreis || null,
+      eingeladen_von: currentUser.id
+    }, { onConflict: 'email' });
+    if (piErr) console.warn('pending_invites speichern fehlgeschlagen:', piErr.message);
+
+    // Prüfe ob Nutzer schon existiert → Profil direkt aktualisieren
+    const {data:existing} = await sb.from('user_profiles').select('id').eq('email', email).maybeSingle();
+    if (existing) {
+      const upd = { name, rolle };
+      if (telefon) upd.telefon = telefon;
+      if (rolle === 'verwalter' && verwaltete_regionen.length > 0) {
+        upd.verwaltete_regionen = verwaltete_regionen;
+        upd.verwaltete_gebietsverbaende = verwaltete_regionen;
+      }
+      if (rolle === 'kreisverwalter' && verwalteter_landkreis) {
+        upd.verwalteter_landkreis = verwalteter_landkreis;
+      }
+      await sb.from('user_profiles').update(upd).eq('id', existing.id);
+    }
+
+    // Einladungstext zusammenbauen
+    const regLink = APP_URL + '#register';
+    const shareText = `Hallo ${name}!\nDu wurdest als ${rolleLabel} zur FlyerOrg-App eingeladen.\n\nBitte registriere dich hier:\n${regLink}\n\nDeine E-Mail: ${email}`;
+
+    // Je nach Kanal versenden
+    if (channel === 'email') {
+      // Zuerst versuchen: Magic Link direkt per Supabase senden
+      let emailSent = false;
+      try {
+        const { data: otpData, error: otpErr } = await sb.auth.signInWithOtp({
+          email,
+          options: {
+            shouldCreateUser: true,
+            data: { name, rolle },
+            emailRedirectTo: APP_URL
+          }
+        });
+        // OTP gesendet
+        if (!otpErr) {
+          emailSent = true;
+          statusEl.style.color = 'var(--green)';
+          statusEl.textContent = `✅ Einladungs-E-Mail an ${email} gesendet! (Magic Link)`;
+        } else {
+          console.warn('OTP Fehler:', otpErr.message);
+        }
+      } catch(otpE) {
+        console.warn('OTP Exception:', otpE.message);
+      }
+
+      // Fallback: E-Mail-Programm öffnen wenn Supabase-Mail nicht geklappt hat
+      if (!emailSent) {
+        const subject = encodeURIComponent('Einladung zur FlyerOrg-App');
+        const body = encodeURIComponent(shareText);
+        window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
+        statusEl.style.color = 'var(--orange, #e67e22)';
+        statusEl.textContent = `📧 E-Mail-Programm geöffnet (Supabase-Mail nicht verfügbar)`;
+      }
+    } else if (channel === 'whatsapp') {
+      // WhatsApp direkt an die Nummer senden
+      const waNumber = telefonClean.replace('+', '');
+      const shareEnc = encodeURIComponent(shareText);
+      window.open(`https://wa.me/${waNumber}?text=${shareEnc}`, '_blank');
+      statusEl.style.color = 'var(--green)';
+      statusEl.textContent = `✅ WhatsApp geöffnet – Nachricht an ${telefon}`;
+    } else if (channel === 'telegram') {
+      // Telegram: tg://resolve funktioniert nur mit Username, daher share-Link mit vorausgefülltem Text
+      const tgText = encodeURIComponent(`Hallo ${name}! Du wurdest als ${rolleLabel} zur FlyerOrg-App eingeladen. Registriere dich mit ${email}.\n${regLink}`);
+      window.open(`https://t.me/share/url?url=${encodeURIComponent(regLink)}&text=${tgText}`, '_blank');
+      statusEl.style.color = 'var(--green)';
+      statusEl.textContent = `✅ Telegram geöffnet – Einladung für ${name}`;
+    } else if (channel === 'copy') {
+      await navigator.clipboard.writeText(shareText);
+      statusEl.style.color = 'var(--green)';
+      statusEl.textContent = `✅ Einladungstext in Zwischenablage kopiert!`;
+      const copyBtn = document.getElementById('invBtnCopy');
+      if (copyBtn) { copyBtn.textContent = '✅ Kopiert!'; setTimeout(()=>{ copyBtn.textContent = '📋 Einladung kopieren'; }, 2000); }
+    }
 
     await loadAllUsers();
     renderUserList();
@@ -1258,16 +1413,11 @@ async function doInviteUser() {
   } catch(e) {
     console.error('Invite failed:', e);
     statusEl.style.color = 'var(--red)';
-    if (e.message?.includes('already registered') || e.message?.includes('already been registered')) {
-      statusEl.textContent = '⚠️ Diese E-Mail ist bereits registriert';
-    } else if (e.message?.includes('Signups not allowed') || e.message?.includes('signups')) {
-      statusEl.textContent = '⚠️ Registrierung ist in Supabase deaktiviert. Bitte unter Authentication → Settings → "Enable sign ups" aktivieren.';
-    } else {
-      statusEl.textContent = `⚠️ ${e.message || 'Fehler bei der Einladung'}`;
-    }
+    statusEl.textContent = `⚠️ ${e.message || 'Fehler bei der Einladung'}`;
   }
 
-  btn.disabled = false;
+  // Buttons wieder aktivieren
+  ['invBtnEmail','invBtnWA','invBtnTG','invBtnCopy'].forEach(id => { const b=document.getElementById(id); if(b) b.disabled=false; });
 }
 
 async function deleteUser(userId, userName) {
@@ -1343,6 +1493,78 @@ async function loadCustomGebiete() {
   }
 }
 
+// Rollenbasierter Filter: Setzt Breadcrumb-Filter basierend auf Benutzerrolle
+function setRollenbasierterFilter() {
+  const rolle = currentProfile?.rolle || 'verteiler';
+
+  if (rolle === 'kreisverwalter') {
+    // Kreisverwalter → auf seinen Landkreis filtern
+    const lkId = currentProfile?.verwalteter_landkreis;
+    if (lkId && landkreise[lkId]) {
+      curLK = lkId;
+      // Auto-selektiere GV wenn nur einer im Landkreis
+      const gvs = Object.entries(gebietsverbaende).filter(([,gv]) => gv.landkreis_id === lkId);
+      if (gvs.length === 1) curGV = gvs[0][0];
+    }
+  } else if (rolle === 'verwalter') {
+    // Gebietsverwalter → auf ersten zugewiesenen Gebietsverband filtern
+    const verwGV = currentProfile?.verwaltete_gebietsverbaende || currentProfile?.verwaltete_regionen || [];
+    if (verwGV.length > 0) {
+      const erstesGV = verwGV[0];
+      if (gebietsverbaende[erstesGV]) {
+        curGV = erstesGV;
+        // Landkreis passend setzen
+        const gv = gebietsverbaende[erstesGV];
+        if (gv?.landkreis_id && landkreise[gv.landkreis_id]) {
+          curLK = gv.landkreis_id;
+        }
+        // Auto-selektiere Region wenn nur eine im GV
+        const regs = Object.entries(regionen).filter(([,r]) => r.gebietsverband_id === erstesGV);
+        if (regs.length === 1) curReg = regs[0][0];
+      }
+    }
+  } else if (rolle === 'verteiler') {
+    // Verteiler → auf den Bereich seiner zugewiesenen Gebiete filtern
+    // Finde alle Gebiete die diesem Verteiler zugewiesen sind
+    const meineGebiete = [];
+    for (const [rKey, r] of Object.entries(regionen)) {
+      for (const g of r.gebiete) {
+        if (g.verteilerId === currentUser?.id) {
+          meineGebiete.push({ gebiet: g, regionKey: rKey });
+        }
+      }
+    }
+    if (meineGebiete.length > 0) {
+      // Bestimme die Region(en) des Verteilers
+      const regionKeys = [...new Set(meineGebiete.map(m => m.regionKey))];
+      if (regionKeys.length === 1) {
+        // Alle Gebiete in einer Region → direkt auf Region filtern
+        const rKey = regionKeys[0];
+        curReg = rKey;
+        const reg = regionen[rKey];
+        if (reg) {
+          curGV = reg.gebietsverband_id;
+          const gv = gebietsverbaende[reg.gebietsverband_id];
+          if (gv) curLK = gv.landkreis_id;
+        }
+      } else {
+        // Mehrere Regionen → auf GV-Ebene filtern
+        const gvKeys = [...new Set(regionKeys.map(rk => regionen[rk]?.gebietsverband_id).filter(Boolean))];
+        if (gvKeys.length === 1) {
+          curGV = gvKeys[0];
+          const gv = gebietsverbaende[gvKeys[0]];
+          if (gv) curLK = gv.landkreis_id;
+        } else if (gvKeys.length > 1) {
+          // Mehrere GVs → auf Landkreis-Ebene filtern
+          const lkKeys = [...new Set(gvKeys.map(gk => gebietsverbaende[gk]?.landkreis_id).filter(Boolean))];
+          if (lkKeys.length === 1) curLK = lkKeys[0];
+        }
+      }
+    }
+  }
+  // Admin: keine Einschränkung, bleibt auf 'alle'
+}
+
 async function showApp() {
   document.getElementById('loginScreen').classList.add('hidden');
   document.getElementById('appHeader').style.display = 'flex';
@@ -1373,10 +1595,15 @@ async function showApp() {
   await loadCustomGebiete();  // Selbst gezeichnete Gebiete aus DB laden
   await loadAnfragen();       // Offene Anfragen laden
   await loadHinweise();       // Hinweise aus DB laden
+  // Rollenbasierter Filter: Breadcrumbs vorselektieren basierend auf Rolle
+  setRollenbasierterFilter();
   initApp();
   // Erste Kampagne automatisch laden
   if (curKampagne?.id && curKampagne.id !== 'default') {
     await loadGebieteForKampagne(curKampagne.id);
+    // Nach Kampagne-Laden nochmal rollenbasiert filtern (Verteiler braucht gebiet_status)
+    setRollenbasierterFilter();
+    renderBreadcrumb(); renderList(); renderStats(); drawPolygons(); showDrawToolbar();
   }
 }
 
@@ -1384,6 +1611,13 @@ async function showApp() {
 async function checkSession() {
   // Detect invite/recovery link tokens in URL hash
   const hash = window.location.hash;
+
+  // #register → Registrierungsformular automatisch öffnen
+  if (hash === '#register') {
+    setTimeout(() => showRegisterForm(), 100);
+    window.location.hash = '';
+  }
+
   const isInviteLink = hash.includes('type=invite') || hash.includes('type=recovery') || hash.includes('type=magiclink');
 
   // Listen for auth state change (Supabase processes the token from the URL)
@@ -1391,6 +1625,30 @@ async function checkSession() {
     const { data: { subscription } } = sb.auth.onAuthStateChange(async (event, session) => {
       if (session && (event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY')) {
         currentUser = session.user;
+
+        // Pending-Invite-Daten aus DB laden und anwenden
+        try {
+          const invite = await ladePendingInvite(session.user.email);
+          const profileData = {
+            id: session.user.id,
+            email: session.user.email,
+            name: invite?.name || session.user.user_metadata?.name || session.user.email.split('@')[0],
+            rolle: invite?.rolle || 'verteiler'
+          };
+          if (invite?.telefon) profileData.telefon = invite.telefon;
+          if (invite?.verwaltete_regionen?.length > 0) {
+            profileData.verwaltete_regionen = invite.verwaltete_regionen;
+            profileData.verwaltete_gebietsverbaende = invite.verwaltete_regionen;
+          }
+          if (invite?.verwalteter_landkreis) {
+            profileData.verwalteter_landkreis = invite.verwalteter_landkreis;
+          }
+          await sb.from('user_profiles').upsert(profileData, { onConflict: 'id' });
+          if (invite) {
+            await sb.from('pending_invites').delete().eq('email', session.user.email.toLowerCase());
+          }
+        } catch(e) { console.warn('Pending invite apply failed:', e); }
+
         // Show password-set screen for invite links
         document.getElementById('loginScreen').style.display = 'none';
         document.getElementById('setPasswordScreen').style.display = 'flex';
@@ -1403,6 +1661,8 @@ async function checkSession() {
   const { data: { session } } = await sb.auth.getSession();
   if (session) {
     currentUser = session.user;
+    // Prüfe ob ein pending_invite existiert (Admin hat Rolle/Region nachträglich geändert)
+    await pruefePendingInviteBeiLogin(session.user);
     await loadProfile();
     showApp();
   }
@@ -1445,6 +1705,8 @@ async function loadHinweise() {
 }
 
 let meineRueckmeldungen = [];
+let meineZuweisungsAnfragen = []; // Zuweisungs-Anfragen die an mich gerichtet sind
+
 async function loadAnfragen() {
   try {
     // Offene Anfragen (für Admin/Verwalter)
@@ -1454,6 +1716,9 @@ async function loadAnfragen() {
     if (currentUser?.id) {
       const { data: rm, error: rmErr } = await sb.from('anfragen').select('*').eq('user_id', currentUser.id).in('status', ['genehmigt', 'abgelehnt']).eq('gelesen', false).order('updated_at', { ascending: false });
       if (!rmErr && rm) { meineRueckmeldungen = rm; }
+      // Zuweisungs-Anfragen die an den aktuellen Nutzer gerichtet sind
+      const { data: za, error: zaErr } = await sb.from('anfragen').select('*').eq('ziel_user_id', currentUser.id).eq('typ', 'zuweisung_anfrage').eq('status', 'offen').order('created_at', { ascending: false });
+      if (!zaErr && za) { meineZuweisungsAnfragen = za; }
     }
     updateAnfragenBadge();
   } catch(e) { console.warn('loadAnfragen failed:', e); }
@@ -1465,11 +1730,12 @@ function updateAnfragenBadge() {
   let count = 0;
   if (curRole === 'admin') {
     count = alleAnfragen.length;
-  } else if (curRole === 'verwalter' || curRole === 'kreisverwalter') {
+  } else if (istVerwalterOderKreisverwalter()) {
     count = alleAnfragen.filter(a => verwalterHatGebietZugriff(a.gebiet_id)).length;
   }
-  // Verteiler (und alle Rollen): eigene Rückmeldungen zählen
+  // Verteiler (und alle Rollen): eigene Rückmeldungen + Zuweisungs-Anfragen zählen
   count += meineRueckmeldungen.length;
+  count += meineZuweisungsAnfragen.length;
   if (count > 0) {
     badge.textContent = count;
     badge.style.display = 'flex';
@@ -1516,11 +1782,36 @@ function renderAnfragenList() {
     }).join('');
   }
 
-  // 2) Offene Anfragen (für Admin/Verwalter)
+  // 2) Zuweisungs-Anfragen an den aktuellen Verteiler
+  if (meineZuweisungsAnfragen.length > 0) {
+    if (html) html += '<hr style="border:none;border-top:1px solid var(--surface3);margin:12px 0">';
+    html += '<div style="font-size:.7rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:6px">Gebiets-Anfragen an dich</div>';
+    html += meineZuweisungsAnfragen.map(a => {
+      const g = getG(a.gebiet_id);
+      const gebietName = g ? g.name : a.gebiet_id;
+      const absender = allUsers.find(u => u.id === a.user_id);
+      const absenderName = absender ? absender.name : 'Verwalter';
+      const datum = new Date(a.created_at).toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+      return `<div style="background:var(--surface2);border-radius:var(--r8);padding:10px;border-left:3px solid var(--blue)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <span style="font-size:.82rem;font-weight:600">${gebietName}</span>
+          <span style="font-size:.65rem;color:var(--text4)">${datum}</span>
+        </div>
+        <div style="font-size:.78rem;color:var(--text2);margin-bottom:2px">👤 ${absenderName} möchte dir dieses Gebiet zuweisen</div>
+        <div style="font-size:.75rem;color:var(--text3);margin-bottom:6px">📦 ${a.neue_stueckzahl} Stück</div>
+        <div style="display:flex;gap:6px">
+          <button onclick="handleZuweisungAnfrage('${a.id}','genehmigt','${a.gebiet_id}')" style="flex:1;padding:5px;border:none;border-radius:var(--r8);background:var(--green);color:#fff;font-size:.75rem;font-weight:600;cursor:pointer">✓ Annehmen</button>
+          <button onclick="handleZuweisungAnfrage('${a.id}','abgelehnt','${a.gebiet_id}')" style="flex:1;padding:5px;border:none;border-radius:var(--r8);background:var(--red);color:#fff;font-size:.75rem;font-weight:600;cursor:pointer">✗ Ablehnen</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // 3) Offene Anfragen (für Admin/Verwalter)
   let sichtbar = [];
   if (curRole === 'admin') {
     sichtbar = alleAnfragen;
-  } else if (curRole === 'verwalter' || curRole === 'kreisverwalter') {
+  } else if (istVerwalterOderKreisverwalter()) {
     sichtbar = alleAnfragen.filter(a => verwalterHatGebietZugriff(a.gebiet_id));
   }
 
@@ -1533,15 +1824,23 @@ function renderAnfragenList() {
       const user = allUsers.find(u => u.id === a.user_id);
       const userName = user ? user.name : 'Unbekannt';
       const datum = new Date(a.created_at).toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+      const typLabel = a.typ === 'uebernahme' ? '🙋 Übernahme' : a.typ === 'zuweisung_anfrage' ? '👤 Zuweisung' : '📦 Stückzahl';
+      const beschreibung = a.typ === 'uebernahme'
+        ? `🙋 ${userName} möchte dieses Problemgebiet übernehmen`
+        : `👤 ${userName} → 📦 <strong>${a.neue_stueckzahl}</strong> Stück`;
+      const genehmigtBtn = a.typ === 'uebernahme'
+        ? `<button onclick="handleUebernahmeAnfrage('${a.id}','genehmigt','${a.gebiet_id}','${a.user_id}')" style="flex:1;padding:5px;border:none;border-radius:var(--r8);background:var(--green);color:#fff;font-size:.75rem;font-weight:600;cursor:pointer">✓ Genehmigen</button>`
+        : `<button onclick="handleAnfrage('${a.id}','genehmigt',${a.neue_stueckzahl},'${a.gebiet_id}')" style="flex:1;padding:5px;border:none;border-radius:var(--r8);background:var(--green);color:#fff;font-size:.75rem;font-weight:600;cursor:pointer">✓ Genehmigen</button>`;
       return `<div style="background:var(--surface2);border-radius:var(--r8);padding:10px;border-left:3px solid var(--orange)">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
           <span style="font-size:.82rem;font-weight:600">${gebietName} (${a.gebiet_id})</span>
           <span style="font-size:.65rem;color:var(--text4)">${datum}</span>
         </div>
-        <div style="font-size:.78rem;color:var(--text2);margin-bottom:2px">👤 ${userName} → 📦 <strong>${a.neue_stueckzahl}</strong> Stück</div>
+        <div style="font-size:.7rem;font-weight:600;color:var(--blue);margin-bottom:2px">${typLabel}</div>
+        <div style="font-size:.78rem;color:var(--text2);margin-bottom:2px">${beschreibung}</div>
         ${a.grund ? `<div style="font-size:.75rem;color:var(--text3);margin-bottom:6px;font-style:italic">${a.grund}</div>` : ''}
         <div style="display:flex;gap:6px">
-          <button onclick="handleAnfrage('${a.id}','genehmigt',${a.neue_stueckzahl},'${a.gebiet_id}')" style="flex:1;padding:5px;border:none;border-radius:var(--r8);background:var(--green);color:#fff;font-size:.75rem;font-weight:600;cursor:pointer">✓ Genehmigen</button>
+          ${genehmigtBtn}
           <button onclick="handleAnfrage('${a.id}','abgelehnt',null,null)" style="flex:1;padding:5px;border:none;border-radius:var(--r8);background:var(--red);color:#fff;font-size:.75rem;font-weight:600;cursor:pointer">✗ Ablehnen</button>
         </div>
       </div>`;
@@ -1592,7 +1891,116 @@ async function handleAnfrage(anfrageId, entscheidung, neueStueckzahl, gebietId) 
   updateAnfragenBadge();
   renderAnfragenList();
   if (selId) openDetail(selId);
-  toast(entscheidung === 'genehmigt' ? '✅ Anfrage genehmigt – Stückzahl aktualisiert' : '❌ Anfrage abgelehnt');
+  toast(entscheidung === 'genehmigt' ? '✅ Anfrage genehmigt' : '❌ Anfrage abgelehnt');
+}
+
+// Verwalter genehmigt Übernahme-Anfrage eines Verteilers
+async function handleUebernahmeAnfrage(anfrageId, entscheidung, gebietId, verteilerId) {
+  const { error } = await sb.from('anfragen').update({
+    status: entscheidung,
+    bearbeitet_von: currentUser.id,
+    updated_at: new Date().toISOString()
+  }).eq('id', anfrageId);
+  if (error) { toast('⚠️ Fehler: ' + (error.message || error.code)); return; }
+
+  if (entscheidung === 'genehmigt' && gebietId && verteilerId) {
+    const g = getG(gebietId);
+    const verteiler = allUsers.find(u => u.id === verteilerId);
+    if (g) {
+      g.verteilerId = verteilerId;
+      g.verteiler = verteiler?.name || '';
+      g.status = 'zugeteilt';
+      // In DB aktualisieren
+      const kampId = curKampagne?.id || null;
+      if (kampId) {
+        await sb.from('gebiet_status').upsert({
+          gebiet_id: gebietId, kampagne_id: kampId,
+          verteiler_id: verteilerId, verteiler_name: g.verteiler,
+          status: 'zugeteilt', stueckzahl: g.stueckzahl,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'gebiet_id,kampagne_id' });
+      }
+      renderList(); renderStats(); drawPolygons();
+    }
+  }
+  alleAnfragen = alleAnfragen.filter(a => a.id !== anfrageId);
+  updateAnfragenBadge();
+  renderAnfragenList();
+  if (selId) openDetail(selId);
+  toast(entscheidung === 'genehmigt' ? '✅ Übernahme genehmigt – Verteiler zugewiesen' : '❌ Übernahme abgelehnt');
+}
+
+// Verteiler nimmt Zuweisungs-Anfrage an oder lehnt ab
+async function handleZuweisungAnfrage(anfrageId, entscheidung, gebietId) {
+  const { error } = await sb.from('anfragen').update({
+    status: entscheidung,
+    bearbeitet_von: currentUser.id,
+    updated_at: new Date().toISOString()
+  }).eq('id', anfrageId);
+  if (error) { toast('⚠️ Fehler: ' + (error.message || error.code)); return; }
+
+  if (entscheidung === 'genehmigt' && gebietId) {
+    const g = getG(gebietId);
+    if (g) {
+      g.verteilerId = currentUser.id;
+      g.verteiler = currentProfile?.name || '';
+      g.status = 'zugeteilt';
+      // In DB aktualisieren
+      const kampId = curKampagne?.id || null;
+      if (kampId) {
+        await sb.from('gebiet_status').upsert({
+          gebiet_id: gebietId, kampagne_id: kampId,
+          verteiler_id: currentUser.id, verteiler_name: g.verteiler,
+          status: 'zugeteilt', stueckzahl: g.stueckzahl,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'gebiet_id,kampagne_id' });
+      }
+      renderList(); renderStats(); drawPolygons();
+    }
+  }
+  meineZuweisungsAnfragen = meineZuweisungsAnfragen.filter(a => a.id !== anfrageId);
+  updateAnfragenBadge();
+  renderAnfragenList();
+  if (selId) openDetail(selId);
+  toast(entscheidung === 'genehmigt' ? '✅ Gebiet angenommen – du bist jetzt zugewiesen' : '❌ Zuweisung abgelehnt');
+}
+
+// Verteiler meldet sich freiwillig für ein Problemgebiet
+async function sendeUebernahmeAnfrage(gebietId) {
+  const g = getG(gebietId);
+  if (!g) return;
+  const { error } = await sb.from('anfragen').insert({
+    gebiet_id: gebietId,
+    user_id: currentUser.id,
+    typ: 'uebernahme',
+    neue_stueckzahl: g.stueckzahl || 0,
+    grund: 'Möchte dieses Problemgebiet übernehmen'
+  });
+  if (error) { toast('⚠️ Fehler: ' + (error.message || error.code)); return; }
+  toast('✅ Übernahme-Anfrage gesendet!');
+  await loadAnfragen();
+  if (selId) openDetail(selId);
+}
+
+// Verwalter fragt einen Verteiler an, ob er ein Gebiet übernehmen möchte
+async function sendeZuweisungAnfrage(gebietId) {
+  const zielUserId = document.getElementById('inpAnfrageVerteiler')?.value;
+  if (!zielUserId) { toast('⚠️ Bitte einen Verteiler auswählen'); return; }
+  const g = getG(gebietId);
+  if (!g) return;
+  const zielUser = allUsers.find(u => u.id === zielUserId);
+  const { error } = await sb.from('anfragen').insert({
+    gebiet_id: gebietId,
+    user_id: currentUser.id,
+    typ: 'zuweisung_anfrage',
+    ziel_user_id: zielUserId,
+    neue_stueckzahl: g.stueckzahl || 0,
+    grund: `Verwalter möchte dir Gebiet "${g.name}" zuweisen`
+  });
+  if (error) { toast('⚠️ Fehler: ' + (error.message || error.code)); return; }
+  toast(`✅ Anfrage an ${zielUser?.name || 'Verteiler'} gesendet!`);
+  await loadAnfragen();
+  if (selId) openDetail(selId);
 }
 
 // ============================================================
@@ -1626,6 +2034,16 @@ function getCoords(rk,i,tot,gid){
 let curLK='alle',curGV='alle',curReg='alle',selId=null,curRole='verteiler',layers={},map,mapInited=false;
 const scol={offen:{f:'#aeaeb2',s:'#8e8e93'},zugeteilt:{f:'#ff9500',s:'#c97800'},fertig:{f:'#34c759',s:'#248a3d'},problem:{f:'#ff3b30',s:'#c62828'}};
 
+// ── HELPER: Rollen-Prüfungen ──
+function istVerwalterOderKreisverwalter() { return curRole === 'verwalter' || curRole === 'kreisverwalter'; }
+function istManager() { return curRole === 'admin' || istVerwalterOderKreisverwalter(); }
+function pruefeGebietZugriff(gebietId) {
+  if (istVerwalterOderKreisverwalter() && !verwalterHatGebietZugriff(gebietId)) {
+    toast('⚠️ Kein Zugriff auf dieses Gebiet'); return false;
+  }
+  return true;
+}
+
 function initApp(){
   renderBreadcrumb(); renderList(); renderStats();
   if(!mapInited){ setTimeout(()=>{ initMap(); mapInited=true; showDrawToolbar(); },100); }
@@ -1653,6 +2071,13 @@ async function toggleVerwaltungsgrenzen(show){
     if(grenzenLayer){map.removeLayer(grenzenLayer);grenzenLayer=null;}
     return;
   }
+  // Verteiler: Keine Gemeindegrenzen laden (nur eigene Polygone relevant)
+  if(curRole==='verteiler'){
+    toast('ℹ️ Gemeindegrenzen werden für Verteiler nicht geladen');
+    const cb=document.getElementById('toggleGrenzen');
+    if(cb) cb.checked=false;
+    return;
+  }
   // Already loaded?
   if(grenzenData){
     renderGrenzen();return;
@@ -1660,11 +2085,38 @@ async function toggleVerwaltungsgrenzen(show){
   // Fetch from Overpass API
   if(grenzenLoading)return;
   grenzenLoading=true;
-  toast('🗺️ Gemeindegrenzen für Thüringen werden geladen…');
+
+  // Rollenbasierte Overpass-Query
+  let query, bereichName;
+  if(curRole==='kreisverwalter' && currentProfile?.verwalteter_landkreis){
+    // Kreisverwalter: Nur Grenzen im zugewiesenen Landkreis
+    const lk=landkreise[currentProfile.verwalteter_landkreis];
+    const lkName=lk?.name||'';
+    bereichName=lkName||'Landkreis';
+    query=`[out:json][timeout:90];area["name"="${lkName}"]["admin_level"="6"]->.lk;(relation["boundary"="administrative"]["admin_level"="8"](area.lk););out geom;`;
+  } else if(curRole==='verwalter'){
+    // Gebietsverwalter: Grenzen im Bereich des Gebietsverbands (Bounding Box aus GV-Koordinaten)
+    const verwGV=currentProfile?.verwaltete_gebietsverbaende||currentProfile?.verwaltete_regionen||[];
+    if(verwGV.length>0 && gebietsverbaende[verwGV[0]]){
+      const gv=gebietsverbaende[verwGV[0]];
+      bereichName=gv.name||'Gebietsverband';
+      // Bounding Box um den GV-Mittelpunkt (ca. 15km Radius)
+      const lat=gv.center_lat||50.94, lng=gv.center_lng||12.10;
+      const d=0.15; // ~15km
+      query=`[out:json][timeout:90];(relation["boundary"="administrative"]["admin_level"="8"](${lat-d},${lng-d},${lat+d},${lng+d}););out geom;`;
+    } else {
+      // Fallback: Ganz Thüringen
+      bereichName='Thüringen';
+      query=`[out:json][timeout:90];area["name"="Thüringen"]["admin_level"="4"]->.th;(relation["boundary"="administrative"]["admin_level"="8"](area.th);relation["boundary"="administrative"]["admin_level"="6"](area.th););out geom;`;
+    }
+  } else {
+    // Admin: Ganz Thüringen
+    bereichName='Thüringen';
+    query=`[out:json][timeout:90];area["name"="Thüringen"]["admin_level"="4"]->.th;(relation["boundary"="administrative"]["admin_level"="8"](area.th);relation["boundary"="administrative"]["admin_level"="6"](area.th););out geom;`;
+  }
+  toast('🗺️ Gemeindegrenzen für '+bereichName+' werden geladen…');
 
   try{
-    // Ganz Thüringen über area-Filter (genauer als Bounding Box)
-    const query=`[out:json][timeout:90];area["name"="Thüringen"]["admin_level"="4"]->.th;(relation["boundary"="administrative"]["admin_level"="8"](area.th);relation["boundary"="administrative"]["admin_level"="6"](area.th););out geom;`;
     const url='https://overpass-api.de/api/interpreter?data='+encodeURIComponent(query);
 
     const resp=await fetch(url);
@@ -1778,7 +2230,8 @@ function drawPolygons(){
     const c=getCoords(rKey,idx,rObj?rObj.gebiete.length:1,g.id);
     const col=scol[g.status]||scol.offen;
     const poly=L.polygon(c,{color:col.s,fillColor:col.f,fillOpacity:.35,weight:2}).addTo(map);
-    poly.bindPopup(`<div class="popup-id">${g.id}</div><div class="popup-name">${g.name}</div><div class="popup-meta">📦 ${g.stueckzahl} · ${g.verteiler||'Nicht zugeteilt'}</div>`);
+    const verteilerAnzeige = curRole==='verteiler' ? (g.verteilerId ? (g.verteilerId===currentUser?.id ? g.verteiler : 'Zugeteilt') : 'Nicht zugeteilt') : (g.verteiler||'Nicht zugeteilt');
+    poly.bindPopup(`<div class="popup-id">${g.id}</div><div class="popup-name">${g.name}</div><div class="popup-meta">📦 ${g.stueckzahl} · ${verteilerAnzeige}</div>`);
     poly.on('click',()=>{selGebiet(g.id);if(window.innerWidth<=768)document.getElementById('sidebar').classList.remove('open')});
     poly.on('mouseover',()=>poly.setStyle({fillOpacity:.55}));
     poly.on('mouseout',()=>poly.setStyle({fillOpacity:selId===g.id?.55:.35}));
@@ -1802,11 +2255,45 @@ function drawPolygons(){
 function getFilteredGV(){ return curLK==='alle' ? Object.entries(gebietsverbaende) : Object.entries(gebietsverbaende).filter(([,gv])=>gv.landkreis_id===curLK); }
 function getFilteredReg(){ return curGV==='alle' ? Object.entries(regionen) : Object.entries(regionen).filter(([,r])=>r.gebietsverband_id===curGV); }
 function getVisibleGebiete(){
-  if(curReg!=='alle') return regionen[curReg]?.gebiete||[];
   let gs=[];
-  if(curGV!=='alle'){ Object.values(regionen).forEach(r=>{ if(r.gebietsverband_id===curGV) gs=gs.concat(r.gebiete); }); return gs; }
-  if(curLK!=='alle'){ Object.values(regionen).forEach(r=>{ const gv=gebietsverbaende[r.gebietsverband_id]; if(gv&&gv.landkreis_id===curLK) gs=gs.concat(r.gebiete); }); return gs; }
-  return getAllGebiete();
+  if(curReg!=='alle') gs=regionen[curReg]?.gebiete||[];
+  else if(curGV!=='alle'){ Object.values(regionen).forEach(r=>{ if(r.gebietsverband_id===curGV) gs=gs.concat(r.gebiete); }); }
+  else if(curLK!=='alle'){ Object.values(regionen).forEach(r=>{ const gv=gebietsverbaende[r.gebietsverband_id]; if(gv&&gv.landkreis_id===curLK) gs=gs.concat(r.gebiete); }); }
+  else gs=getAllGebiete();
+
+  // Verteiler: Problemgebiete aus dem gesamten Landkreis hinzufügen
+  if(curRole==='verteiler'){
+    const lkId=ermittleVerteilerLandkreis();
+    if(lkId){
+      const gsIds=new Set(gs.map(g=>g.id));
+      Object.values(regionen).forEach(r=>{
+        const gv=gebietsverbaende[r.gebietsverband_id];
+        if(gv&&gv.landkreis_id===lkId){
+          r.gebiete.forEach(g=>{
+            if(g.status==='problem'&&!gsIds.has(g.id)){
+              gs.push(g);
+              gsIds.add(g.id);
+            }
+          });
+        }
+      });
+    }
+  }
+  return gs;
+}
+
+// Ermittelt den Landkreis eines Verteilers anhand seiner zugewiesenen Gebiete
+function ermittleVerteilerLandkreis(){
+  for(const [rKey,r] of Object.entries(regionen)){
+    for(const g of r.gebiete){
+      if(g.verteilerId===currentUser?.id){
+        const gv=gebietsverbaende[r.gebietsverband_id];
+        if(gv) return gv.landkreis_id;
+      }
+    }
+  }
+  // Fallback: aktueller Landkreis-Filter
+  return curLK!=='alle'?curLK:null;
 }
 
 function renderBreadcrumb(){
@@ -1867,12 +2354,16 @@ function switchReg(id){curReg=id;if(id!=='alle'){const r=regionen[id];if(r){if(c
 function getAllGebiete(){return Object.values(regionen).flatMap(r=>r.gebiete)}
 function renderList(){
   const gs=getVisibleGebiete();
-  document.getElementById('gebietList').innerHTML=gs.map(g=>`
-    <div class="g-card status-${g.status} ${selId===g.id?'sel':''}" onclick="selGebiet('${g.id}')">
-      <div class="g-top"><span class="g-id">${g.id}</span><span class="s-chip c-${g.status}">${sl(g.status)}</span></div>
+  document.getElementById('gebietList').innerHTML=gs.map(g=>{
+    const istProblemgebietFremdes = curRole==='verteiler' && g.status==='problem' && g.verteilerId!==currentUser?.id;
+    const statusLabel = istProblemgebietFremdes ? '🆘 Hilfe gesucht' : sl(g.status);
+    const verteilerInfo = g.verteiler?(curRole==='verteiler'?(g.verteilerId===currentUser?.id?'👤 Du':'👤 Zugeteilt'):'👤 '+g.verteiler.split(' ')[0]):'— offen';
+    return `<div class="g-card status-${g.status} ${selId===g.id?'sel':''}" onclick="selGebiet('${g.id}')">
+      <div class="g-top"><span class="g-id">${g.id}</span><span class="s-chip c-${g.status}">${statusLabel}</span></div>
       <div class="g-name">${g.name}</div>
-      <div class="g-meta"><span>📦 ${g.stueckzahl}</span><span>${g.verteiler?'👤 '+g.verteiler.split(' ')[0]:'— offen'}</span>${g.whatsapp?'<span class="wa">WA</span>':''}</div>
-    </div>`).join('');
+      <div class="g-meta"><span>📦 ${g.stueckzahl}</span><span>${verteilerInfo}</span>${g.whatsapp?'<span class="wa">WA</span>':''}</div>
+    </div>`;
+  }).join('');
 }
 function sl(s){return{offen:'Offen',zugeteilt:'Zugeteilt',fertig:'Fertig ✓',problem:'Problem !'}[s]||s}
 function renderStats(){
@@ -1901,7 +2392,7 @@ function openDetail(id){
   document.getElementById('detailId').textContent=g.id;
   document.getElementById('detailTitle').textContent=g.name;
   const isAdmin=curRole==='admin';
-  const isM=(curRole==='verwalter'&&verwalterHatGebietZugriff(id))||(curRole==='kreisverwalter'&&verwalterHatGebietZugriff(id))||isAdmin;
+  const isM=(istVerwalterOderKreisverwalter()&&verwalterHatGebietZugriff(id))||isAdmin;
   // isV: nur wenn der aktuelle Nutzer diesem Gebiet als Verteiler zugewiesen ist
   const isV=g.verteilerId&&g.verteilerId===currentUser?.id;
   // Darf dieser Nutzer den Verteiler-Status (Fertig/Problem) setzen?
@@ -1911,7 +2402,7 @@ function openDetail(id){
   h+=`<div class="d-sec"><div class="info-g">
     <div><div class="ii-label">Stückzahl</div><div class="ii-val" style="color:var(--blue)">${g.stueckzahl}</div></div>
     <div><div class="ii-label">Status</div><div class="ii-val">${sl(g.status)}</div></div>
-    <div class="ii-full"><div class="ii-label">Verteiler</div><div class="ii-val">${g.verteiler||'— nicht zugeteilt'}</div></div>
+    <div class="ii-full"><div class="ii-label">Verteiler</div><div class="ii-val">${curRole==='verteiler'?(g.verteilerId?(g.verteilerId===currentUser?.id?g.verteiler:'Zugeteilt'):'— nicht zugeteilt'):(g.verteiler||'— nicht zugeteilt')}</div></div>
   </div></div>`;
 
   h+=`<div class="d-sec"><div class="sec-hd">Status</div><div class="s-grid">
@@ -2004,6 +2495,33 @@ function openDetail(id){
       <button class="btn btn-g" onclick="openModal('${g.id}')">📦 Stückzahl beantragen</button>
     </div></div>`;
   }
+  // Verteiler kann Problemgebiet übernehmen (wenn nicht eigenes)
+  if(curRole==='verteiler' && g.status==='problem' && g.verteilerId!==currentUser?.id){
+    // Prüfen ob bereits eine Übernahme-Anfrage existiert
+    const bereitsAngefragt = alleAnfragen.some(a => a.gebiet_id===g.id && a.user_id===currentUser?.id && a.typ==='uebernahme');
+    if(bereitsAngefragt){
+      h+=`<div class="d-sec"><div class="sec-hd">Übernahme</div><div class="f-stack">
+        <div style="text-align:center;font-size:.8rem;color:var(--text3);padding:8px">⏳ Anfrage zur Übernahme wurde gesendet</div>
+      </div></div>`;
+    } else {
+      h+=`<div class="d-sec"><div class="sec-hd">Übernahme</div><div class="f-stack">
+        <button class="btn btn-p" onclick="sendeUebernahmeAnfrage('${g.id}')">🙋 Gebiet übernehmen</button>
+      </div></div>`;
+    }
+  }
+  // Verwalter kann Verteiler für Gebiet anfragen
+  if(isM && (g.status==='problem' || g.status==='offen' || !g.verteilerId)){
+    const verteilerListe = allUsers.filter(u => u.rolle==='verteiler' && u.id!==g.verteilerId);
+    if(verteilerListe.length>0){
+      h+=`<div class="d-sec"><div class="sec-hd">Verteiler anfragen</div><div class="f-stack">
+        <select id="inpAnfrageVerteiler">
+          <option value="">— Verteiler wählen —</option>
+          ${verteilerListe.map(u=>`<option value="${u.id}">${u.name}</option>`).join('')}
+        </select>
+        <button class="btn btn-p" onclick="sendeZuweisungAnfrage('${g.id}')">👤 Verteiler anfragen</button>
+      </div></div>`;
+    }
+  }
   // Hinweis schreiben: Admin überall, Verwalter in seiner Region, Verteiler nur in seinem Gebiet
   const darfHinweis = isAdmin || isM || isV;
   if (darfHinweis) {
@@ -2031,14 +2549,14 @@ function openDetail(id){
     });
     h+=`</div></div>`;
   }
-  if(curRole==='admin'||(curRole==='kreisverwalter'&&verwalterHatGebietZugriff(g.id))){
+  if(curRole==='admin'||(curRole==='kreisverwalter'&&verwalterHatGebietZugriff(id))){
     h+=`<div class="d-sec"><div class="sec-hd">Admin – Geodaten</div><div class="f-stack">
       <label class="btn-f">📂 KML hochladen<input type="file" accept=".kml" style="display:none" onchange="handleKML(event)"></label>
       ${kmlP[g.id]?`<button class="btn btn-g" onclick="editPolygon('${g.id}')">✏️ Polygon bearbeiten</button>`:''}
       ${window.innerWidth>=768?`<button class="btn btn-g" onclick="redrawGebiet('${g.id}')">🔄 Polygon neu zeichnen</button>`:''}
       <button class="btn btn-d" onclick="deleteGebiet('${g.id}')">Gebiet löschen</button>
     </div></div>`;
-  } else if((curRole==='verwalter'||curRole==='kreisverwalter') && window.innerWidth>=768 && verwalterHatGebietZugriff(g.id)){
+  } else if(istVerwalterOderKreisverwalter() && window.innerWidth>=768 && verwalterHatGebietZugriff(id)){
     h+=`<div class="d-sec"><div class="sec-hd">Geodaten</div><div class="f-stack">
       ${kmlP[g.id]?`<button class="btn btn-g" onclick="editPolygon('${g.id}')">✏️ Polygon bearbeiten</button>`:''}
       <button class="btn btn-g" onclick="redrawGebiet('${g.id}')">🔄 Polygon neu zeichnen</button>
@@ -2057,10 +2575,7 @@ function closeDetail(){
 // ACTIONS (write to Supabase + local update)
 // ============================================================
 async function setSt(id,s){
-  // Zugriffsprüfung
-  if ((curRole === 'verwalter' || curRole === 'kreisverwalter') && !verwalterHatGebietZugriff(id)) {
-    toast('⚠️ Kein Zugriff auf dieses Gebiet'); return;
-  }
+  if (!pruefeGebietZugriff(id)) return;
   if (curRole === 'verteiler') {
     const g=getG(id);
     if (!g?.verteilerId || g.verteilerId !== currentUser?.id) {
@@ -2089,10 +2604,7 @@ async function setSt(id,s){
 }
 
 async function saveZ(id){
-  // Zugriffsprüfung: nur Admin oder Verwalter mit Regionszugriff
-  if ((curRole === 'verwalter' || curRole === 'kreisverwalter') && !verwalterHatGebietZugriff(id)) {
-    toast('⚠️ Kein Zugriff auf dieses Gebiet'); return;
-  }
+  if (!pruefeGebietZugriff(id)) return;
   if (curRole === 'verteiler') { toast('⚠️ Keine Berechtigung'); return; }
   const g=getG(id);
   const sel=document.getElementById('inpV');
@@ -2119,10 +2631,7 @@ async function saveZ(id){
 }
 
 async function saveSt2(id){
-  // Zugriffsprüfung: nur Admin oder Verwalter mit Regionszugriff
-  if ((curRole === 'verwalter' || curRole === 'kreisverwalter') && !verwalterHatGebietZugriff(id)) {
-    toast('⚠️ Kein Zugriff auf dieses Gebiet'); return;
-  }
+  if (!pruefeGebietZugriff(id)) return;
   if (curRole === 'verteiler') { toast('⚠️ Keine Berechtigung'); return; }
   const g=getG(id),v=parseInt(document.getElementById('inpS').value);
   const kampId = curKampagne?.id || null;
@@ -2153,9 +2662,7 @@ async function saveH(id){
   if (curRole === 'verteiler' && (!g.verteilerId || g.verteilerId !== currentUser?.id)) {
     toast('⚠️ Du bist diesem Gebiet nicht zugewiesen'); return;
   }
-  if ((curRole === 'verwalter' || curRole === 'kreisverwalter') && !verwalterHatGebietZugriff(id)) {
-    toast('⚠️ Kein Zugriff auf dieses Gebiet'); return;
-  }
+  if (!pruefeGebietZugriff(id)) return;
   const {error}=await sb.from('hinweise').insert({gebiet_id:id,user_id:currentUser.id,text:t});
   if (error) { toast('⚠️ DB-Fehler: ' + (error.message || error.code)); return; }
   await loadHinweise();
@@ -2173,7 +2680,7 @@ async function deleteHinweis(hinweisId, gebietId) {
 }
 
 async function deleteGebiet(id){
-  if (curRole !== 'admin' && !(curRole === 'kreisverwalter' && verwalterHatGebietZugriff(id))) { toast('⚠️ Keine Berechtigung zum Löschen'); return; }
+  if (curRole !== 'admin' && !(curRole === 'kreisverwalter' && verwalterHatGebietZugriff(id))) { toast('⚠️ Keine Berechtigung'); return; }
   if(!confirm(`Gebiet ${id} wirklich löschen?`)) return;
 
   // Zuerst aus DB löschen (gebiet_status + gebiete)
@@ -2313,10 +2820,6 @@ function openHierarchyModal(){
 }
 function closeHierarchyModal(){document.getElementById('hierarchyModalOv').classList.remove('open');}
 function switchHTab(tab){
-  ['lk','gv','reg'].forEach(t=>{
-    document.getElementById('hTab'+t.charAt(0).toUpperCase()+t.slice(1).toUpperCase().replace('K','K').replace('V','V').replace('EG','eg')).className = t===tab?'pill active':'pill';
-    // Fix tab ID mapping
-  });
   document.getElementById('hTabLK').className=tab==='lk'?'pill active':'pill';
   document.getElementById('hTabGV').className=tab==='gv'?'pill active':'pill';
   document.getElementById('hTabReg').className=tab==='reg'?'pill active':'pill';
@@ -2478,10 +2981,9 @@ async function deleteRegion(id){
 
 function showDrawToolbar(){
   if(curReg==='alle'){document.getElementById('drawToolbar').classList.remove('visible');return;}
-  const isAdmin = curRole === 'admin';
   const reg=regionen[curReg];
-  const isVerwalterWithAccess = (curRole === 'verwalter' || curRole === 'kreisverwalter') && reg && verwalterHatGebietsverbandZugriff(reg.gebietsverband_id);
-  if((isAdmin || isVerwalterWithAccess) && window.innerWidth >= 768){
+  const hatZugriff = curRole === 'admin' || (istVerwalterOderKreisverwalter() && reg && verwalterHatGebietsverbandZugriff(reg.gebietsverband_id));
+  if(hatZugriff && window.innerWidth >= 768){
     document.getElementById('drawToolbar').classList.add('visible');
   } else {
     document.getElementById('drawToolbar').classList.remove('visible');
@@ -2532,7 +3034,7 @@ function verwalterHatGebietZugriff(gebietId) {
 function toggleDraw(){
   if(drawMode){drawCancel();return}
   if(curReg==='alle'){toast('⚠️ Bitte zuerst eine Region wählen');return;}
-  if((curRole==='verwalter'||curRole==='kreisverwalter') && !verwalterHatRegionZugriff(curReg)){
+  if(istVerwalterOderKreisverwalter() && !verwalterHatRegionZugriff(curReg)){
     toast('⚠️ Kein Zugriff auf diese Region');return;
   }
   drawMode=true;
