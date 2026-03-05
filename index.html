@@ -2075,13 +2075,6 @@ async function toggleVerwaltungsgrenzen(show){
     if(grenzenLayer){map.removeLayer(grenzenLayer);grenzenLayer=null;}
     return;
   }
-  // Verteiler: Keine Gemeindegrenzen laden (nur eigene Polygone relevant)
-  if(curRole==='verteiler'){
-    toast('ℹ️ Gemeindegrenzen werden für Verteiler nicht geladen');
-    const cb=document.getElementById('toggleGrenzen');
-    if(cb) cb.checked=false;
-    return;
-  }
   // Already loaded?
   if(grenzenData){
     renderGrenzen();return;
@@ -2093,25 +2086,36 @@ async function toggleVerwaltungsgrenzen(show){
   // Rollenbasierte Overpass-Query
   let query, bereichName;
   if(curRole==='kreisverwalter' && currentProfile?.verwalteter_landkreis){
-    // Kreisverwalter: Nur Grenzen im zugewiesenen Landkreis
+    // Kreisverwalter: Gemeinde- UND Landkreisgrenzen im zugewiesenen Landkreis
     const lk=landkreise[currentProfile.verwalteter_landkreis];
     const lkName=lk?.name||'';
     bereichName=lkName||'Landkreis';
-    query=`[out:json][timeout:90];area["name"="${lkName}"]["admin_level"="6"]->.lk;(relation["boundary"="administrative"]["admin_level"="8"](area.lk););out geom;`;
+    query=`[out:json][timeout:90];area["name"="${lkName}"]["admin_level"="6"]->.lk;(relation["boundary"="administrative"]["admin_level"="8"](area.lk);relation["name"="${lkName}"]["boundary"="administrative"]["admin_level"="6"];);out geom;`;
   } else if(curRole==='verwalter'){
-    // Gebietsverwalter: Grenzen im Bereich des Gebietsverbands (Bounding Box aus GV-Koordinaten)
+    // Gebietsverwalter: Gemeindegrenzen + Landkreisgrenze im Bereich des Gebietsverbands
     const verwGV=currentProfile?.verwaltete_gebietsverbaende||currentProfile?.verwaltete_regionen||[];
     if(verwGV.length>0 && gebietsverbaende[verwGV[0]]){
       const gv=gebietsverbaende[verwGV[0]];
       bereichName=gv.name||'Gebietsverband';
-      // Bounding Box um den GV-Mittelpunkt (ca. 15km Radius)
       const lat=gv.center_lat||50.94, lng=gv.center_lng||12.10;
       const d=0.15; // ~15km
-      query=`[out:json][timeout:90];(relation["boundary"="administrative"]["admin_level"="8"](${lat-d},${lng-d},${lat+d},${lng+d}););out geom;`;
+      query=`[out:json][timeout:90];(relation["boundary"="administrative"]["admin_level"="8"](${lat-d},${lng-d},${lat+d},${lng+d});relation["boundary"="administrative"]["admin_level"="6"](${lat-d},${lng-d},${lat+d},${lng+d}););out geom;`;
     } else {
-      // Fallback: Ganz Thüringen
       bereichName='Thüringen';
       query=`[out:json][timeout:90];area["name"="Thüringen"]["admin_level"="4"]->.th;(relation["boundary"="administrative"]["admin_level"="8"](area.th);relation["boundary"="administrative"]["admin_level"="6"](area.th););out geom;`;
+    }
+  } else if(curRole==='verteiler'){
+    // Verteiler: Gemeinde- und Landkreisgrenzen im Bereich seiner Gebiete
+    const lkId=ermittleVerteilerLandkreis();
+    if(lkId && landkreise[lkId]){
+      const lkName=landkreise[lkId].name;
+      bereichName=lkName;
+      query=`[out:json][timeout:90];area["name"="${lkName}"]["admin_level"="6"]->.lk;(relation["boundary"="administrative"]["admin_level"="8"](area.lk);relation["name"="${lkName}"]["boundary"="administrative"]["admin_level"="6"];);out geom;`;
+    } else {
+      bereichName='Bereich';
+      // Fallback: Bounding Box um aktuelle Kartenansicht
+      const b=map.getBounds();
+      query=`[out:json][timeout:90];(relation["boundary"="administrative"]["admin_level"="8"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()});relation["boundary"="administrative"]["admin_level"="6"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()}););out geom;`;
     }
   } else {
     // Admin: Ganz Thüringen
@@ -2203,19 +2207,37 @@ function renderGrenzen(){
   if(!grenzenData||grenzenData.length===0)return;
 
   const layerGroup=L.layerGroup();
-  grenzenData.forEach(g=>{
-    const isVG=g.level==='6';
+  // Erst Gemeindegrenzen (darunter), dann Landkreisgrenzen (darüber)
+  const gemeinden=grenzenData.filter(g=>g.level!=='6');
+  const landkreiseG=grenzenData.filter(g=>g.level==='6');
+
+  gemeinden.forEach(g=>{
     const poly=L.polyline(g.coords,{
-      color:isVG?'#6a1b9a':'#1565c0',
-      weight:isVG?2.5:1.8,
-      opacity:isVG?0.7:0.5,
-      dashArray:isVG?'':'5,5',
+      color:'#1565c0',
+      weight:1.5,
+      opacity:0.4,
+      dashArray:'5,5',
       fill:false,
       interactive:true
     });
     if(g.name)poly.bindTooltip(g.name,{sticky:true,className:'grenzen-tooltip'});
     layerGroup.addLayer(poly);
   });
+
+  // Landkreisgrenzen: dick, durchgezogen, auffällig
+  landkreiseG.forEach(g=>{
+    const poly=L.polyline(g.coords,{
+      color:'#d32f2f',
+      weight:4,
+      opacity:0.85,
+      dashArray:'',
+      fill:false,
+      interactive:true
+    });
+    if(g.name)poly.bindTooltip(g.name,{sticky:true,className:'grenzen-tooltip',permanent:false});
+    layerGroup.addLayer(poly);
+  });
+
   grenzenLayer=layerGroup;
   grenzenLayer.addTo(map);
 }
