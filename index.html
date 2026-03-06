@@ -953,12 +953,12 @@ async function sichereBasisKampagne() {
     if (!error && data) {
       kampagnen.unshift(data);
     } else {
-      // Fallback lokal
-      kampagnen.unshift({ id: 'basis_local', name: 'Grundzuweisung', beschreibung: 'Basis-Verteiler-Zuweisungen', ist_basis: true });
+      // Fallback lokal mit echter UUID
+      kampagnen.unshift({ id: crypto.randomUUID(), name: 'Grundzuweisung', beschreibung: 'Basis-Verteiler-Zuweisungen', ist_basis: true, _local: true });
     }
   } catch(e) {
     console.warn('Basis-Kampagne erstellen fehlgeschlagen:', e);
-    kampagnen.unshift({ id: 'basis_local', name: 'Grundzuweisung', beschreibung: 'Basis-Verteiler-Zuweisungen', ist_basis: true });
+    kampagnen.unshift({ id: crypto.randomUUID(), name: 'Grundzuweisung', beschreibung: 'Basis-Verteiler-Zuweisungen', ist_basis: true, _local: true });
   }
 }
 
@@ -2065,7 +2065,7 @@ async function handleAnfrage(anfrageId, entscheidung, neueStueckzahl, gebietId) 
       g.stueckzahl = neueStueckzahl;
       await sb.from('gebiete').update({ stueckzahl: neueStueckzahl }).eq('id', gebietId);
       const kampId = curKampagne?.id || null;
-      if (kampId) {
+      if (kampId && !curKampagne?._local) {
         await sb.from('gebiet_status').upsert({
           gebiet_id: gebietId, kampagne_id: kampId,
           stueckzahl: neueStueckzahl, status: g.status,
@@ -2101,7 +2101,7 @@ async function handleUebernahmeAnfrage(anfrageId, entscheidung, gebietId, vertei
       // Status bleibt unverändert – Verteiler-Zuweisung ändert nicht den Status
       // In DB aktualisieren
       const kampId = curKampagne?.id || null;
-      if (kampId) {
+      if (kampId && !curKampagne?._local) {
         await sb.from('gebiet_status').upsert({
           gebiet_id: gebietId, kampagne_id: kampId,
           verteiler_id: verteilerId, verteiler_name: g.verteiler,
@@ -2136,7 +2136,7 @@ async function handleZuweisungAnfrage(anfrageId, entscheidung, gebietId) {
       // Status bleibt unverändert – Verteiler-Zuweisung ändert nicht den Status
       // In DB aktualisieren
       const kampId = curKampagne?.id || null;
-      if (kampId) {
+      if (kampId && !curKampagne?._local) {
         await sb.from('gebiet_status').upsert({
           gebiet_id: gebietId, kampagne_id: kampId,
           verteiler_id: currentUser.id, verteiler_name: g.verteiler,
@@ -2205,7 +2205,7 @@ async function handleAbgabeAnfrage(anfrageId, entscheidung, gebietId) {
       g.verteiler = '';
       g.status = 'offen';
       const kampId = curKampagne?.id || null;
-      if (kampId) {
+      if (kampId && !curKampagne?._local) {
         await sb.from('gebiet_status').upsert({
           gebiet_id: gebietId, kampagne_id: kampId,
           verteiler_id: null, verteiler_name: null,
@@ -2766,7 +2766,7 @@ function openDetail(id){
   }
 
   if(isM){
-    const userOptions = `<option value="">— nicht zugeteilt</option>` +
+    const userOptions = `<option value="">— nicht zugewiesen</option>` +
       allUsers.map(u=>
         `<option value="${u.id}" data-name="${u.name}" ${g.verteilerId===u.id?'selected':''}>${u.name}${u.rolle==='verwalter'?' (Gebietsverwalter)':u.rolle==='kreisverwalter'?' (Kreisverwalter)':u.rolle==='admin'?' (Admin)':''}</option>`
       ).join('');
@@ -2905,7 +2905,7 @@ async function setSt(id,s){
   if(layers[id])layers[id].setStyle({fillColor:col.f,color:col.s,fillOpacity:.6});
   renderList();renderStats();openDetail(id);
   const kampId = curKampagne?.id || null;
-  if (!kampId) { toast(`${id} → ${sl(s)} (lokal, keine Kampagne)`); return; }
+  if (!kampId || curKampagne?._local) { toast(`✅ Status → ${sl(s)} (lokal)`); return; }
   // Upsert in gebiet_status (composite PK: gebiet_id + kampagne_id)
   const { error } = await sb.from('gebiet_status').upsert({
     gebiet_id: id,
@@ -2930,7 +2930,7 @@ async function saveZ(id){
   if(layers[id])layers[id].setStyle({fillColor:col.f,color:col.s});
   renderList();renderStats();openDetail(id);
   const kampId = curKampagne?.id || null;
-  if (!kampId) { toast('⚠️ Keine Kampagne ausgewählt'); return; }
+  if (!kampId || curKampagne?._local) { toast(`✅ Verteiler ${userName?'zugewiesen':'entfernt'} (lokal)`); return; }
   // Upsert in gebiet_status (composite PK: gebiet_id + kampagne_id)
   const { error } = await sb.from('gebiet_status').upsert({
     gebiet_id: id,
@@ -2950,10 +2950,11 @@ async function saveSt2(id){
   if (curRole === 'verteiler') { toast('⚠️ Keine Berechtigung'); return; }
   const g=getG(id),v=parseInt(document.getElementById('inpS').value);
   const kampId = curKampagne?.id || null;
+  const kampLocal = curKampagne?._local;
   if(!isNaN(v)&&v>0){
     g.stueckzahl=v;
     renderStats();openDetail(id);
-    if (kampId) {
+    if (kampId && !kampLocal) {
       // Upsert in gebiet_status (composite PK: gebiet_id + kampagne_id)
       const {error}=await sb.from('gebiet_status').upsert({
         gebiet_id: id,
@@ -3421,8 +3422,9 @@ function editPolygon(id){
   rebuildEditMarkers();
 
   // Show edit toolbar
+  const _eg=getG(id);
   const info=document.getElementById('drawInfo');
-  info.innerHTML=`<span style="font-size:.82rem">✏️ <strong>${id}</strong> bearbeiten – Eckpunkte verschieben |
+  info.innerHTML=`<span style="font-size:.82rem">✏️ <strong>${_eg?_eg.name:id}</strong> bearbeiten – Eckpunkte verschieben |
     <a href="#" onclick="editPolyAddPoint();return false" style="color:var(--blue)">+ Punkt</a> |
     <a href="#" onclick="editPolySave();return false" style="color:var(--green)">💾 Speichern</a> |
     <a href="#" onclick="editPolyCancel();return false" style="color:var(--red)">❌ Abbrechen</a></span>`;
