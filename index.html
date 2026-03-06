@@ -122,7 +122,7 @@ header{height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturate(18
 .s-chip{font-size:.58rem;font-weight:600;padding:2px 7px;border-radius:10px;text-transform:uppercase;letter-spacing:.04em}
 .c-offen{background:#f2f2f7;color:var(--text3)}
 .c-zugeteilt{background:rgba(255,149,0,.12);color:var(--orange)}
-.c-fertig{background:rgba(52,199,89,.12);color:var(--green)}
+.c-fertig{background:rgba(66,165,245,.12);color:#1565c0}
 .c-problem{background:rgba(255,59,48,.12);color:var(--red)}
 .g-name{font-size:.82rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;margin-right:6px}
 .g-meta{display:flex;gap:9px;font-size:.7rem;color:var(--text3)}
@@ -371,15 +371,21 @@ textarea{min-height:68px}
     <div class="draw-info" id="drawInfo"></div>
     <div class="map-legend">
       <div class="leg-title">Status</div>
-      <div class="leg-row"><div class="leg-dot" style="background:#aeaeb2"></div>Offen</div>
+      <div class="leg-row"><div class="leg-dot" style="background:#aeaeb2"></div>Nicht zugestellt</div>
+      <div class="leg-row"><div class="leg-dot" style="background:#cfd8dc;border:2px solid #546e7a"></div>Zugewiesen</div>
       <div class="leg-row"><div class="leg-dot" style="background:#ff9500"></div>Zugestellt</div>
-      <div class="leg-row"><div class="leg-dot" style="background:#34c759"></div>Verteilt</div>
+      <div class="leg-row"><div class="leg-dot" style="background:#42a5f5"></div>Verteilt</div>
       <div class="leg-row"><div class="leg-dot" style="background:#ff3b30"></div>Verteiler fehlt</div>
       <hr style="border:none;border-top:1px solid #e0e0e0;margin:6px 0">
       <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:.7rem">
         <input type="checkbox" id="toggleGrenzen" checked onchange="toggleVerwaltungsgrenzen(this.checked)">
-        <span>Gemeindegrenzen</span>
+        <span>Verwaltungsgrenzen</span>
       </label>
+      <div style="font-size:.6rem;color:var(--text4);padding-left:20px;margin-top:2px">
+        <span style="color:#1565c0">━━</span> Gemeinde &nbsp;
+        <span style="color:#2e7d32">╌╌</span> VG &nbsp;
+        <span style="color:#d32f2f">━━</span> Landkreis
+      </div>
     </div>
   </div>
 
@@ -399,7 +405,7 @@ textarea{min-height:68px}
 <div class="modal-ov" id="modalOv" onclick="if(event.target===this)closeModal()">
   <div class="modal">
     <div class="m-handle"></div>
-    <div class="m-title">📦 Stückzahl-Anfrage</div>
+    <div class="m-title">📦 Stückzahl ändern</div>
     <div style="display:flex;flex-direction:column;gap:9px">
       <input type="number" id="modalMenge" placeholder="Neue Stückzahl (z.B. 250)">
       <textarea id="modalGrund" placeholder="Begründung…"></textarea>
@@ -609,7 +615,8 @@ textarea{min-height:68px}
     <div class="m-handle"></div>
     <div class="m-title">📋 Kampagnen verwalten</div>
     <div id="kampagnenList" style="max-height:200px;overflow-y:auto;margin-bottom:12px"></div>
-    <div style="font-size:.6rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:6px">Neue Kampagne</div>
+    <input type="hidden" id="editKampagneId" value="">
+    <div id="kampFormTitle" style="font-size:.6rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:6px">Neue Kampagne</div>
     <div style="display:flex;flex-direction:column;gap:7px">
       <input type="text" id="newKampName" placeholder="Name der Kampagne">
       <input type="text" id="newKampBeschr" placeholder="Beschreibung (optional)">
@@ -628,19 +635,14 @@ textarea{min-height:68px}
         <input type="date" id="newKampDeadline" style="font-size:.75rem">
       </div>
       <div style="display:flex;flex-direction:column;gap:2px">
-        <label style="font-size:.65rem;font-weight:600;color:var(--text3)">Geltungsbereich</label>
-        <select id="newKampBereichTyp" onchange="updateKampBereichAuswahl()" style="font-size:.78rem">
-          <option value="alle">Alle (gesamter Bereich)</option>
-          <option value="landkreis">Landkreis</option>
-          <option value="gebietsverband">Gebietsverband</option>
-          <option value="region">Region</option>
-        </select>
-        <div id="newKampBereichAuswahl" style="display:none;max-height:120px;overflow-y:auto;margin-top:4px"></div>
+        <label style="font-size:.65rem;font-weight:600;color:var(--text3)">Geltungsbereiche</label>
+        <div id="kampBereicheContainer" style="display:flex;flex-direction:column;gap:4px"></div>
+        <button type="button" onclick="addKampBereichZeile()" style="align-self:flex-start;background:none;border:1px dashed var(--text4);border-radius:var(--r8);padding:4px 10px;font-size:.72rem;color:var(--text3);cursor:pointer">+ Bereich hinzufügen</button>
       </div>
     </div>
     <div class="m-actions" style="margin-top:12px">
-      <button class="btn btn-g" onclick="closeKampagnenModal()">Schließen</button>
-      <button class="btn btn-p" onclick="createKampagne()">Erstellen</button>
+      <button class="btn btn-g" onclick="resetKampForm()">Abbrechen</button>
+      <button class="btn btn-p" id="kampSaveBtn" onclick="saveKampagne()">Erstellen</button>
     </div>
   </div>
 </div>
@@ -923,13 +925,41 @@ async function loadKampagnen() {
     if (!error && data && data.length > 0) {
       kampagnen = data;
     } else {
-      kampagnen = [{ id: 'default', name: 'Flyer Allgemein', beschreibung: 'Standard-Kampagne' }];
+      kampagnen = [];
     }
   } catch(e) {
-    console.warn('loadKampagnen failed, using default:', e);
-    kampagnen = [{ id: 'default', name: 'Flyer Allgemein', beschreibung: 'Standard-Kampagne' }];
+    console.warn('loadKampagnen failed:', e);
+    kampagnen = [];
   }
+  // Sicherstellen dass eine Basis-Kampagne existiert
+  await sichereBasisKampagne();
+  // Basis-Kampagne immer an erste Stelle
+  kampagnen.sort((a,b) => (b.ist_basis?1:0) - (a.ist_basis?1:0));
   renderKampagnenDropdown();
+}
+
+async function sichereBasisKampagne() {
+  const basis = kampagnen.find(k => k.ist_basis);
+  if (basis) return;
+  // Keine Basis-Kampagne → erstellen
+  try {
+    const { data, error } = await sb.from('kampagnen').insert({
+      name: 'Grundzuweisung',
+      beschreibung: 'Basis-Verteiler-Zuweisungen',
+      ist_basis: true,
+      erstellt_von: currentUser?.id || null,
+      created_at: new Date()
+    }).select().single();
+    if (!error && data) {
+      kampagnen.unshift(data);
+    } else {
+      // Fallback lokal
+      kampagnen.unshift({ id: 'basis_local', name: 'Grundzuweisung', beschreibung: 'Basis-Verteiler-Zuweisungen', ist_basis: true });
+    }
+  } catch(e) {
+    console.warn('Basis-Kampagne erstellen fehlgeschlagen:', e);
+    kampagnen.unshift({ id: 'basis_local', name: 'Grundzuweisung', beschreibung: 'Basis-Verteiler-Zuweisungen', ist_basis: true });
+  }
 }
 
 function renderKampagnenDropdown() {
@@ -1037,7 +1067,8 @@ function renderKampagnenList() {
   );
 
   list.innerHTML = sichtbar.map(k => {
-    const kannLoeschen = isAdmin || isKV || (String(k.erstellt_von) === String(currentUser?.id));
+    const kannBearbeiten = isAdmin || isKV || (String(k.erstellt_von) === String(currentUser?.id));
+    const kannLoeschen = kannBearbeiten && !k.ist_basis;
     // Zeitraum-Info zusammenbauen
     let zeitInfo = '';
     if (k.verteil_von || k.verteil_bis) {
@@ -1051,44 +1082,107 @@ function renderKampagnenList() {
     }
     // Bereich-Info
     let bereichInfo = '';
-    if (k.bereich_typ && k.bereich_ids?.length > 0) {
+    const bi = k.bereich_items || [];
+    if (bi.length > 0) {
+      bereichInfo = `🗺 ${bi.length} Bereich${bi.length>1?'e':''}`;
+    } else if (k.bereich_typ && k.bereich_ids?.length > 0) {
       const typLabel = {landkreis:'LK',gebietsverband:'GV',region:'Reg.'}[k.bereich_typ] || k.bereich_typ;
       bereichInfo = `🗺 ${typLabel}: ${k.bereich_ids.length}`;
     }
-    const metaLine = [zeitInfo, bereichInfo].filter(Boolean).join(' · ');
-    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--sep)">
+    const metaLine = [k.ist_basis?'⭐ Basis':'', zeitInfo, bereichInfo].filter(Boolean).join(' · ');
+    return `<div style="display:flex;align-items:center;gap:6px;padding:8px 0;border-bottom:1px solid var(--sep)">
       <div style="flex:1">
         <div style="font-size:.85rem;font-weight:500">${k.name}</div>
         ${k.beschreibung ? `<div style="font-size:.7rem;color:var(--text3)">${k.beschreibung}</div>` : ''}
         ${metaLine ? `<div style="font-size:.65rem;color:var(--text4);margin-top:2px">${metaLine}</div>` : ''}
       </div>
-      ${kannLoeschen ? `<button class="btn btn-d" style="width:auto;padding:5px 10px;font-size:.75rem" onclick="deleteKampagne('${k.id}')">Löschen</button>` : ''}
+      ${kannBearbeiten ? `<button style="background:none;border:none;cursor:pointer;font-size:.85rem;padding:2px" onclick="editKampagne('${k.id}')" title="Bearbeiten">✏️</button>` : ''}
+      ${kannLoeschen ? `<button class="btn btn-d" style="width:auto;padding:4px 8px;font-size:.7rem" onclick="deleteKampagne('${k.id}')">🗑</button>` : ''}
     </div>`;
   }).join('') || '<div style="color:var(--text3);font-size:.85rem;padding:8px 0">Keine Kampagnen vorhanden.</div>';
 }
 
-// Bereichsauswahl im Kampagnen-Modal dynamisch rendern
-function updateKampBereichAuswahl() {
-  const typ = document.getElementById('newKampBereichTyp').value;
-  const container = document.getElementById('newKampBereichAuswahl');
-  if (typ === 'alle') { container.style.display = 'none'; container.innerHTML = ''; return; }
-  container.style.display = 'block';
-  let items = [];
-  if (typ === 'landkreis') {
-    items = Object.entries(landkreise).map(([id, lk]) => ({ id, name: lk.name }));
-  } else if (typ === 'gebietsverband') {
-    items = Object.entries(gebietsverbaende).map(([id, gv]) => ({ id, name: gv.name }));
-  } else if (typ === 'region') {
-    items = Object.entries(regionen).map(([id, r]) => ({ id, name: r.short || r.name }));
+// Mischbare Geltungsbereiche: Dynamische Zeilen
+function addKampBereichZeile(typ, id) {
+  const container = document.getElementById('kampBereicheContainer');
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:4px;align-items:center';
+  row.className = 'kampBereichZeile';
+
+  const typSel = document.createElement('select');
+  typSel.style.cssText = 'font-size:.75rem;flex:0 0 auto;width:110px';
+  typSel.innerHTML = `<option value="landkreis" ${typ==='landkreis'?'selected':''}>Landkreis</option>
+    <option value="gebietsverband" ${typ==='gebietsverband'?'selected':''}>Gebietsverband</option>
+    <option value="region" ${typ==='region'?'selected':''}>Region</option>`;
+
+  const idSel = document.createElement('select');
+  idSel.style.cssText = 'font-size:.75rem;flex:1';
+  idSel.className = 'kampBereichIdSel';
+
+  function fillIdOptions() {
+    const t = typSel.value;
+    let items = [];
+    if (t === 'landkreis') items = Object.entries(landkreise).map(([k,v])=>({id:k,name:v.name}));
+    else if (t === 'gebietsverband') items = Object.entries(gebietsverbaende).map(([k,v])=>({id:k,name:v.name}));
+    else if (t === 'region') items = Object.entries(regionen).map(([k,v])=>({id:k,name:v.short||v.name}));
+    idSel.innerHTML = items.map(i=>`<option value="${i.id}" ${i.id===id?'selected':''}>${i.name}</option>`).join('');
   }
-  container.innerHTML = items.map(i =>
-    `<label style="display:flex;align-items:center;gap:6px;padding:3px 4px;font-size:.75rem;cursor:pointer">
-      <input type="checkbox" class="kampBereichCb" value="${i.id}"> ${i.name}
-    </label>`
-  ).join('');
+  typSel.onchange = fillIdOptions;
+  fillIdOptions();
+
+  const removeBtn = document.createElement('button');
+  removeBtn.type = 'button';
+  removeBtn.textContent = '×';
+  removeBtn.style.cssText = 'background:none;border:none;font-size:1rem;cursor:pointer;color:var(--red);padding:0 4px;line-height:1';
+  removeBtn.onclick = () => row.remove();
+
+  row.append(typSel, idSel, removeBtn);
+  container.appendChild(row);
 }
 
-async function createKampagne() {
+function getKampBereiche() {
+  const rows = document.querySelectorAll('.kampBereichZeile');
+  const items = [];
+  rows.forEach(row => {
+    const typ = row.querySelector('select').value;
+    const id = row.querySelector('.kampBereichIdSel').value;
+    if (typ && id) items.push({ typ, id });
+  });
+  return items;
+}
+
+function resetKampForm() {
+  document.getElementById('editKampagneId').value = '';
+  document.getElementById('newKampName').value = '';
+  document.getElementById('newKampBeschr').value = '';
+  document.getElementById('newKampVerteilVon').value = '';
+  document.getElementById('newKampVerteilBis').value = '';
+  document.getElementById('newKampDeadline').value = '';
+  document.getElementById('kampBereicheContainer').innerHTML = '';
+  document.getElementById('kampFormTitle').textContent = 'Neue Kampagne';
+  document.getElementById('kampSaveBtn').textContent = 'Erstellen';
+}
+
+function editKampagne(id) {
+  const k = kampagnen.find(k => String(k.id) === String(id));
+  if (!k) return;
+  document.getElementById('editKampagneId').value = k.id;
+  document.getElementById('newKampName').value = k.name || '';
+  document.getElementById('newKampBeschr').value = k.beschreibung || '';
+  document.getElementById('newKampVerteilVon').value = k.verteil_von || '';
+  document.getElementById('newKampVerteilBis').value = k.verteil_bis || '';
+  document.getElementById('newKampDeadline').value = k.deadline || '';
+  document.getElementById('kampFormTitle').textContent = `✏️ „${k.name}" bearbeiten`;
+  document.getElementById('kampSaveBtn').textContent = 'Speichern';
+  // Bereiche laden
+  const container = document.getElementById('kampBereicheContainer');
+  container.innerHTML = '';
+  const items = k.bereich_items || [];
+  items.forEach(bi => addKampBereichZeile(bi.typ, bi.id));
+}
+
+async function saveKampagne() {
+  const editId = document.getElementById('editKampagneId').value;
   const name = document.getElementById('newKampName').value.trim();
   const beschr = document.getElementById('newKampBeschr').value.trim();
   if (!name) { toast('⚠️ Bitte Namen eingeben'); return; }
@@ -1096,56 +1190,73 @@ async function createKampagne() {
   const verteilVon = document.getElementById('newKampVerteilVon').value || null;
   const verteilBis = document.getElementById('newKampVerteilBis').value || null;
   const deadline = document.getElementById('newKampDeadline').value || null;
-  const bereichTyp = document.getElementById('newKampBereichTyp').value;
+  const bereichItems = getKampBereiche();
 
-  // Ausgewählte Bereiche sammeln
-  const bereichIds = [...document.querySelectorAll('.kampBereichCb:checked')].map(cb => cb.value);
-
-  const newK = {
+  const kampData = {
     name,
     beschreibung: beschr,
-    erstellt_von: currentUser.id,
-    created_at: new Date(),
     verteil_von: verteilVon,
     verteil_bis: verteilBis,
     deadline: deadline,
-    bereich_typ: bereichTyp !== 'alle' ? bereichTyp : null,
-    bereich_ids: bereichIds.length > 0 ? bereichIds : null
+    bereich_items: bereichItems.length > 0 ? bereichItems : null
   };
 
-  // Verwalter: region_keys aus Bereichsauswahl oder verwalteten Regionen ableiten
-  if (bereichTyp === 'region' && bereichIds.length > 0) {
-    newK.region_keys = bereichIds;
-  } else if (istVerwalterOderKreisverwalter()) {
-    const regionen_ids = (currentProfile?.verwaltete_regionen || []);
-    if (regionen_ids.length === 0 && curRole === 'verwalter') { toast('⚠️ Keine zugewiesenen Regionen'); return; }
-    if (regionen_ids.length > 0) newK.region_keys = regionen_ids;
+  if (editId) {
+    // UPDATE
+    try {
+      const { error } = await sb.from('kampagnen').update(kampData).eq('id', editId);
+      if (error) throw error;
+      const idx = kampagnen.findIndex(k => String(k.id) === String(editId));
+      if (idx > -1) Object.assign(kampagnen[idx], kampData);
+      toast(`✅ Kampagne „${name}" aktualisiert`);
+    } catch(e) {
+      console.warn('DB update kampagne failed:', e);
+      toast('⚠️ Fehler beim Aktualisieren');
+    }
+  } else {
+    // INSERT
+    kampData.erstellt_von = currentUser.id;
+    kampData.created_at = new Date();
+    try {
+      const { data, error } = await sb.from('kampagnen').insert(kampData).select().single();
+      if (error) throw error;
+      const neueKampagne = data || { ...kampData, id: Date.now() };
+      kampagnen.push(neueKampagne);
+
+      // Verteiler-Zuweisungen aus Basis-Kampagne übernehmen
+      const basis = kampagnen.find(k => k.ist_basis);
+      if (basis && neueKampagne.id !== basis.id) {
+        try {
+          const { data: basisStatus } = await sb.from('gebiet_status').select('*').eq('kampagne_id', basis.id);
+          if (basisStatus && basisStatus.length > 0) {
+            const kopien = basisStatus.map(s => ({
+              gebiet_id: s.gebiet_id,
+              kampagne_id: neueKampagne.id,
+              status: 'offen',
+              verteiler_id: s.verteiler_id,
+              verteiler_name: s.verteiler_name,
+              stueckzahl: s.stueckzahl,
+              updated_at: new Date().toISOString()
+            }));
+            await sb.from('gebiet_status').upsert(kopien, { onConflict: 'gebiet_id,kampagne_id' });
+          }
+        } catch(e) { console.warn('Basis-Zuweisungen kopieren fehlgeschlagen:', e); }
+      }
+      toast(`✅ Kampagne „${name}" erstellt`);
+    } catch(e) {
+      kampagnen.push({ ...kampData, id: Date.now().toString() });
+      console.warn('DB insert kampagne failed:', e);
+    }
   }
 
-  try {
-    const { data, error } = await sb.from('kampagnen').insert(newK).select().single();
-    if (error) throw error;
-    kampagnen.unshift(data || { ...newK, id: Date.now() });
-  } catch(e) {
-    kampagnen.unshift({ ...newK, id: Date.now().toString() });
-    console.warn('DB insert kampagne failed:', e);
-  }
-
-  // Felder zurücksetzen
-  document.getElementById('newKampName').value = '';
-  document.getElementById('newKampBeschr').value = '';
-  document.getElementById('newKampVerteilVon').value = '';
-  document.getElementById('newKampVerteilBis').value = '';
-  document.getElementById('newKampDeadline').value = '';
-  document.getElementById('newKampBereichTyp').value = 'alle';
-  updateKampBereichAuswahl();
-
+  resetKampForm();
   renderKampagnenList();
   renderKampagnenDropdown();
-  toast(`✅ Kampagne „${name}" erstellt`);
 }
 
 async function deleteKampagne(id) {
+  const k = kampagnen.find(k => String(k.id) === String(id));
+  if (k?.ist_basis) { toast('⚠️ Die Basis-Kampagne kann nicht gelöscht werden'); return; }
   if (!confirm('Kampagne wirklich löschen? Alle zugehörigen Status-Daten gehen verloren.')) return;
   try {
     // gebiet_status löscht sich via ON DELETE CASCADE automatisch mit
@@ -1898,12 +2009,16 @@ function renderAnfragenList() {
       const user = allUsers.find(u => u.id === a.user_id);
       const userName = user ? user.name : 'Unbekannt';
       const datum = new Date(a.created_at).toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
-      const typLabel = a.typ === 'uebernahme' ? '🙋 Übernahme' : a.typ === 'zuweisung_anfrage' ? '👤 Zuweisung' : '📦 Stückzahl';
+      const typLabel = a.typ === 'uebernahme' ? '🙋 Übernahme' : a.typ === 'abgabe' ? '🔄 Abgabe' : a.typ === 'zuweisung_anfrage' ? '👤 Zuweisung' : '📦 Stückzahl';
       const beschreibung = a.typ === 'uebernahme'
         ? `🙋 ${userName} möchte dieses Problemgebiet übernehmen`
+        : a.typ === 'abgabe'
+        ? `🔄 ${userName} möchte dieses Gebiet abgeben`
         : `👤 ${userName} → 📦 <strong>${a.neue_stueckzahl}</strong> Stück`;
       const genehmigtBtn = a.typ === 'uebernahme'
         ? `<button onclick="handleUebernahmeAnfrage('${a.id}','genehmigt','${a.gebiet_id}','${a.user_id}')" style="flex:1;padding:5px;border:none;border-radius:var(--r8);background:var(--green);color:#fff;font-size:.75rem;font-weight:600;cursor:pointer">✓ Genehmigen</button>`
+        : a.typ === 'abgabe'
+        ? `<button onclick="handleAbgabeAnfrage('${a.id}','genehmigt','${a.gebiet_id}')" style="flex:1;padding:5px;border:none;border-radius:var(--r8);background:var(--green);color:#fff;font-size:.75rem;font-weight:600;cursor:pointer">✓ Genehmigen</button>`
         : `<button onclick="handleAnfrage('${a.id}','genehmigt',${a.neue_stueckzahl},'${a.gebiet_id}')" style="flex:1;padding:5px;border:none;border-radius:var(--r8);background:var(--green);color:#fff;font-size:.75rem;font-weight:600;cursor:pointer">✓ Genehmigen</button>`;
       return `<div style="background:var(--surface2);border-radius:var(--r8);padding:10px;border-left:3px solid var(--orange)">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
@@ -2056,6 +2171,58 @@ async function sendeUebernahmeAnfrage(gebietId) {
   if (selId) openDetail(selId);
 }
 
+// Verteiler möchte Gebiet abgeben
+async function sendeAbgabeAnfrage(gebietId) {
+  const g = getG(gebietId);
+  if (!g) return;
+  if (!confirm(`Möchtest du das Gebiet „${g.name}" wirklich abgeben?`)) return;
+  const { error } = await sb.from('anfragen').insert({
+    gebiet_id: gebietId,
+    user_id: currentUser.id,
+    typ: 'abgabe',
+    neue_stueckzahl: g.stueckzahl || 0,
+    grund: 'Möchte dieses Gebiet abgeben'
+  });
+  if (error) { toast('⚠️ Fehler: ' + (error.message || error.code)); return; }
+  toast('✅ Abgabe-Anfrage gesendet!');
+  await loadAnfragen();
+  if (selId) openDetail(selId);
+}
+
+// Verwalter genehmigt/lehnt Abgabe ab
+async function handleAbgabeAnfrage(anfrageId, entscheidung, gebietId) {
+  const { error } = await sb.from('anfragen').update({
+    status: entscheidung,
+    bearbeitet_von: currentUser.id,
+    updated_at: new Date().toISOString()
+  }).eq('id', anfrageId);
+  if (error) { toast('⚠️ Fehler: ' + (error.message || error.code)); return; }
+
+  if (entscheidung === 'genehmigt' && gebietId) {
+    const g = getG(gebietId);
+    if (g) {
+      g.verteilerId = null;
+      g.verteiler = '';
+      g.status = 'offen';
+      const kampId = curKampagne?.id || null;
+      if (kampId) {
+        await sb.from('gebiet_status').upsert({
+          gebiet_id: gebietId, kampagne_id: kampId,
+          verteiler_id: null, verteiler_name: null,
+          status: 'offen', stueckzahl: g.stueckzahl,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'gebiet_id,kampagne_id' });
+      }
+      renderList(); renderStats(); drawPolygons();
+    }
+  }
+  alleAnfragen = alleAnfragen.filter(a => a.id !== anfrageId);
+  updateAnfragenBadge();
+  renderAnfragenList();
+  if (selId) openDetail(selId);
+  toast(entscheidung === 'genehmigt' ? '✅ Abgabe genehmigt – Verteiler entfernt' : '❌ Abgabe abgelehnt');
+}
+
 // Verwalter fragt einen Verteiler an, ob er ein Gebiet übernehmen möchte
 async function sendeZuweisungAnfrage(gebietId) {
   const zielUserId = document.getElementById('inpAnfrageVerteiler')?.value;
@@ -2095,7 +2262,7 @@ function getCoords(rk,i,tot,gid){
 // STATE
 // ============================================================
 let curLK='alle',curGV='alle',curReg='alle',selId=null,curRole='verteiler',layers={},map,mapInited=false;
-const scol={offen:{f:'#aeaeb2',s:'#8e8e93'},zugeteilt:{f:'#ff9500',s:'#c97800'},fertig:{f:'#34c759',s:'#248a3d'},problem:{f:'#ff3b30',s:'#c62828'}};
+const scol={offen:{f:'#aeaeb2',s:'#8e8e93'},offen_zugewiesen:{f:'#cfd8dc',s:'#546e7a'},zugeteilt:{f:'#ff9500',s:'#c97800'},fertig:{f:'#42a5f5',s:'#1565c0'},problem:{f:'#ff3b30',s:'#c62828'}};
 
 // ── HELPER: Rollen-Prüfungen ──
 function istVerwalterOderKreisverwalter() { return curRole === 'verwalter' || curRole === 'kreisverwalter'; }
@@ -2149,37 +2316,36 @@ async function toggleVerwaltungsgrenzen(show){
     const lk=landkreise[currentProfile.verwalteter_landkreis];
     const lkName=lk?.name||'';
     bereichName=lkName||'Landkreis';
-    query=`[out:json][timeout:90];area["name"="${lkName}"]["admin_level"="6"]->.lk;(relation["boundary"="administrative"]["admin_level"="8"](area.lk);relation["name"="${lkName}"]["boundary"="administrative"]["admin_level"="6"];);out geom;`;
+    query=`[out:json][timeout:90];area["name"="${lkName}"]["admin_level"="6"]->.lk;(relation["boundary"="administrative"]["admin_level"="8"](area.lk);relation["boundary"="administrative"]["admin_level"="7"](area.lk);relation["name"="${lkName}"]["boundary"="administrative"]["admin_level"="6"];);out geom;`;
   } else if(curRole==='verwalter'){
-    // Gebietsverwalter: Gemeindegrenzen + Landkreisgrenze im Bereich des Gebietsverbands
+    // Gebietsverwalter: Gemeinde- + VG- + Landkreisgrenzen im Bereich des Gebietsverbands
     const verwGV=currentProfile?.verwaltete_gebietsverbaende||currentProfile?.verwaltete_regionen||[];
     if(verwGV.length>0 && gebietsverbaende[verwGV[0]]){
       const gv=gebietsverbaende[verwGV[0]];
       bereichName=gv.name||'Gebietsverband';
       const lat=gv.center_lat||50.94, lng=gv.center_lng||12.10;
       const d=0.15; // ~15km
-      query=`[out:json][timeout:90];(relation["boundary"="administrative"]["admin_level"="8"](${lat-d},${lng-d},${lat+d},${lng+d});relation["boundary"="administrative"]["admin_level"="6"](${lat-d},${lng-d},${lat+d},${lng+d}););out geom;`;
+      query=`[out:json][timeout:90];(relation["boundary"="administrative"]["admin_level"="8"](${lat-d},${lng-d},${lat+d},${lng+d});relation["boundary"="administrative"]["admin_level"="7"](${lat-d},${lng-d},${lat+d},${lng+d});relation["boundary"="administrative"]["admin_level"="6"](${lat-d},${lng-d},${lat+d},${lng+d}););out geom;`;
     } else {
       bereichName='Thüringen';
-      query=`[out:json][timeout:90];area["name"="Thüringen"]["admin_level"="4"]->.th;(relation["boundary"="administrative"]["admin_level"="8"](area.th);relation["boundary"="administrative"]["admin_level"="6"](area.th););out geom;`;
+      query=`[out:json][timeout:90];area["name"="Thüringen"]["admin_level"="4"]->.th;(relation["boundary"="administrative"]["admin_level"="8"](area.th);relation["boundary"="administrative"]["admin_level"="7"](area.th);relation["boundary"="administrative"]["admin_level"="6"](area.th););out geom;`;
     }
   } else if(curRole==='verteiler'){
-    // Verteiler: Gemeinde- und Landkreisgrenzen im Bereich seiner Gebiete
+    // Verteiler: Gemeinde- + VG- + Landkreisgrenzen im Bereich seiner Gebiete
     const lkId=ermittleVerteilerLandkreis();
     if(lkId && landkreise[lkId]){
       const lkName=landkreise[lkId].name;
       bereichName=lkName;
-      query=`[out:json][timeout:90];area["name"="${lkName}"]["admin_level"="6"]->.lk;(relation["boundary"="administrative"]["admin_level"="8"](area.lk);relation["name"="${lkName}"]["boundary"="administrative"]["admin_level"="6"];);out geom;`;
+      query=`[out:json][timeout:90];area["name"="${lkName}"]["admin_level"="6"]->.lk;(relation["boundary"="administrative"]["admin_level"="8"](area.lk);relation["boundary"="administrative"]["admin_level"="7"](area.lk);relation["name"="${lkName}"]["boundary"="administrative"]["admin_level"="6"];);out geom;`;
     } else {
       bereichName='Bereich';
-      // Fallback: Bounding Box um aktuelle Kartenansicht
       const b=map.getBounds();
-      query=`[out:json][timeout:90];(relation["boundary"="administrative"]["admin_level"="8"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()});relation["boundary"="administrative"]["admin_level"="6"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()}););out geom;`;
+      query=`[out:json][timeout:90];(relation["boundary"="administrative"]["admin_level"="8"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()});relation["boundary"="administrative"]["admin_level"="7"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()});relation["boundary"="administrative"]["admin_level"="6"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()}););out geom;`;
     }
   } else {
     // Admin: Ganz Thüringen
     bereichName='Thüringen';
-    query=`[out:json][timeout:90];area["name"="Thüringen"]["admin_level"="4"]->.th;(relation["boundary"="administrative"]["admin_level"="8"](area.th);relation["boundary"="administrative"]["admin_level"="6"](area.th););out geom;`;
+    query=`[out:json][timeout:90];area["name"="Thüringen"]["admin_level"="4"]->.th;(relation["boundary"="administrative"]["admin_level"="8"](area.th);relation["boundary"="administrative"]["admin_level"="7"](area.th);relation["boundary"="administrative"]["admin_level"="6"](area.th););out geom;`;
   }
   toast('🗺️ Gemeindegrenzen für '+bereichName+' werden geladen…');
 
@@ -2284,8 +2450,9 @@ function renderGrenzen(){
   if(!grenzenData||grenzenData.length===0)return;
 
   const layerGroup=L.layerGroup();
-  // Erst Gemeindegrenzen (darunter), dann Landkreisgrenzen (darüber)
-  const gemeinden=grenzenData.filter(g=>g.level!=='6');
+  // Erst Gemeindegrenzen (darunter), dann VG, dann Landkreisgrenzen (darüber)
+  const gemeinden=grenzenData.filter(g=>g.level==='8');
+  const vgs=grenzenData.filter(g=>g.level==='7');
   const landkreiseG=grenzenData.filter(g=>g.level==='6');
 
   gemeinden.forEach(g=>{
@@ -2294,6 +2461,20 @@ function renderGrenzen(){
       weight:1.5,
       opacity:0.4,
       dashArray:'5,5',
+      fill:false,
+      interactive:true
+    });
+    if(g.name)poly.bindTooltip(g.name,{sticky:true,className:'grenzen-tooltip'});
+    layerGroup.addLayer(poly);
+  });
+
+  // Verwaltungsgemeinschaften: mittel, grün, gestrichelt
+  vgs.forEach(g=>{
+    const poly=L.polyline(g.coords,{
+      color:'#2e7d32',
+      weight:2,
+      opacity:0.6,
+      dashArray:'8,4',
       fill:false,
       interactive:true
     });
@@ -2331,7 +2512,7 @@ function drawPolygons(){
     const rObj=rKey?regionen[rKey]:null;
     const idx=rObj?rObj.gebiete.indexOf(g):0;
     const c=getCoords(rKey,idx,rObj?rObj.gebiete.length:1,g.id);
-    const col=scol[g.status]||scol.offen;
+    const col=(g.status==='offen'&&g.verteilerId)?scol.offen_zugewiesen:(scol[g.status]||scol.offen);
     const poly=L.polygon(c,{color:col.s,fillColor:col.f,fillOpacity:.35,weight:2}).addTo(map);
     const verteilerAnzeige = curRole==='verteiler' ? (g.verteilerId ? (g.verteilerId===currentUser?.id ? g.verteiler : 'Zugewiesen') : 'Nicht zugewiesen') : (g.verteiler||'Nicht zugewiesen');
     poly.bindPopup(`<div class="popup-name">${g.name}</div><div class="popup-meta">📦 ${g.stueckzahl} · ${verteilerAnzeige}</div>`);
@@ -2382,7 +2563,32 @@ function getVisibleGebiete(){
       });
     }
   }
+
+  // Kampagnen-Bereichsfilter: Nur Gebiete anzeigen die zur Kampagne gehören
+  if(curKampagne && !curKampagne.ist_basis){
+    const bi = curKampagne.bereich_items || [];
+    if(bi.length > 0){
+      gs = gs.filter(g => gebietInKampagnenBereich(g.id, bi));
+    }
+  }
   return gs;
+}
+
+function gebietInKampagnenBereich(gebietId, bereichItems) {
+  // Finde Region des Gebiets
+  for(const [rKey, r] of Object.entries(regionen)){
+    const found = r.gebiete.find(g => g.id === gebietId);
+    if(!found) continue;
+    const gvId = r.gebietsverband_id;
+    const lkId = gebietsverbaende[gvId]?.landkreis_id;
+    for(const bi of bereichItems){
+      if(bi.typ === 'region' && bi.id === rKey) return true;
+      if(bi.typ === 'gebietsverband' && bi.id === gvId) return true;
+      if(bi.typ === 'landkreis' && bi.id === lkId) return true;
+    }
+    return false; // Gebiet gefunden aber nicht im Bereich
+  }
+  return false; // Gebiet nicht gefunden
 }
 
 // Ermittelt den Landkreis eines Verteilers anhand seiner zugewiesenen Gebiete
@@ -2460,14 +2666,14 @@ function renderList(){
   document.getElementById('gebietList').innerHTML=gs.map(g=>{
     const istProblemgebietFremdes = curRole==='verteiler' && g.status==='problem' && g.verteilerId!==currentUser?.id;
     const statusLabel = istProblemgebietFremdes ? '🆘 Hilfe gesucht' : sl(g.status);
-    const verteilerInfo = g.verteiler?(curRole==='verteiler'?(g.verteilerId===currentUser?.id?'👤 Du':'👤 Zugewiesen'):'👤 '+g.verteiler.split(' ')[0]):'— offen';
+    const verteilerInfo = g.verteiler?(curRole==='verteiler'?(g.verteilerId===currentUser?.id?'👤 Du':'👤 Zugewiesen'):'👤 '+g.verteiler.split(' ')[0]):'— nicht zugewiesen';
     return `<div class="g-card status-${g.status} ${selId===g.id?'sel':''}" onclick="selGebiet('${g.id}')">
       <div class="g-top"><span class="g-name">${g.name}</span><span class="s-chip c-${g.status}">${statusLabel}</span></div>
       <div class="g-meta"><span>📦 ${g.stueckzahl}</span><span>${verteilerInfo}</span>${g.whatsapp?'<span class="wa">WA</span>':''}</div>
     </div>`;
   }).join('');
 }
-function sl(s){return{offen:'Offen',zugeteilt:'Zugestellt',fertig:'Verteilt ✓',problem:'Verteiler fehlt!'}[s]||s}
+function sl(s){return{offen:'Nicht zugestellt',zugeteilt:'Zugestellt',fertig:'Verteilt ✓',problem:'Verteiler fehlt!'}[s]||s}
 function renderStats(){
   const gs=getVisibleGebiete();
   const tot=gs.reduce((a,g)=>a+g.stueckzahl,0),
@@ -2507,7 +2713,7 @@ function openDetail(id){
   </div></div>`;
 
   h+=`<div class="d-sec"><div class="sec-hd">Status</div><div class="s-grid">
-    ${isM?`<button class="s-btn ${g.status==='offen'?'ao':''}" onclick="setSt('${g.id}','offen')">Offen</button>`:''}
+    ${darfVerteilerStatus?`<button class="s-btn ${g.status==='offen'?'ao':''}" onclick="setSt('${g.id}','offen')">Nicht zugestellt</button>`:''}
     ${isM?`<button class="s-btn ${g.status==='zugeteilt'?'az':''}" onclick="setSt('${g.id}','zugeteilt')">Zugestellt</button>`:''}
     ${darfVerteilerStatus?`<button class="s-btn ${g.status==='fertig'?'af':''}" onclick="setSt('${g.id}','fertig')">Verteilt ✓</button>`:''}
     ${darfVerteilerStatus?`<button class="s-btn ${g.status==='problem'?'ap':''}" onclick="setSt('${g.id}','problem')">Verteiler fehlt!</button>`:''}
@@ -2592,8 +2798,12 @@ function openDetail(id){
     }
   }
   if(isV){
+    const bereitsAbgabe = alleAnfragen.some(a => a.gebiet_id===g.id && a.user_id===currentUser?.id && a.typ==='abgabe' && a.status==='offen');
     h+=`<div class="d-sec"><div class="sec-hd">Anfrage</div><div class="f-stack">
-      <button class="btn btn-g" onclick="openModal('${g.id}')">📦 Stückzahl beantragen</button>
+      <button class="btn btn-g" onclick="openModal('${g.id}')">📦 Stückzahl ändern</button>
+      ${bereitsAbgabe
+        ? `<div style="text-align:center;font-size:.8rem;color:var(--text3);padding:8px">⏳ Abgabe-Anfrage gesendet</div>`
+        : `<button class="btn btn-d" onclick="sendeAbgabeAnfrage('${g.id}')">🔄 Gebiet abgeben</button>`}
     </div></div>`;
   }
   // Verteiler kann Problemgebiet übernehmen (wenn nicht eigenes)
@@ -2681,13 +2891,13 @@ async function setSt(id,s){
     if (!g?.verteilerId || g.verteilerId !== currentUser?.id) {
       toast('⚠️ Du bist diesem Gebiet nicht zugewiesen'); return;
     }
-    if (s !== 'fertig' && s !== 'problem') {
-      toast('⚠️ Du darfst nur Verteilt oder Verteiler fehlt setzen'); return;
+    if (s !== 'fertig' && s !== 'problem' && s !== 'offen') {
+      toast('⚠️ Du darfst nur Verteilt, Verteiler fehlt oder Nicht zugestellt setzen'); return;
     }
   }
   const g=getG(id);
   // Bestätigungsabfrage bevor Status geändert wird
-  const statusLabels = {offen:'Offen',zugeteilt:'Zugestellt',fertig:'Verteilt ✓',problem:'Verteiler fehlt!'};
+  const statusLabels = {offen:'Nicht zugestellt',zugeteilt:'Zugestellt',fertig:'Verteilt ✓',problem:'Verteiler fehlt!'};
   if (g.status === s) return; // Gleicher Status, nichts zu tun
   if (!confirm(`Status von „${g.name}" wirklich auf „${statusLabels[s]||s}" ändern?`)) return;
   g.status=s;
