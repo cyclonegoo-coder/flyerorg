@@ -370,12 +370,13 @@ textarea{min-height:68px}
     </div>
     <div class="draw-info" id="drawInfo"></div>
     <div class="map-legend">
-      <div class="leg-title">Status</div>
+      <div class="leg-title">Verteiler-Status</div>
+      <div class="leg-row"><div class="leg-dot" style="background:#ff3b30"></div>Verteiler fehlt</div>
       <div class="leg-row"><div class="leg-dot" style="background:#cfd8dc;border:2px solid #546e7a"></div>Zugewiesen</div>
+      <div class="leg-title" style="margin-top:6px">Verteil-Status</div>
       <div class="leg-row"><div class="leg-dot" style="background:#aeaeb2"></div>Nicht zugestellt</div>
       <div class="leg-row"><div class="leg-dot" style="background:#ff9500"></div>Zugestellt</div>
       <div class="leg-row"><div class="leg-dot" style="background:#42a5f5"></div>Verteilt</div>
-      <div class="leg-row"><div class="leg-dot" style="background:#ff3b30"></div>Verteiler fehlt</div>
       <hr style="border:none;border-top:1px solid #e0e0e0;margin:6px 0">
       <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:.7rem">
         <input type="checkbox" id="toggleGrenzen" checked onchange="toggleVerwaltungsgrenzen(this.checked)">
@@ -2523,8 +2524,7 @@ function drawPolygons(){
     const c=getCoords(rKey,idx,rObj?rObj.gebiete.length:1,g.id);
     const col=getGebietFarbe(g);
     const poly=L.polygon(c,{color:col.s,fillColor:col.f,fillOpacity:.35,weight:2}).addTo(map);
-    const verteilerAnzeige = curRole==='verteiler' ? (g.verteilerId ? (g.verteilerId===currentUser?.id ? g.verteiler : 'Zugewiesen') : 'Nicht zugewiesen') : (g.verteiler||'Nicht zugewiesen');
-    poly.bindPopup(`<div class="popup-name">${g.name}</div><div class="popup-meta">📦 ${g.stueckzahl} · ${verteilerAnzeige}</div>`);
+    poly.bindPopup(`<div class="popup-name">${g.name}</div><div class="popup-meta">📦 ${g.stueckzahl} · ${sl(g.status)}</div>`);
     poly.on('click',()=>{selGebiet(g.id);if(window.innerWidth<=768)document.getElementById('sidebar').classList.remove('open')});
     poly.on('mouseover',()=>poly.setStyle({fillOpacity:.55}));
     poly.on('mouseout',()=>poly.setStyle({fillOpacity:selId===g.id?.55:.35}));
@@ -2675,7 +2675,7 @@ function renderList(){
   document.getElementById('gebietList').innerHTML=gs.map(g=>{
     const istProblemgebietFremdes = curRole==='verteiler' && g.status==='problem' && g.verteilerId!==currentUser?.id;
     const statusLabel = istProblemgebietFremdes ? '🆘 Hilfe gesucht' : sl(g.status);
-    const verteilerInfo = g.verteiler?(curRole==='verteiler'?(g.verteilerId===currentUser?.id?'👤 Du':'👤 Zugewiesen'):'👤 '+g.verteiler.split(' ')[0]):'— nicht zugewiesen';
+    const verteilerInfo = g.verteiler?(curRole==='verteiler'?(g.verteilerId===currentUser?.id?'👤 Du':'👤 Zugewiesen'):'👤 '+g.verteiler.split(' ')[0]):'—';
     return `<div class="g-card status-${g.status} ${selId===g.id?'sel':''}" onclick="selGebiet('${g.id}')">
       <div class="g-top"><span class="g-name">${g.name}</span><span class="s-chip c-${g.status}">${statusLabel}</span></div>
       <div class="g-meta"><span>📦 ${g.stueckzahl}</span><span>${verteilerInfo}</span>${g.whatsapp?'<span class="wa">WA</span>':''}</div>
@@ -2718,7 +2718,7 @@ function openDetail(id){
   h+=`<div class="d-sec"><div class="info-g">
     <div><div class="ii-label">Stückzahl</div><div class="ii-val" style="color:var(--blue)">${g.stueckzahl}</div></div>
     <div><div class="ii-label">Status</div><div class="ii-val">${sl(g.status)}</div></div>
-    <div class="ii-full"><div class="ii-label">Verteiler</div><div class="ii-val">${curRole==='verteiler'?(g.verteilerId?(g.verteilerId===currentUser?.id?g.verteiler:'Zugewiesen'):'— nicht zugewiesen'):(g.verteiler||'— nicht zugewiesen')}</div></div>
+    <div class="ii-full"><div class="ii-label">Verteiler</div><div class="ii-val">${curRole==='verteiler'?(g.verteilerId?(g.verteilerId===currentUser?.id?g.verteiler:'Zugewiesen'):'—'):(g.verteiler||'—')}</div></div>
   </div></div>`;
 
   h+=`<div class="d-sec"><div class="sec-hd">Status</div><div class="s-grid">
