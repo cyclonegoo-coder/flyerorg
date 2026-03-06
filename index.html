@@ -2996,7 +2996,8 @@ async function deleteHinweis(hinweisId, gebietId) {
 
 async function deleteGebiet(id){
   if (curRole !== 'admin' && !(curRole === 'kreisverwalter' && verwalterHatGebietZugriff(id))) { toast('⚠️ Keine Berechtigung'); return; }
-  if(!confirm(`Gebiet ${id} wirklich löschen?`)) return;
+  const _g = getG(id);
+  if(!confirm(`Gebiet "${_g ? _g.name : id}" wirklich löschen?`)) return;
 
   // Zuerst aus DB löschen (gebiet_status + gebiete)
   await sb.from('gebiet_status').delete().eq('gebiet_id', id);
