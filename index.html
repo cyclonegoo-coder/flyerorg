@@ -371,8 +371,8 @@ textarea{min-height:68px}
     <div class="draw-info" id="drawInfo"></div>
     <div class="map-legend">
       <div class="leg-title">Status</div>
-      <div class="leg-row"><div class="leg-dot" style="background:#aeaeb2"></div>Nicht zugestellt</div>
       <div class="leg-row"><div class="leg-dot" style="background:#cfd8dc;border:2px solid #546e7a"></div>Zugewiesen</div>
+      <div class="leg-row"><div class="leg-dot" style="background:#aeaeb2"></div>Nicht zugestellt</div>
       <div class="leg-row"><div class="leg-dot" style="background:#ff9500"></div>Zugestellt</div>
       <div class="leg-row"><div class="leg-dot" style="background:#42a5f5"></div>Verteilt</div>
       <div class="leg-row"><div class="leg-dot" style="background:#ff3b30"></div>Verteiler fehlt</div>
@@ -1395,14 +1395,19 @@ async function changeRole(userId, newRolle) {
 // VERWALTER-REGIONEN BEARBEITEN
 // ============================================================
 function getRegionVerwalter(regionKey, excludeUserId) {
-  // Now looks for verwalter of the gebietsverband that contains this region
+  // Prüft ob ein anderer Verwalter diese Region (oder deren GV) verwaltet
   const reg = regionen[regionKey];
   if (!reg) return null;
-  return allUsers.find(u =>
-    u.id !== excludeUserId &&
-    (u.rolle === 'verwalter' || u.rolle === 'kreisverwalter' || u.rolle === 'admin') &&
-    (u.verwaltete_gebietsverbaende || u.verwaltete_regionen || []).includes(reg.gebietsverband_id)
-  );
+  return allUsers.find(u => {
+    if (u.id === excludeUserId) return false;
+    if (u.rolle !== 'verwalter' && u.rolle !== 'kreisverwalter' && u.rolle !== 'admin') return false;
+    const verwReg = u.verwaltete_regionen || [];
+    // Prüfe ob der User eine Region in demselben GV verwaltet
+    return verwReg.some(rId => {
+      const r = regionen[rId];
+      return r && r.gebietsverband_id === reg.gebietsverband_id;
+    });
+  });
 }
 
 function openEditRegionenModal(userId, userName, currentRegionen) {
@@ -1687,10 +1692,11 @@ function setRollenbasierterFilter() {
     }
   } else if (rolle === 'verwalter') {
     // Gebietsverwalter → auf ersten zugewiesenen Gebietsverband filtern
-    const verwGV = currentProfile?.verwaltete_gebietsverbaende || currentProfile?.verwaltete_regionen || [];
-    if (verwGV.length > 0) {
-      const erstesGV = verwGV[0];
-      if (gebietsverbaende[erstesGV]) {
+    const verwReg = currentProfile?.verwaltete_regionen || [];
+    if (verwReg.length > 0) {
+      const ersteReg = regionen[verwReg[0]];
+      const erstesGV = ersteReg?.gebietsverband_id;
+      if (erstesGV && gebietsverbaende[erstesGV]) {
         curGV = erstesGV;
         // Landkreis passend setzen
         const gv = gebietsverbaende[erstesGV];
@@ -2263,6 +2269,7 @@ function getCoords(rk,i,tot,gid){
 // ============================================================
 let curLK='alle',curGV='alle',curReg='alle',selId=null,curRole='verteiler',layers={},map,mapInited=false;
 const scol={offen:{f:'#aeaeb2',s:'#8e8e93'},offen_zugewiesen:{f:'#cfd8dc',s:'#546e7a'},zugeteilt:{f:'#ff9500',s:'#c97800'},fertig:{f:'#42a5f5',s:'#1565c0'},problem:{f:'#ff3b30',s:'#c62828'}};
+function getGebietFarbe(g){return(g.status==='offen'&&g.verteilerId)?scol.offen_zugewiesen:(scol[g.status]||scol.offen);}
 
 // ── HELPER: Rollen-Prüfungen ──
 function istVerwalterOderKreisverwalter() { return curRole === 'verwalter' || curRole === 'kreisverwalter'; }
@@ -2319,9 +2326,11 @@ async function toggleVerwaltungsgrenzen(show){
     query=`[out:json][timeout:90];area["name"="${lkName}"]["admin_level"="6"]->.lk;(relation["boundary"="administrative"]["admin_level"="8"](area.lk);relation["boundary"="administrative"]["admin_level"="7"](area.lk);relation["name"="${lkName}"]["boundary"="administrative"]["admin_level"="6"];);out geom;`;
   } else if(curRole==='verwalter'){
     // Gebietsverwalter: Gemeinde- + VG- + Landkreisgrenzen im Bereich des Gebietsverbands
-    const verwGV=currentProfile?.verwaltete_gebietsverbaende||currentProfile?.verwaltete_regionen||[];
-    if(verwGV.length>0 && gebietsverbaende[verwGV[0]]){
-      const gv=gebietsverbaende[verwGV[0]];
+    const verwReg=currentProfile?.verwaltete_regionen||[];
+    const erstRegObj=verwReg.length>0?regionen[verwReg[0]]:null;
+    const erstGvId=erstRegObj?.gebietsverband_id;
+    if(erstGvId && gebietsverbaende[erstGvId]){
+      const gv=gebietsverbaende[erstGvId];
       bereichName=gv.name||'Gebietsverband';
       const lat=gv.center_lat||50.94, lng=gv.center_lng||12.10;
       const d=0.15; // ~15km
@@ -2512,7 +2521,7 @@ function drawPolygons(){
     const rObj=rKey?regionen[rKey]:null;
     const idx=rObj?rObj.gebiete.indexOf(g):0;
     const c=getCoords(rKey,idx,rObj?rObj.gebiete.length:1,g.id);
-    const col=(g.status==='offen'&&g.verteilerId)?scol.offen_zugewiesen:(scol[g.status]||scol.offen);
+    const col=getGebietFarbe(g);
     const poly=L.polygon(c,{color:col.s,fillColor:col.f,fillOpacity:.35,weight:2}).addTo(map);
     const verteilerAnzeige = curRole==='verteiler' ? (g.verteilerId ? (g.verteilerId===currentUser?.id ? g.verteiler : 'Zugewiesen') : 'Nicht zugewiesen') : (g.verteiler||'Nicht zugewiesen');
     poly.bindPopup(`<div class="popup-name">${g.name}</div><div class="popup-meta">📦 ${g.stueckzahl} · ${verteilerAnzeige}</div>`);
@@ -2901,7 +2910,7 @@ async function setSt(id,s){
   if (g.status === s) return; // Gleicher Status, nichts zu tun
   if (!confirm(`Status von „${g.name}" wirklich auf „${statusLabels[s]||s}" ändern?`)) return;
   g.status=s;
-  const col=scol[s];
+  const col=getGebietFarbe(g);
   if(layers[id])layers[id].setStyle({fillColor:col.f,color:col.s,fillOpacity:.6});
   renderList();renderStats();openDetail(id);
   const kampId = curKampagne?.id || null;
@@ -2926,7 +2935,7 @@ async function saveZ(id){
   const userId=sel.value;
   const userName=sel.options[sel.selectedIndex]?.dataset?.name||'';
   g.verteiler=userName; g.verteilerId=userId;
-  const col=scol[g.status];
+  const col=getGebietFarbe(g);
   if(layers[id])layers[id].setStyle({fillColor:col.f,color:col.s});
   renderList();renderStats();openDetail(id);
   const kampId = curKampagne?.id || null;
@@ -3242,7 +3251,9 @@ function verwalterHatRegionZugriff(regionId) {
     return gv ? kreisverwalterHatLandkreisZugriff(gv.landkreis_id) : false;
   }
   if (curRole !== 'verwalter') return false;
-  return verwalterHatGebietsverbandZugriff(reg.gebietsverband_id);
+  // Direkt prüfen ob Region in verwalteten Regionen enthalten
+  const verwReg = currentProfile?.verwaltete_regionen || [];
+  return verwReg.includes(regionId);
 }
 
 function verwalterHatGebietsverbandZugriff(gvId) {
@@ -3252,8 +3263,12 @@ function verwalterHatGebietsverbandZugriff(gvId) {
     return gv ? kreisverwalterHatLandkreisZugriff(gv.landkreis_id) : false;
   }
   if (curRole !== 'verwalter') return false;
-  const verwGV = currentProfile?.verwaltete_gebietsverbaende || currentProfile?.verwaltete_regionen || [];
-  return verwGV.includes(gvId);
+  // Prüfe ob der Verwalter Regionen in diesem Gebietsverband verwaltet
+  const verwReg = currentProfile?.verwaltete_regionen || [];
+  return verwReg.some(rId => {
+    const reg = regionen[rId];
+    return reg && reg.gebietsverband_id === gvId;
+  });
 }
 
 // Prüft ob Verwalter/Kreisverwalter Zugriff auf ein Gebiet hat (anhand Region)
