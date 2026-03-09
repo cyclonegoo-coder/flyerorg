@@ -458,7 +458,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v51</div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v52</div>
 
 <!-- NUTZER EINLADEN MODAL (nur Admin) -->
 <div class="modal-ov" id="inviteModalOv" onclick="if(event.target===this)closeInviteModal()">
@@ -2690,86 +2690,89 @@ function calcCentroid(gebietId){
   return{lat:50.94,lng:12.10};
 }
 
-// ── Gebiet drucken: Karte als Bild erfassen + Infos ──
+// ── Gebiet drucken: exakter Ausschnitt, auto Hoch-/Querformat, Karte als Bild ──
 async function printGebiet(gebietId){
   const g=getG(gebietId);
   if(!g){toast('⚠️ Gebiet nicht gefunden');return}
-  toast('🖨️ Druckansicht wird erstellt...');
-  // 1. Karte auf Gebiet zentrieren
   const coords=kmlP[gebietId];
-  if(coords&&coords.length>2){
-    const bounds=L.latLngBounds(coords.map(c=>[c[0],c[1]]));
-    map.fitBounds(bounds.pad(0.1));
-  }
-  // 2. Polygon-Styles temporär ändern: nur Rand, keine Füllung
+  if(!coords||coords.length<3){toast('⚠️ Kein Polygon vorhanden');return}
+  toast('🖨️ Druckansicht wird erstellt...');
+  // 1. Polygon-Bounds + Seitenformat bestimmen
+  const bounds=L.latLngBounds(coords.map(c=>[c[0],c[1]]));
+  const sw=bounds.getSouthWest(),ne=bounds.getNorthEast();
+  // Breite/Höhe in Grad (Näherung für Seitenverhältnis)
+  const polyW=Math.abs(ne.lng-sw.lng)*Math.cos((sw.lat+ne.lat)/2*Math.PI/180);
+  const polyH=Math.abs(ne.lat-sw.lat);
+  const isLandscape=polyW>polyH;
+  // 2. Karte exakt auf Polygon setzen (nur 3% Padding)
+  map.fitBounds(bounds.pad(0.03));
+  // 3. UI-Elemente temporär ausblenden
+  map.closePopup();
+  const hideEls=['.leaflet-control-zoom','.leaflet-control-attribution'];
+  hideEls.forEach(sel=>{const el=document.querySelector(sel);if(el)el.style.display='none'});
+  // 4. Polygone: nur aktuelles mit Rand, Rest weg
   const savedStyles={};
   Object.entries(layers).forEach(([id,poly])=>{
     if(!poly||!poly.setStyle)return;
-    savedStyles[id]={
-      color:poly.options.color,
-      fillColor:poly.options.fillColor,
-      fillOpacity:poly.options.fillOpacity,
-      weight:poly.options.weight,
-      opacity:poly.options.opacity
-    };
-    if(id===gebietId){
-      poly.setStyle({color:'#333',fillColor:'transparent',fillOpacity:0,weight:3,opacity:1});
-    } else {
-      poly.setStyle({fillOpacity:0,opacity:0,weight:0});
-    }
+    savedStyles[id]={color:poly.options.color,fillColor:poly.options.fillColor,
+      fillOpacity:poly.options.fillOpacity,weight:poly.options.weight,opacity:poly.options.opacity};
+    if(id===gebietId)poly.setStyle({color:'#222',fillColor:'transparent',fillOpacity:0,weight:3,opacity:1});
+    else poly.setStyle({fillOpacity:0,opacity:0,weight:0});
   });
-  // 3. Kurz warten bis Tiles geladen + Styles angewendet
-  await new Promise(r=>setTimeout(r,800));
-  // 4. Karte als Bild erfassen mit html2canvas
+  // 5. Panels zu für maximale Kartenfläche
+  const sidebar=document.getElementById('sidebar');
+  const detailPanel=document.getElementById('detailPanel');
+  const sidebarWas=sidebar?.classList.contains('open');
+  const detailWas=detailPanel?.classList.contains('open');
+  if(sidebar)sidebar.classList.remove('open');
+  if(detailPanel)detailPanel.classList.remove('open');
+  map.invalidateSize();
+  map.fitBounds(bounds.pad(0.03));
+  // 6. Warten bis Tiles geladen
+  await new Promise(r=>setTimeout(r,1200));
+  // Hilfsfunktion: alles wiederherstellen
+  const restore=()=>{
+    Object.entries(savedStyles).forEach(([id,style])=>{if(layers[id]?.setStyle)layers[id].setStyle(style)});
+    hideEls.forEach(sel=>{const el=document.querySelector(sel);if(el)el.style.display=''});
+    if(sidebarWas&&sidebar)sidebar.classList.add('open');
+    if(detailWas&&detailPanel)detailPanel.classList.add('open');
+    map.invalidateSize();
+  };
   try{
-    const mapEl=document.getElementById('map');
-    const canvas=await html2canvas(mapEl,{
-      useCORS:true,
-      allowTaint:true,
-      scale:2, // Höhere Auflösung für Druck
-      logging:false
-    });
+    // 7. Screenshot
+    const canvas=await html2canvas(document.getElementById('map'),{useCORS:true,allowTaint:true,scale:2,logging:false});
     const imgData=canvas.toDataURL('image/png');
-    // 5. Polygon-Styles sofort wiederherstellen
-    Object.entries(savedStyles).forEach(([id,style])=>{
-      if(layers[id]&&layers[id].setStyle)layers[id].setStyle(style);
-    });
-    // 6. Druckfenster öffnen
+    restore();
+    // 8. Druckfenster: auto Hoch-/Querformat, Karte maximal groß
+    const orient=isLandscape?'landscape':'portrait';
     const verteilerInfo=g.verteilerId?(g.verteiler||'Zugewiesen'):'Nicht zugewiesen';
-    const printWin=window.open('','_blank','width=900,height=700');
-    if(!printWin){toast('⚠️ Popup-Blocker! Bitte Popups erlauben.');return}
-    printWin.document.write(`<!DOCTYPE html><html><head><title>${g.name} – Gebietskarte</title>
+    const pw=window.open('','_blank','width=900,height=700');
+    if(!pw){toast('⚠️ Popup-Blocker! Bitte Popups erlauben.');return}
+    pw.document.write(`<!DOCTYPE html><html><head><title>${g.name}</title>
 <style>
+  @page{size:A4 ${orient};margin:6mm}
   *{margin:0;padding:0;box-sizing:border-box}
-  body{font-family:system-ui,-apple-system,sans-serif;padding:12px}
-  .header{font-size:18pt;font-weight:700;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:8px}
-  .meta{font-size:10pt;color:#444;margin-bottom:12px;line-height:1.6}
-  .map-img{width:100%;border:1px solid #ccc;border-radius:4px}
-  @media print{body{padding:0}.map-img{border:1px solid #999}}
+  html,body{height:100%;overflow:hidden}
+  body{font-family:system-ui,sans-serif;display:flex;flex-direction:column;height:100vh;padding:4px}
+  .info{flex-shrink:0;padding:2px 0 4px}
+  .title{font-size:13pt;font-weight:700;margin-bottom:2px}
+  .meta{font-size:8pt;color:#444;line-height:1.4;border-bottom:1px solid #ccc;padding-bottom:4px}
+  .map-wrap{flex:1;min-height:0;overflow:hidden;display:flex;align-items:center;justify-content:center}
+  .map-img{max-width:100%;max-height:100%;object-fit:contain;border:1px solid #aaa}
 </style></head><body>
-  <div class="header">${g.name}</div>
-  <div class="meta">
-    <strong>Datum:</strong> ${new Date().toLocaleDateString('de-DE')} ·
-    <strong>Stückzahl:</strong> ${g.stueckzahl||0} ·
-    <strong>Verteiler:</strong> ${verteilerInfo}
-    ${g.hinweise&&g.hinweise.length?' · <strong>Hinweise:</strong> '+g.hinweise.join(', '):''}
+  <div class="info">
+    <div class="title">${g.name}</div>
+    <div class="meta"><b>Datum:</b> ${new Date().toLocaleDateString('de-DE')} · <b>Stückzahl:</b> ${g.stueckzahl||0} · <b>Verteiler:</b> ${verteilerInfo}${g.hinweise?.length?' · <b>Hinweise:</b> '+g.hinweise.join(', '):''}</div>
   </div>
-  <img class="map-img" src="${imgData}" />
+  <div class="map-wrap"><img class="map-img" src="${imgData}"/></div>
 </body></html>`);
-    printWin.document.close();
-    // 7. Warten bis Bild geladen, dann drucken
-    printWin.onload=()=>{
-      setTimeout(()=>{printWin.print();},300);
-    };
-    // Fallback falls onload nicht feuert
-    setTimeout(()=>{try{printWin.print()}catch(e){}},1500);
+    pw.document.close();
+    pw.onload=()=>setTimeout(()=>pw.print(),400);
+    setTimeout(()=>{try{pw.print()}catch(e){}},2000);
   }catch(err){
     console.error('Print error:',err);
-    // Styles wiederherstellen bei Fehler
-    Object.entries(savedStyles).forEach(([id,style])=>{
-      if(layers[id]&&layers[id].setStyle)layers[id].setStyle(style);
-    });
-    toast('⚠️ Fehler beim Erstellen der Druckansicht: '+err.message);
+    restore();
+    toast('⚠️ Fehler: '+err.message);
   }
 }
 
