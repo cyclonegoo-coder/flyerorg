@@ -229,11 +229,11 @@ textarea{min-height:68px}
 /* ── PRINT STYLES ── */
 @media print{
   body>*:not(#gebietPrintContainer):not(#map){display:none!important}
-  #map{position:relative!important;width:100%!important;height:60vh!important;border:1px solid #ccc!important}
-  .sidebar,.detail-panel,.draw-toolbar,.draw-info,header,.modal-ov,.toast,.leaflet-control-zoom,.leg{display:none!important}
-  #gebietPrintContainer{display:block!important;padding:16px;font-family:system-ui,sans-serif}
-  .gp-header{font-size:16pt;font-weight:700;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:10px}
-  .gp-meta{font-size:10pt;color:#555;margin-bottom:10px;line-height:1.6}
+  #map{display:block!important;position:relative!important;width:100%!important;height:70vh!important;border:1px solid #999!important;margin-bottom:0!important;page-break-after:avoid}
+  .sidebar,.detail-panel,.draw-toolbar,.draw-info,header,.modal-ov,.toast,.leaflet-control-zoom,.leg,.leaflet-control-attribution{display:none!important}
+  #gebietPrintContainer{display:block!important;padding:12px 16px;font-family:system-ui,sans-serif;page-break-before:avoid}
+  .gp-header{font-size:14pt;font-weight:700;border-bottom:2px solid #000;padding-bottom:4px;margin-bottom:8px}
+  .gp-meta{font-size:9pt;color:#555;line-height:1.5}
 }
 </style>
 </head>
@@ -457,7 +457,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v49</div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v50</div>
 
 <!-- NUTZER EINLADEN MODAL (nur Admin) -->
 <div class="modal-ov" id="inviteModalOv" onclick="if(event.target===this)closeInviteModal()">
@@ -2689,35 +2689,74 @@ function calcCentroid(gebietId){
   return{lat:50.94,lng:12.10};
 }
 
-// ── Gebiet drucken: Karte + Infos ausdrucken ──
+// ── Gebiet drucken: Karte (ohne Statusfarben) + Infos ──
 function printGebiet(gebietId){
   const g=getG(gebietId);
   if(!g){toast('⚠️ Gebiet nicht gefunden');return}
-  // Karte auf Gebiet zentrieren
+  // 1. Karte auf Gebiet zentrieren
   const coords=kmlP[gebietId];
   if(coords&&coords.length>2){
     const bounds=L.latLngBounds(coords.map(c=>[c[0],c[1]]));
-    map.fitBounds(bounds.pad(0.05));
+    map.fitBounds(bounds.pad(0.1));
   }
-  // Druckcontainer erstellen
+  // 2. Alle Polygone temporär ausblenden, nur das aktuelle Gebiet mit neutralem Rand zeigen
+  const savedStyles={};
+  Object.entries(layers).forEach(([id,poly])=>{
+    if(!poly||!poly.setStyle)return;
+    savedStyles[id]={
+      color:poly.options.color,
+      fillColor:poly.options.fillColor,
+      fillOpacity:poly.options.fillOpacity,
+      weight:poly.options.weight,
+      opacity:poly.options.opacity
+    };
+    if(id===gebietId){
+      // Aktuelles Gebiet: nur schwarzer Rand, keine Füllung
+      poly.setStyle({color:'#333',fillColor:'transparent',fillOpacity:0,weight:3,opacity:1});
+    } else {
+      // Alle anderen Gebiete: komplett ausblenden
+      poly.setStyle({fillOpacity:0,opacity:0,weight:0});
+    }
+  });
+  // 3. Sidebar und Detail-Panel zuklappen
+  const sidebar=document.getElementById('sidebar');
+  const detailPanel=document.getElementById('detailPanel');
+  const sidebarWasOpen=sidebar?.classList.contains('open');
+  const detailWasOpen=detailPanel?.classList.contains('open');
+  if(sidebar)sidebar.classList.remove('open');
+  if(detailPanel)detailPanel.classList.remove('open');
+  // 4. Karte invalidieren (damit Tiles korrekt laden)
+  map.invalidateSize();
+  // 5. Druckcontainer erstellen
   let old=document.getElementById('gebietPrintContainer');if(old)old.remove();
   const div=document.createElement('div');div.id='gebietPrintContainer';div.style.display='none';
   const verteilerInfo=g.verteilerId?`<strong>Verteiler:</strong> ${g.verteiler||'Zugewiesen'}`:'<strong>Verteiler:</strong> Nicht zugewiesen';
   div.innerHTML=`
     <div class="gp-header">${g.name}</div>
     <div class="gp-meta">
-      <strong>Datum:</strong> ${new Date().toLocaleDateString('de-DE')}<br>
-      <strong>Status:</strong> ${sl(g.status)} · <strong>Stückzahl:</strong> ${g.stueckzahl||0}<br>
+      <strong>Datum:</strong> ${new Date().toLocaleDateString('de-DE')} ·
+      <strong>Stückzahl:</strong> ${g.stueckzahl||0} ·
       ${verteilerInfo}
-      ${g.hinweise&&g.hinweise.length?'<br><strong>Hinweise:</strong> '+g.hinweise.join(', '):''}
+      ${g.hinweise&&g.hinweise.length?' · <strong>Hinweise:</strong> '+g.hinweise.join(', '):''}
     </div>
   `;
   document.body.appendChild(div);
-  // Kurz warten bis Karte gerendert ist
+  // 6. Warten bis Tiles geladen, dann drucken
   setTimeout(()=>{
     window.print();
-    setTimeout(()=>div.remove(),2000);
-  },300);
+    // 7. Alles wiederherstellen
+    setTimeout(()=>{
+      div.remove();
+      // Polygon-Styles zurücksetzen
+      Object.entries(savedStyles).forEach(([id,style])=>{
+        if(layers[id]&&layers[id].setStyle)layers[id].setStyle(style);
+      });
+      // Panels wiederherstellen
+      if(sidebarWasOpen&&sidebar)sidebar.classList.add('open');
+      if(detailWasOpen&&detailPanel)detailPanel.classList.add('open');
+      map.invalidateSize();
+    },500);
+  },600);
 }
 
 // ============================================================
