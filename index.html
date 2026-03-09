@@ -942,7 +942,10 @@ async function loadKampagnen() {
 async function sichereBasisKampagne() {
   const basis = kampagnen.find(k => k.ist_basis);
   if (basis) return;
-  // Keine Basis-Kampagne → erstellen
+  // Auch ohne ist_basis-Flag nach erster Kampagne suchen (falls Spalte fehlt)
+  if (kampagnen.length > 0) return;
+  // Keine Kampagne → erstellen
+  // Strategie 1: Mit ist_basis
   try {
     const { data, error } = await sb.from('kampagnen').insert({
       name: 'Grundzuweisung',
@@ -951,16 +954,25 @@ async function sichereBasisKampagne() {
       erstellt_von: currentUser?.id || null,
       created_at: new Date()
     }).select().single();
-    if (!error && data) {
-      kampagnen.unshift(data);
-    } else {
-      // Fallback lokal mit echter UUID
-      kampagnen.unshift({ id: crypto.randomUUID(), name: 'Grundzuweisung', beschreibung: 'Basis-Verteiler-Zuweisungen', ist_basis: true, _local: true });
-    }
+    if (!error && data) { kampagnen.unshift(data); return; }
+    console.warn('sichereBasisKampagne Strategie 1:', JSON.stringify(error));
   } catch(e) {
-    console.warn('Basis-Kampagne erstellen fehlgeschlagen:', e);
-    kampagnen.unshift({ id: crypto.randomUUID(), name: 'Grundzuweisung', beschreibung: 'Basis-Verteiler-Zuweisungen', ist_basis: true, _local: true });
+    console.warn('sichereBasisKampagne Strategie 1 Exception:', e);
   }
+  // Strategie 2: Ohne ist_basis (falls Spalte fehlt)
+  try {
+    const { data, error } = await sb.from('kampagnen').insert({
+      name: 'Grundzuweisung',
+      beschreibung: 'Basis-Verteiler-Zuweisungen',
+      erstellt_von: currentUser?.id || null
+    }).select().single();
+    if (!error && data) { kampagnen.unshift(data); return; }
+    console.warn('sichereBasisKampagne Strategie 2:', JSON.stringify(error));
+  } catch(e) {
+    console.warn('sichereBasisKampagne Strategie 2 Exception:', e);
+  }
+  // Letzter Fallback: Lokal
+  kampagnen.unshift({ id: crypto.randomUUID(), name: 'Grundzuweisung', beschreibung: 'Basis-Verteiler-Zuweisungen', ist_basis: true, _local: true });
 }
 
 // Versucht eine lokale Kampagne in die DB zu persistieren.
@@ -968,7 +980,7 @@ async function sichereBasisKampagne() {
 async function ensureKampagneInDB() {
   if (!curKampagne) return null;
   if (!curKampagne._local) return curKampagne.id;
-  // Versuch die Kampagne in DB zu erstellen
+  // Strategie 1: Mit allen Feldern (inkl. ist_basis)
   try {
     const { data, error } = await sb.from('kampagnen').insert({
       name: curKampagne.name || 'Grundzuweisung',
@@ -978,20 +990,51 @@ async function ensureKampagneInDB() {
       created_at: new Date()
     }).select().single();
     if (!error && data) {
-      // Alte lokale ID merken und durch DB-ID ersetzen
       const oldId = curKampagne.id;
       const idx = kampagnen.findIndex(k => k.id === oldId);
       if (idx >= 0) kampagnen[idx] = data;
       curKampagne = data;
-      console.log('Kampagne erfolgreich in DB persistiert:', data.id);
+      console.log('Kampagne in DB persistiert (Strategie 1):', data.id);
       return data.id;
     }
-    console.warn('Kampagne konnte nicht in DB erstellt werden:', error);
-    return null;
+    console.warn('ensureKampagneInDB Strategie 1 fehlgeschlagen:', JSON.stringify(error));
   } catch(e) {
-    console.warn('ensureKampagneInDB fehlgeschlagen:', e);
-    return null;
+    console.warn('ensureKampagneInDB Strategie 1 Exception:', e);
   }
+  // Strategie 2: Nur Pflichtfelder (ohne ist_basis, falls Spalte fehlt)
+  try {
+    const { data, error } = await sb.from('kampagnen').insert({
+      name: curKampagne.name || 'Grundzuweisung',
+      beschreibung: curKampagne.beschreibung || 'Basis-Verteiler-Zuweisungen',
+      erstellt_von: currentUser?.id || null
+    }).select().single();
+    if (!error && data) {
+      const oldId = curKampagne.id;
+      const idx = kampagnen.findIndex(k => k.id === oldId);
+      if (idx >= 0) kampagnen[idx] = data;
+      curKampagne = data;
+      console.log('Kampagne in DB persistiert (Strategie 2):', data.id);
+      return data.id;
+    }
+    console.warn('ensureKampagneInDB Strategie 2 fehlgeschlagen:', JSON.stringify(error));
+  } catch(e) {
+    console.warn('ensureKampagneInDB Strategie 2 Exception:', e);
+  }
+  // Strategie 3: Prüfen ob vielleicht inzwischen eine Basis-Kampagne existiert
+  try {
+    const { data } = await sb.from('kampagnen').select('*').limit(1).single();
+    if (data) {
+      const oldId = curKampagne.id;
+      const idx = kampagnen.findIndex(k => k.id === oldId);
+      if (idx >= 0) kampagnen[idx] = data;
+      curKampagne = data;
+      console.log('Existierende Kampagne gefunden (Strategie 3):', data.id);
+      return data.id;
+    }
+  } catch(e) {
+    console.warn('ensureKampagneInDB Strategie 3 fehlgeschlagen:', e);
+  }
+  return null;
 }
 
 function renderKampagnenDropdown() {
@@ -1034,6 +1077,13 @@ function renderKampagnenDropdown() {
 
 // Gebiete kampagnenspezifisch aus DB laden und lokal überschreiben
 async function loadGebieteForKampagne(kampagneId) {
+  // Bei lokaler Kampagne: Daten aus gebiete-Tabelle wurden schon beim Laden übernommen, nicht überschreiben
+  if (curKampagne?._local) {
+    console.log('loadGebieteForKampagne: Lokale Kampagne, überspringe gebiet_status Abfrage');
+    closeDetail();
+    renderBreadcrumb(); renderList(); renderStats(); drawPolygons(); showDrawToolbar();
+    return;
+  }
   try {
     // Liest aus gebiet_status (composite PK: gebiet_id + kampagne_id)
     const { data, error } = await sb.from('gebiet_status')
@@ -1059,14 +1109,8 @@ async function loadGebieteForKampagne(kampagneId) {
           g.verteilerId = null;
         }
       }));
-    } else {
-      // Keine DB-Daten → alle Gebiete auf 'offen' zurücksetzen
-      Object.values(regionen).forEach(r => r.gebiete.forEach(g => {
-        g.status = 'offen';
-        g.verteiler = '';
-        g.verteilerId = null;
-      }));
     }
+    // Wenn keine gebiet_status Daten: Daten aus gebiete-Tabelle behalten (nicht zurücksetzen)
   } catch(e) {
     console.warn('loadGebieteForKampagne failed:', e);
   }
@@ -1768,8 +1812,8 @@ async function loadCustomGebiete() {
       if (regionen[rKey]) {
         regionen[rKey].gebiete.push({
           id: dbG.id, name: dbG.name || dbG.id,
-          verteiler: '', verteilerId: null, whatsapp: false,
-          stueckzahl: dbG.stueckzahl || 0, status: 'offen', hinweise: []
+          verteiler: dbG.verteiler_name || '', verteilerId: dbG.verteiler_id || null, whatsapp: false,
+          stueckzahl: dbG.stueckzahl || 0, status: dbG.status || 'offen', hinweise: []
         });
       }
     });
@@ -3019,18 +3063,33 @@ async function setSt(id,s){
   let kampId = curKampagne?.id || null;
   if (!kampId || curKampagne?._local) {
     kampId = await ensureKampagneInDB();
-    if (!kampId) { toast(`✅ Status → ${sl(s)} (lokal)`); return; }
   }
-  // Upsert in gebiet_status (composite PK: gebiet_id + kampagne_id)
-  const { error } = await sb.from('gebiet_status').upsert({
-    gebiet_id: id,
-    kampagne_id: kampId,
-    status: s,
-    stueckzahl: g.stueckzahl,
-    updated_at: new Date().toISOString()
-  }, { onConflict: 'gebiet_id,kampagne_id' });
-  if (error) console.error('setSt error:', JSON.stringify(error));
-  toast(error ? `⚠️ DB-Fehler: ${error.message||error.code||'unbekannt'}` : `✅ Status → ${sl(s)}`);
+  if (kampId) {
+    const { error } = await sb.from('gebiet_status').upsert({
+      gebiet_id: id,
+      kampagne_id: kampId,
+      status: s,
+      stueckzahl: g.stueckzahl,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'gebiet_id,kampagne_id' });
+    if (error) console.error('setSt gebiet_status error:', JSON.stringify(error));
+    toast(error ? `⚠️ DB-Fehler: ${error.message||error.code||'unbekannt'}` : `✅ Status → ${sl(s)}`);
+    return;
+  }
+  // Fallback: Direkt in gebiete-Tabelle
+  try {
+    const { error } = await sb.from('gebiete').update({
+      status: s, updated_at: new Date().toISOString()
+    }).eq('id', id);
+    if (error) {
+      console.warn('setSt gebiete-Fallback Fehler:', JSON.stringify(error));
+      toast(`✅ Status → ${sl(s)} (lokal – DB-Kampagne fehlt)`);
+    } else {
+      toast(`✅ Status → ${sl(s)}`);
+    }
+  } catch(e) {
+    toast(`✅ Status → ${sl(s)} (lokal)`);
+  }
 }
 
 async function saveZ(id){
@@ -3047,20 +3106,40 @@ async function saveZ(id){
   let kampId = curKampagne?.id || null;
   if (!kampId || curKampagne?._local) {
     kampId = await ensureKampagneInDB();
-    if (!kampId) { toast(`✅ Verteiler ${userName?'zugewiesen':'entfernt'} (lokal)`); return; }
   }
-  // Upsert in gebiet_status (composite PK: gebiet_id + kampagne_id)
-  const { error } = await sb.from('gebiet_status').upsert({
-    gebiet_id: id,
-    kampagne_id: kampId,
-    status: g.status,
-    verteiler_id: userId||null,
-    verteiler_name: userName||null,
-    stueckzahl: g.stueckzahl,
+  if (kampId) {
+    // Upsert in gebiet_status (composite PK: gebiet_id + kampagne_id)
+    const { error } = await sb.from('gebiet_status').upsert({
+      gebiet_id: id,
+      kampagne_id: kampId,
+      status: g.status,
+      verteiler_id: userId||null,
+      verteiler_name: userName||null,
+      stueckzahl: g.stueckzahl,
     updated_at: new Date().toISOString()
   }, { onConflict: 'gebiet_id,kampagne_id' });
-  if (error) console.error('saveZ error:', JSON.stringify(error));
-  toast(error ? `⚠️ DB-Fehler: ${error.message||error.code||'unbekannt'}` : `✅ Verteiler ${userName?'zugewiesen':'entfernt'}`);
+    if (error) console.error('saveZ gebiet_status error:', JSON.stringify(error));
+    toast(error ? `⚠️ DB-Fehler: ${error.message||error.code||'unbekannt'}` : `✅ Verteiler ${userName?'zugewiesen':'entfernt'}`);
+    return;
+  }
+  // Fallback: Direkt in gebiete-Tabelle speichern (falls Kampagnen-System nicht verfügbar)
+  try {
+    const { error } = await sb.from('gebiete').update({
+      verteiler_id: userId||null,
+      verteiler_name: userName||null,
+      status: g.status,
+      updated_at: new Date().toISOString()
+    }).eq('id', id);
+    if (error) {
+      console.warn('saveZ gebiete-Fallback Fehler:', JSON.stringify(error));
+      toast(`⚠️ Verteiler ${userName?'zugewiesen':'entfernt'} (lokal – DB-Kampagne fehlt)`);
+    } else {
+      toast(`✅ Verteiler ${userName?'zugewiesen':'entfernt'}`);
+    }
+  } catch(e) {
+    console.warn('saveZ gebiete-Fallback Exception:', e);
+    toast(`✅ Verteiler ${userName?'zugewiesen':'entfernt'} (lokal)`);
+  }
 }
 
 async function saveSt2(id){
