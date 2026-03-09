@@ -462,7 +462,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v43</div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v44</div>
 
 <!-- NUTZER EINLADEN MODAL (nur Admin) -->
 <div class="modal-ov" id="inviteModalOv" onclick="if(event.target===this)closeInviteModal()">
@@ -2796,74 +2796,75 @@ function pointInPolygon(point,polygon){
   return inside;
 }
 
-// ── Wegpunkte: JEDE Straße bekommt mindestens einen Punkt, NUR innerhalb des Polygons ──
-function sampleWaypoints(ways,gebietId){
-  const polygon=kmlP[gebietId];// [[lat,lng],...]
+// ── Straßen auf Polygon filtern und Geometrien vorbereiten ──
+function prepareStreets(ways,gebietId){
+  const polygon=kmlP[gebietId];
+  const streets=[];// {id, name, type, nodes:[{lat,lng}], midpoint:{lat,lng}}
   const streetNames=new Set();
-  const streetPoints=[];// {point, streetName}
   ways.forEach(w=>{
-    if(w.name)streetNames.add(w.name);
-    const streetLabel=w.name||'Weg '+w.id;
-    // Nur Nodes verwenden die im Polygon liegen
+    // Nur Nodes innerhalb des Polygons behalten
     const insideNodes=polygon?w.nodes.filter(n=>pointInPolygon(n,polygon)):w.nodes;
-    if(insideNodes.length===0)return;// Straße komplett außerhalb → überspringen
-    // Mittelpunkt der Inside-Nodes
+    if(insideNodes.length<2)return;// zu wenig Punkte → überspringen
+    if(w.name)streetNames.add(w.name);
     const mid=insideNodes[Math.floor(insideNodes.length/2)];
-    streetPoints.push({point:mid,street:streetLabel});
-    // Bei langen Abschnitten im Polygon auch Start+Ende
-    const sn=insideNodes[0],en=insideNodes[insideNodes.length-1];
-    if(haversine(sn,en)>0.1){// >100m
-      streetPoints.push({point:sn,street:streetLabel});
-      streetPoints.push({point:en,street:streetLabel});
-    }
+    streets.push({id:w.id,name:w.name||'',type:w.type,nodes:insideNodes,midpoint:mid});
   });
-  // Duplikate entfernen, aber jede Straße behält mindestens einen Punkt
-  const streetHasPoint=new Map();
-  const unique=[];
-  streetPoints.forEach(sp=>{
-    const tooClose=unique.some(u=>haversine(u,sp.point)<0.02);
-    const streetAlreadyCovered=streetHasPoint.get(sp.street);
-    if(!tooClose||!streetAlreadyCovered){
-      unique.push(sp.point);
-      streetHasPoint.set(sp.street,true);
-    }
-  });
-  return{points:unique,streetNames:[...streetNames]};
+  return{streets,streetNames:[...streetNames]};
 }
 
-// ── TSP Nearest-Neighbor für Wegpunkte ──
-function tspNearestNeighbor(start,points){
-  if(points.length===0)return[];
-  if(points.length===1)return[points[0]];
-  const remaining=[...points];
-  const route=[];
-  let cur=start;
+// ── TSP Nearest-Neighbor: Straßen in optimaler Reihenfolge ──
+// Verbindet immer zum nächstgelegenen Ende/Anfang einer noch nicht besuchten Straße
+function tspStreetOrder(start,streets){
+  if(streets.length===0)return[];
+  const remaining=streets.map((s,i)=>i);
+  const ordered=[];
+  let curPos=start;
   while(remaining.length>0){
-    let bestIdx=0,bestDist=Infinity;
-    remaining.forEach((p,i)=>{const d=haversine(cur,p);if(d<bestDist){bestDist=d;bestIdx=i}});
-    route.push(remaining[bestIdx]);
-    cur=remaining[bestIdx];
+    let bestIdx=-1,bestDist=Infinity,bestReverse=false;
+    remaining.forEach((si,ri)=>{
+      const s=streets[si];
+      const startNode=s.nodes[0];
+      const endNode=s.nodes[s.nodes.length-1];
+      const dStart=haversine(curPos,startNode);
+      const dEnd=haversine(curPos,endNode);
+      if(dStart<bestDist){bestDist=dStart;bestIdx=ri;bestReverse=false;}
+      if(dEnd<bestDist){bestDist=dEnd;bestIdx=ri;bestReverse=true;}
+    });
+    const streetIdx=remaining[bestIdx];
+    const s=streets[streetIdx];
+    const nodes=bestReverse?[...s.nodes].reverse():s.nodes;
+    ordered.push({...s,nodes,reversed:bestReverse});
+    curPos=nodes[nodes.length-1];// Ende der Straße = nächster Startpunkt
     remaining.splice(bestIdx,1);
   }
-  return route;
+  return ordered;
 }
 
-// ── OSRM: Echte Gehroute berechnen ──
-async function fetchOSRMRoute(waypoints){
-  // OSRM erwartet: lng,lat;lng,lat;...
-  const coordStr=waypoints.map(p=>p.lng.toFixed(6)+','+p.lat.toFixed(6)).join(';');
-  const url=`https://router.project-osrm.org/route/v1/foot/${coordStr}?overview=full&geometries=geojson&steps=true`;
-  const resp=await fetch(url);
-  if(!resp.ok)throw new Error('OSRM Fehler: '+resp.status);
-  const data=await resp.json();
-  if(!data.routes||data.routes.length===0)throw new Error('Keine Route gefunden');
-  const route=data.routes[0];
-  return{
-    geometry:route.geometry.coordinates.map(c=>[c[1],c[0]]), // [lat,lng]
-    distance:route.distance, // Meter
-    duration:route.duration, // Sekunden
-    steps:route.legs.flatMap(l=>l.steps).map(s=>({name:s.name,distance:s.distance,duration:s.duration}))
-  };
+// ── Route-Geometrie aus Straßenreihenfolge zusammenbauen ──
+function buildRouteGeometry(start,orderedStreets){
+  const geometry=[];// [[lat,lng],...]
+  let totalDist=0;
+  // Startpunkt
+  geometry.push([start.lat,start.lng]);
+  let curPos=start;
+  orderedStreets.forEach(s=>{
+    // Verbindungslinie zum Anfang der nächsten Straße (gestrichelt = Fußweg)
+    const streetStart=s.nodes[0];
+    const connectDist=haversine(curPos,streetStart);
+    totalDist+=connectDist;
+    // Straßengeometrie entlang laufen
+    s.nodes.forEach(n=>{
+      geometry.push([n.lat,n.lng]);
+    });
+    // Gesamtlänge der Straße berechnen
+    for(let i=1;i<s.nodes.length;i++){
+      totalDist+=haversine(s.nodes[i-1],s.nodes[i]);
+    }
+    curPos=s.nodes[s.nodes.length-1];
+  });
+  // Gehzeit schätzen: ~4.5 km/h Durchschnitt beim Verteilen (langsamer wg. Briefkästen)
+  const durationMin=Math.round((totalDist/4.5)*60);
+  return{geometry,distance:totalDist,durationMin};
 }
 
 // ── UI: Modal öffnen ──
@@ -2939,7 +2940,7 @@ function updateStartInfo(){
   }
 }
 
-// ── Hauptfunktion: Route berechnen ──
+// ── Hauptfunktion: Route berechnen (ohne OSRM, direkte Straßengeometrien) ──
 async function calculateRoute(){
   if(!routeStartPoint){toast('⚠️ Erst Startpunkt setzen');return}
   if(!routeGebietId){toast('⚠️ Kein Gebiet');return}
@@ -2952,48 +2953,30 @@ async function calculateRoute(){
     loadingText.textContent='📡 Straßen werden geladen...';
     const{ways}=await fetchStreetsInPolygon(routeGebietId);
     if(ways.length===0){toast('⚠️ Keine Straßen im Gebiet gefunden');loadingBox.style.display='none';calcBtn.disabled=false;return}
-    // 2. Wegpunkte: Jede Straße bekommt mindestens einen Punkt
-    loadingText.textContent=`🗺️ ${ways.length} Straßen gefunden, optimiere Route...`;
-    const{points,streetNames}=sampleWaypoints(ways,routeGebietId);
-    // 3. TSP: Optimale Reihenfolge
-    const ordered=tspNearestNeighbor(routeStartPoint,points);
-    // 4. OSRM: Echte Gehroute (bei vielen Punkten in Segmente aufteilen)
-    loadingText.textContent=`🚶 Berechne Gehroute (${ordered.length} Wegpunkte)...`;
-    const allWaypoints=[routeStartPoint,...ordered];
-    let osrmRoute;
-    if(allWaypoints.length<=100){
-      osrmRoute=await fetchOSRMRoute(allWaypoints);
-    } else {
-      // In Segmente à 90 Punkte aufteilen (mit Überlappung)
-      osrmRoute={geometry:[],distance:0,duration:0,steps:[]};
-      const chunkSize=90;
-      for(let i=0;i<allWaypoints.length;i+=chunkSize-1){
-        const chunk=allWaypoints.slice(i,i+chunkSize);
-        if(chunk.length<2)break;
-        loadingText.textContent=`🚶 Route Segment ${Math.floor(i/chunkSize)+1}...`;
-        const seg=await fetchOSRMRoute(chunk);
-        osrmRoute.geometry.push(...seg.geometry);
-        osrmRoute.distance+=seg.distance;
-        osrmRoute.duration+=seg.duration;
-        osrmRoute.steps.push(...seg.steps);
-      }
-    }
+    // 2. Straßen auf Polygon filtern & vorbereiten
+    loadingText.textContent=`🗺️ ${ways.length} Straßen gefunden, filtere auf Gebiet...`;
+    const{streets,streetNames}=prepareStreets(ways,routeGebietId);
+    if(streets.length===0){toast('⚠️ Keine Straßen im Polygon');loadingBox.style.display='none';calcBtn.disabled=false;return}
+    // 3. TSP: Straßen in optimaler Laufreihenfolge sortieren
+    loadingText.textContent=`🚶 Optimiere Reihenfolge für ${streets.length} Straßenabschnitte...`;
+    const orderedStreets=tspStreetOrder(routeStartPoint,streets);
+    // 4. Route-Geometrie zusammenbauen (direkt aus Straßen-Nodes)
+    const routeData=buildRouteGeometry(routeStartPoint,orderedStreets);
     // 5. Visualisierung
-    visualizeRoute(osrmRoute,allWaypoints);
-    routeResult={osrmRoute,waypoints:allWaypoints,streetNames,gebietId:routeGebietId};
+    visualizeRoute(routeData,orderedStreets);
+    routeResult={routeData,orderedStreets,streetNames,gebietId:routeGebietId};
     // 6. Stats anzeigen
-    const distKm=(osrmRoute.distance/1000).toFixed(1);
-    const durMin=Math.round(osrmRoute.duration/60);
+    const distKm=routeData.distance.toFixed(1);
+    const durMin=routeData.durationMin;
     const statsBox=document.getElementById('routeStatsBox');
     statsBox.style.display='block';
-    // Straßennamen als Liste
     const namedStreets=streetNames.filter(Boolean).sort();
     document.getElementById('routeStatsList').innerHTML=`
       <div style="margin-bottom:8px">
         <span style="font-size:1rem;font-weight:700">📏 ${distKm} km</span> ·
         <span style="font-size:1rem;font-weight:700">⏱️ ~${durMin} min</span>
       </div>
-      <div style="font-size:.75rem;font-weight:600;color:var(--text3);margin-bottom:4px">${namedStreets.length} Straßen:</div>
+      <div style="font-size:.75rem;font-weight:600;color:var(--text3);margin-bottom:4px">${streets.length} Straßenabschnitte (${namedStreets.length} benannt):</div>
       <div style="font-size:.75rem;color:var(--text2);line-height:1.5">${namedStreets.join(', ')||'Nur unbenannte Wege'}</div>
     `;
     document.getElementById('printRouteBtn').style.display='inline-flex';
@@ -3007,47 +2990,8 @@ async function calculateRoute(){
   calcBtn.disabled=false;
 }
 
-// ── Route-Geometrie auf Polygon clippen ──
-function clipRouteToPolygon(geometry,gebietId){
-  const polygon=kmlP[gebietId];
-  if(!polygon||polygon.length<3)return geometry;
-  // Segmente die im Polygon liegen behalten, außerhalb liegende durch direkten Sprung ersetzen
-  const clipped=[];
-  const BUFFER=0.0003;// ~30m Puffer um Polygon-Rand (Straßen können knapp daneben liegen)
-  geometry.forEach(pt=>{
-    const p={lat:pt[0],lng:pt[1]};
-    // Punkt im Polygon oder sehr nah am Rand?
-    if(pointInPolygon(p,polygon)||isNearPolygonEdge(p,polygon,BUFFER)){
-      clipped.push(pt);
-    } else {
-      // Punkt außerhalb: nur hinzufügen wenn es der einzige Weg ist (Lücke vermeiden)
-      // Markiere als "außerhalb" - wir brechen die Linie hier
-      if(clipped.length>0&&clipped[clipped.length-1]!==null)clipped.push(null);
-    }
-  });
-  // Null-Einträge entfernen und separate Segmente zurückgeben
-  return clipped;
-}
-
-function isNearPolygonEdge(point,polygon,buffer){
-  // Prüfe ob Punkt nahe einer Polygon-Kante liegt
-  for(let i=0,j=polygon.length-1;i<polygon.length;j=i++){
-    const dy=polygon[i][0]-polygon[j][0];
-    const dx=polygon[i][1]-polygon[j][1];
-    const len=Math.sqrt(dy*dy+dx*dx);
-    if(len===0)continue;
-    // Abstand Punkt zu Liniensegment (vereinfacht)
-    const t=Math.max(0,Math.min(1,((point.lat-polygon[j][0])*dy+(point.lng-polygon[j][1])*dx)/(len*len)));
-    const projLat=polygon[j][0]+t*dy;
-    const projLng=polygon[j][1]+t*dx;
-    const dist=Math.sqrt((point.lat-projLat)**2+(point.lng-projLng)**2);
-    if(dist<buffer)return true;
-  }
-  return false;
-}
-
-// ── Karten-Visualisierung ──
-function visualizeRoute(osrmRoute,waypoints){
+// ── Karten-Visualisierung (Straßengeometrien direkt) ──
+function visualizeRoute(routeData,orderedStreets){
   clearRouteVisualization();
   if(!map)return;
   // Startpunkt-Marker
@@ -3055,39 +2999,41 @@ function visualizeRoute(osrmRoute,waypoints){
   routeStartMarker=L.marker([routeStartPoint.lat,routeStartPoint.lng],{
     icon:L.divIcon({className:'route-marker',html:'<div style="width:30px;height:30px;background:#34c759;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.3)">S</div>',iconSize:[30,30],iconAnchor:[15,15]})
   }).bindPopup('Startpunkt').addTo(map);
-  // Route auf Polygon clippen
-  const clipped=clipRouteToPolygon(osrmRoute.geometry,routeGebietId);
-  // Geclippte Geometrie: null-Einträge markieren Unterbrechungen
-  let segment=[];
-  clipped.forEach(pt=>{
-    if(pt===null){
-      if(segment.length>=2){
-        const pl=L.polyline(segment,{color:'#009ee0',weight:4,opacity:.8}).addTo(map);
-        routeMarkers.push(pl);// zum späteren Entfernen
-      }
-      segment=[];
-    } else {
-      segment.push(pt);
-    }
+  // Jede Straße als eigene Polyline (blau, dick)
+  let curPos=routeStartPoint;
+  orderedStreets.forEach((s,idx)=>{
+    const streetStart=s.nodes[0];
+    // Verbindungslinie: gestrichelt, dünn, grau (Fußweg zwischen Straßen)
+    const connectLine=L.polyline(
+      [[curPos.lat,curPos.lng],[streetStart.lat,streetStart.lng]],
+      {color:'#999',weight:2,opacity:.5,dashArray:'6,8'}
+    ).addTo(map);
+    routeMarkers.push(connectLine);
+    // Straße selbst: blau, dick
+    const streetCoords=s.nodes.map(n=>[n.lat,n.lng]);
+    const streetLine=L.polyline(streetCoords,{color:'#009ee0',weight:5,opacity:.85}).addTo(map);
+    if(s.name)streetLine.bindTooltip(s.name,{sticky:true,opacity:.9});
+    routeMarkers.push(streetLine);
+    // Nummer am Anfang der Straße
+    const numMarker=L.marker([streetStart.lat,streetStart.lng],{
+      icon:L.divIcon({
+        className:'route-num',
+        html:`<div style="width:20px;height:20px;background:#009ee0;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;box-shadow:0 1px 4px rgba(0,0,0,.3)">${idx+1}</div>`,
+        iconSize:[20,20],iconAnchor:[10,10]
+      })
+    }).addTo(map);
+    if(s.name)numMarker.bindTooltip(`${idx+1}. ${s.name}`,{opacity:.9});
+    routeMarkers.push(numMarker);
+    curPos=s.nodes[s.nodes.length-1];
   });
-  if(segment.length>=2){
-    routePolyline=L.polyline(segment,{color:'#009ee0',weight:4,opacity:.8}).addTo(map);
-  } else if(routeMarkers.length>0){
-    // Haupt-Polyline ist das längste Segment
-    routePolyline=routeMarkers[0];
-  }
-  // Kleine Marker an Wegpunkten (nur die im Polygon)
+  // Haupt-Polyline für fitBounds: gesamte Route-Geometrie
+  routePolyline=L.polyline(routeData.geometry,{opacity:0,weight:0}).addTo(map);
+  // Bounds auf Polygon
   const polygon=kmlP[routeGebietId];
-  waypoints.slice(1).forEach((p,i)=>{
-    if(polygon&&!pointInPolygon(p,polygon))return;
-    const m=L.circleMarker([p.lat,p.lng],{radius:5,color:'#009ee0',fillColor:'#fff',fillOpacity:1,weight:2}).addTo(map);
-    routeMarkers.push(m);
-  });
-  // Bounds auf Polygon statt auf Route setzen
   if(polygon){
     const polyBounds=L.latLngBounds(polygon.map(c=>[c[0],c[1]]));
     map.fitBounds(polyBounds.pad(0.05));
-  } else if(routePolyline){
+  } else {
     map.fitBounds(routePolyline.getBounds().pad(0.1));
   }
 }
@@ -3115,11 +3061,18 @@ function toggleRouteVisualization(){
 // ── Druckfunktion ──
 function printRoute(){
   if(!routeResult){toast('⚠️ Keine Route berechnet');return}
-  const{osrmRoute,streetNames,gebietId}=routeResult;
+  const{routeData,orderedStreets,streetNames,gebietId}=routeResult;
   const g=getG(gebietId);
-  const distKm=(osrmRoute.distance/1000).toFixed(1);
-  const durMin=Math.round(osrmRoute.duration/60);
+  const distKm=routeData.distance.toFixed(1);
+  const durMin=routeData.durationMin;
   const namedStreets=streetNames.filter(Boolean).sort();
+  // Geordnete Straßenliste mit Nummern (in Laufreihenfolge)
+  const streetList=orderedStreets.filter(s=>s.name).map((s,i)=>({num:i+1,name:s.name}));
+  // Duplikate zusammenfassen
+  const uniqueList=[];
+  streetList.forEach(s=>{
+    if(!uniqueList.some(u=>u.name===s.name))uniqueList.push(s);
+  });
   let old=document.getElementById('routePrintContainer');if(old)old.remove();
   const div=document.createElement('div');div.id='routePrintContainer';div.style.display='none';
   div.innerHTML=`
@@ -3129,8 +3082,8 @@ function printRoute(){
       <strong>Stückzahl:</strong> 📦 ${g?.stueckzahl||0} · <strong>Distanz:</strong> ${distKm} km · <strong>Gehzeit:</strong> ~${durMin} min
     </div>
     <div style="margin-bottom:12px">
-      <strong>Straßen (${namedStreets.length}):</strong><br>
-      ${namedStreets.map((s,i)=>`<span class="rp-item" style="display:inline;border:none;padding:0"><span class="rp-num" style="min-width:auto">${i+1}.</span> ${s}</span>${i<namedStreets.length-1?' · ':''}`).join('')}
+      <strong>Straßen in Laufreihenfolge (${uniqueList.length}):</strong><br>
+      ${uniqueList.map(s=>`<span class="rp-item" style="display:inline;border:none;padding:0"><span class="rp-num" style="min-width:auto">${s.num}.</span> ${s.name}</span>`).join(' · ')}
     </div>
   `;
   document.body.appendChild(div);
