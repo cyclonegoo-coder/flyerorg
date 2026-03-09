@@ -2339,7 +2339,7 @@ function getCoords(rk,i,tot,gid){
 // ============================================================
 let curLK='alle',curGV='alle',curReg='alle',selId=null,curRole='verteiler',layers={},map,mapInited=false;
 const scol={offen:{f:'#aeaeb2',s:'#8e8e93'},offen_zugewiesen:{f:'#cfd8dc',s:'#546e7a'},zugeteilt:{f:'#ff9500',s:'#c97800'},fertig:{f:'#42a5f5',s:'#1565c0'},problem:{f:'#ff3b30',s:'#c62828'}};
-function getGebietFarbe(g){return(g.status==='offen'&&g.verteilerId)?scol.offen_zugewiesen:(scol[g.status]||scol.offen);}
+function getGebietFarbe(g){if(!g.verteilerId)return scol.problem;return(g.status==='offen'&&g.verteilerId)?scol.offen_zugewiesen:(scol[g.status]||scol.offen);}
 
 // ── HELPER: Rollen-Prüfungen ──
 function istVerwalterOderKreisverwalter() { return curRole === 'verwalter' || curRole === 'kreisverwalter'; }
@@ -2632,7 +2632,7 @@ function getVisibleGebiete(){
         const gv=gebietsverbaende[r.gebietsverband_id];
         if(gv&&gv.landkreis_id===lkId){
           r.gebiete.forEach(g=>{
-            if(g.status==='problem'&&!gsIds.has(g.id)){
+            if(!g.verteilerId&&!gsIds.has(g.id)){
               gs.push(g);
               gsIds.add(g.id);
             }
@@ -2742,7 +2742,7 @@ function getAllGebiete(){return Object.values(regionen).flatMap(r=>r.gebiete)}
 function renderList(){
   const gs=getVisibleGebiete();
   document.getElementById('gebietList').innerHTML=gs.map(g=>{
-    const istProblemgebietFremdes = curRole==='verteiler' && g.status==='problem' && g.verteilerId!==currentUser?.id;
+    const istProblemgebietFremdes = curRole==='verteiler' && !g.verteilerId;
     const statusLabel = istProblemgebietFremdes ? '🆘 Hilfe gesucht' : sl(g.status);
     const verteilerInfo = g.verteiler?(curRole==='verteiler'?(g.verteilerId===currentUser?.id?'👤 Du':'👤 Zugewiesen'):'👤 '+g.verteiler.split(' ')[0]):'⚠️ Verteiler fehlt';
     return `<div class="g-card status-${g.status} ${selId===g.id?'sel':''}" onclick="selGebiet('${g.id}')">
@@ -2751,7 +2751,7 @@ function renderList(){
     </div>`;
   }).join('');
 }
-function sl(s){return{offen:'Nicht zugestellt',zugeteilt:'Zugestellt',fertig:'Verteilt ✓',problem:'Nicht zugestellt'}[s]||s}
+function sl(s){return{offen:'Nicht zugestellt',zugeteilt:'Zugestellt',fertig:'Verteilt ✓'}[s]||s}
 function renderStats(){
   const gs=getVisibleGebiete();
   const tot=gs.reduce((a,g)=>a+g.stueckzahl,0),
@@ -2794,7 +2794,6 @@ function openDetail(id){
     ${darfVerteilerStatus?`<button class="s-btn ${g.status==='offen'?'ao':''}" onclick="setSt('${g.id}','offen')">Nicht zugestellt</button>`:''}
     ${isM?`<button class="s-btn ${g.status==='zugeteilt'?'az':''}" onclick="setSt('${g.id}','zugeteilt')">Zugestellt</button>`:''}
     ${darfVerteilerStatus?`<button class="s-btn ${g.status==='fertig'?'af':''}" onclick="setSt('${g.id}','fertig')">Verteilt ✓</button>`:''}
-    ${darfVerteilerStatus?`<button class="s-btn ${g.status==='problem'?'ap':''}" onclick="setSt('${g.id}','problem')">Verteiler fehlt!</button>`:''}
   </div></div>`;
 
   // Kontakt-Sektion
@@ -2885,7 +2884,7 @@ function openDetail(id){
     </div></div>`;
   }
   // Verteiler kann Problemgebiet übernehmen (wenn nicht eigenes)
-  if(curRole==='verteiler' && g.status==='problem' && g.verteilerId!==currentUser?.id){
+  if(curRole==='verteiler' && !g.verteilerId){
     // Prüfen ob bereits eine Übernahme-Anfrage existiert
     const bereitsAngefragt = alleAnfragen.some(a => a.gebiet_id===g.id && a.user_id===currentUser?.id && a.typ==='uebernahme');
     if(bereitsAngefragt){
@@ -2899,7 +2898,7 @@ function openDetail(id){
     }
   }
   // Verwalter kann Verteiler für Gebiet anfragen
-  if(isM && (g.status==='problem' || g.status==='offen' || !g.verteilerId)){
+  if(isM && !g.verteilerId){
     const verteilerListe = allUsers.filter(u => u.rolle==='verteiler' && u.id!==g.verteilerId);
     if(verteilerListe.length>0){
       h+=`<div class="d-sec"><div class="sec-hd">Verteiler anfragen</div><div class="f-stack">
@@ -2969,13 +2968,13 @@ async function setSt(id,s){
     if (!g?.verteilerId || g.verteilerId !== currentUser?.id) {
       toast('⚠️ Du bist diesem Gebiet nicht zugewiesen'); return;
     }
-    if (s !== 'fertig' && s !== 'problem' && s !== 'offen') {
-      toast('⚠️ Du darfst nur Verteilt, Verteiler fehlt oder Nicht zugestellt setzen'); return;
+    if (s !== 'fertig' && s !== 'offen' && s !== 'zugeteilt') {
+      toast('⚠️ Ungültiger Status'); return;
     }
   }
   const g=getG(id);
   // Bestätigungsabfrage bevor Status geändert wird
-  const statusLabels = {offen:'Nicht zugestellt',zugeteilt:'Zugestellt',fertig:'Verteilt ✓',problem:'Verteiler fehlt!'};
+  const statusLabels = {offen:'Nicht zugestellt',zugeteilt:'Zugestellt',fertig:'Verteilt ✓'};
   if (g.status === s) return; // Gleicher Status, nichts zu tun
   if (!confirm(`Status von „${g.name}" wirklich auf „${statusLabels[s]||s}" ändern?`)) return;
   g.status=s;
