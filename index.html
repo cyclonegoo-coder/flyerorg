@@ -462,7 +462,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v42</div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v43</div>
 
 <!-- NUTZER EINLADEN MODAL (nur Admin) -->
 <div class="modal-ov" id="inviteModalOv" onclick="if(event.target===this)closeInviteModal()">
@@ -2736,22 +2736,42 @@ async function fetchStreetsInPolygon(gebietId){
   const coords=kmlP[gebietId];
   if(!coords||coords.length<3)throw new Error('Keine Polygon-Koordinaten');
   const polyStr=coords.map(c=>c[0]+' '+c[1]).join(' ');
-  // Overpass Query: Nur Straßen mit Gebäuden die Hausnummern haben
-  // 1. Alle Gebäude mit Hausnummern im Polygon finden
-  // 2. Straßen in der Nähe dieser Gebäude (=bewohnte Straßen)
-  const query=`[out:json][timeout:30];
-// Alle Wohnstraßen im Polygon (residential + living_street haben per Definition Häuser)
+  // Strategie: Erst einfache schnelle Query, bei Fehler noch einfachere Fallback
+  const queries=[
+    // 1. Haupt-Query: Wohnstraßen + Straßen mit Gebäuden (timeout:60)
+    `[out:json][timeout:60];
 way["highway"~"^(residential|living_street)$"](poly:"${polyStr}")->.wohnstrassen;
-// Alle anderen Straßen die Gebäude mit Hausnummern in der Nähe haben
 way["highway"~"^(unclassified|tertiary|secondary|pedestrian)$"](poly:"${polyStr}")->.andere;
 node(around.andere:30)["addr:housenumber"](poly:"${polyStr}")->.adressen;
 way.andere(bn.adressen)->.bewohnte_andere;
-// Ergebnis: Wohnstraßen + bewohnte andere Straßen
 (.wohnstrassen;.bewohnte_andere;);
-out body;>;out skel qt;`;
-  const resp=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:'data='+encodeURIComponent(query)});
-  if(!resp.ok)throw new Error('Overpass API Fehler: '+resp.status);
-  const data=await resp.json();
+out body;>;out skel qt;`,
+    // 2. Fallback: Nur residential + living_street (sehr schnell, kein addr-Lookup)
+    `[out:json][timeout:60];
+way["highway"~"^(residential|living_street)$"](poly:"${polyStr}");
+out body;>;out skel qt;`,
+    // 3. Letzter Fallback: Alle begehbaren Straßen
+    `[out:json][timeout:60];
+way["highway"~"^(residential|living_street|unclassified|tertiary|pedestrian|footway|path)$"]["highway"!~"^(motorway|trunk|primary)$"](poly:"${polyStr}");
+out body;>;out skel qt;`
+  ];
+  let data=null;
+  for(let i=0;i<queries.length;i++){
+    try{
+      const resp=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:'data='+encodeURIComponent(queries[i])});
+      if(!resp.ok){
+        console.warn(`Overpass Query ${i+1} fehlgeschlagen: ${resp.status}`);
+        if(i<queries.length-1){toast(`⚠️ Overpass Timeout, versuche einfachere Abfrage...`);continue;}
+        throw new Error('Overpass API Fehler: '+resp.status);
+      }
+      data=await resp.json();
+      if(i>0)console.log(`Overpass Fallback-Query ${i+1} erfolgreich`);
+      break;
+    }catch(err){
+      if(i<queries.length-1){console.warn('Overpass Query Fehler, Fallback...',err);continue;}
+      throw err;
+    }
+  }
   const nodes={};
   data.elements.filter(e=>e.type==='node').forEach(n=>{nodes[n.id]={lat:n.lat,lng:n.lon}});
   const ways=data.elements.filter(e=>e.type==='way'&&e.tags).map(w=>({
@@ -2763,31 +2783,46 @@ out body;>;out skel qt;`;
   return{ways,nodes};
 }
 
-// ── Wegpunkte: JEDE Straße bekommt mindestens einen Punkt ──
-function sampleWaypoints(ways){
+// ── Point-in-Polygon Test (Ray-Casting) ──
+function pointInPolygon(point,polygon){
+  // polygon = [[lat,lng],...] , point = {lat,lng}
+  let inside=false;
+  const x=point.lng,y=point.lat;
+  for(let i=0,j=polygon.length-1;i<polygon.length;j=i++){
+    const xi=polygon[i][1],yi=polygon[i][0]; // lng,lat
+    const xj=polygon[j][1],yj=polygon[j][0];
+    if(((yi>y)!==(yj>y))&&(x<(xj-xi)*(y-yi)/(yj-yi)+xi))inside=!inside;
+  }
+  return inside;
+}
+
+// ── Wegpunkte: JEDE Straße bekommt mindestens einen Punkt, NUR innerhalb des Polygons ──
+function sampleWaypoints(ways,gebietId){
+  const polygon=kmlP[gebietId];// [[lat,lng],...]
   const streetNames=new Set();
-  // Pro Straße: Mittelpunkt als Pflicht-Wegpunkt
-  // Lange Straßen bekommen zusätzlich Start und Ende
   const streetPoints=[];// {point, streetName}
   ways.forEach(w=>{
     if(w.name)streetNames.add(w.name);
-    const mid=w.nodes[Math.floor(w.nodes.length/2)];
-    streetPoints.push({point:mid,street:w.name||'Weg '+w.id});
-    // Bei langen Straßen (>100m) auch Start und Ende
-    const startNode=w.nodes[0],endNode=w.nodes[w.nodes.length-1];
-    if(haversine(startNode,endNode)>0.1){// >100m
-      streetPoints.push({point:startNode,street:w.name||'Weg '+w.id});
-      streetPoints.push({point:endNode,street:w.name||'Weg '+w.id});
+    const streetLabel=w.name||'Weg '+w.id;
+    // Nur Nodes verwenden die im Polygon liegen
+    const insideNodes=polygon?w.nodes.filter(n=>pointInPolygon(n,polygon)):w.nodes;
+    if(insideNodes.length===0)return;// Straße komplett außerhalb → überspringen
+    // Mittelpunkt der Inside-Nodes
+    const mid=insideNodes[Math.floor(insideNodes.length/2)];
+    streetPoints.push({point:mid,street:streetLabel});
+    // Bei langen Abschnitten im Polygon auch Start+Ende
+    const sn=insideNodes[0],en=insideNodes[insideNodes.length-1];
+    if(haversine(sn,en)>0.1){// >100m
+      streetPoints.push({point:sn,street:streetLabel});
+      streetPoints.push({point:en,street:streetLabel});
     }
   });
-  // Duplikate entfernen: Punkte die <20m beieinander liegen, aber sicherstellen
-  // dass jede benannte Straße mindestens einen Punkt behält
-  const streetHasPoint=new Map();// streetName → boolean
+  // Duplikate entfernen, aber jede Straße behält mindestens einen Punkt
+  const streetHasPoint=new Map();
   const unique=[];
   streetPoints.forEach(sp=>{
     const tooClose=unique.some(u=>haversine(u,sp.point)<0.02);
     const streetAlreadyCovered=streetHasPoint.get(sp.street);
-    // Behalten wenn: nicht zu nah ODER Straße hat noch keinen Punkt
     if(!tooClose||!streetAlreadyCovered){
       unique.push(sp.point);
       streetHasPoint.set(sp.street,true);
@@ -2919,7 +2954,7 @@ async function calculateRoute(){
     if(ways.length===0){toast('⚠️ Keine Straßen im Gebiet gefunden');loadingBox.style.display='none';calcBtn.disabled=false;return}
     // 2. Wegpunkte: Jede Straße bekommt mindestens einen Punkt
     loadingText.textContent=`🗺️ ${ways.length} Straßen gefunden, optimiere Route...`;
-    const{points,streetNames}=sampleWaypoints(ways);
+    const{points,streetNames}=sampleWaypoints(ways,routeGebietId);
     // 3. TSP: Optimale Reihenfolge
     const ordered=tspNearestNeighbor(routeStartPoint,points);
     // 4. OSRM: Echte Gehroute (bei vielen Punkten in Segmente aufteilen)
@@ -2972,6 +3007,45 @@ async function calculateRoute(){
   calcBtn.disabled=false;
 }
 
+// ── Route-Geometrie auf Polygon clippen ──
+function clipRouteToPolygon(geometry,gebietId){
+  const polygon=kmlP[gebietId];
+  if(!polygon||polygon.length<3)return geometry;
+  // Segmente die im Polygon liegen behalten, außerhalb liegende durch direkten Sprung ersetzen
+  const clipped=[];
+  const BUFFER=0.0003;// ~30m Puffer um Polygon-Rand (Straßen können knapp daneben liegen)
+  geometry.forEach(pt=>{
+    const p={lat:pt[0],lng:pt[1]};
+    // Punkt im Polygon oder sehr nah am Rand?
+    if(pointInPolygon(p,polygon)||isNearPolygonEdge(p,polygon,BUFFER)){
+      clipped.push(pt);
+    } else {
+      // Punkt außerhalb: nur hinzufügen wenn es der einzige Weg ist (Lücke vermeiden)
+      // Markiere als "außerhalb" - wir brechen die Linie hier
+      if(clipped.length>0&&clipped[clipped.length-1]!==null)clipped.push(null);
+    }
+  });
+  // Null-Einträge entfernen und separate Segmente zurückgeben
+  return clipped;
+}
+
+function isNearPolygonEdge(point,polygon,buffer){
+  // Prüfe ob Punkt nahe einer Polygon-Kante liegt
+  for(let i=0,j=polygon.length-1;i<polygon.length;j=i++){
+    const dy=polygon[i][0]-polygon[j][0];
+    const dx=polygon[i][1]-polygon[j][1];
+    const len=Math.sqrt(dy*dy+dx*dx);
+    if(len===0)continue;
+    // Abstand Punkt zu Liniensegment (vereinfacht)
+    const t=Math.max(0,Math.min(1,((point.lat-polygon[j][0])*dy+(point.lng-polygon[j][1])*dx)/(len*len)));
+    const projLat=polygon[j][0]+t*dy;
+    const projLng=polygon[j][1]+t*dx;
+    const dist=Math.sqrt((point.lat-projLat)**2+(point.lng-projLng)**2);
+    if(dist<buffer)return true;
+  }
+  return false;
+}
+
 // ── Karten-Visualisierung ──
 function visualizeRoute(osrmRoute,waypoints){
   clearRouteVisualization();
@@ -2981,20 +3055,47 @@ function visualizeRoute(osrmRoute,waypoints){
   routeStartMarker=L.marker([routeStartPoint.lat,routeStartPoint.lng],{
     icon:L.divIcon({className:'route-marker',html:'<div style="width:30px;height:30px;background:#34c759;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.3)">S</div>',iconSize:[30,30],iconAnchor:[15,15]})
   }).bindPopup('Startpunkt').addTo(map);
-  // Echte OSRM-Route als Polyline
-  routePolyline=L.polyline(osrmRoute.geometry,{color:'#009ee0',weight:4,opacity:.8}).addTo(map);
-  // Kleine Marker an Wegpunkten (optional, dezent)
+  // Route auf Polygon clippen
+  const clipped=clipRouteToPolygon(osrmRoute.geometry,routeGebietId);
+  // Geclippte Geometrie: null-Einträge markieren Unterbrechungen
+  let segment=[];
+  clipped.forEach(pt=>{
+    if(pt===null){
+      if(segment.length>=2){
+        const pl=L.polyline(segment,{color:'#009ee0',weight:4,opacity:.8}).addTo(map);
+        routeMarkers.push(pl);// zum späteren Entfernen
+      }
+      segment=[];
+    } else {
+      segment.push(pt);
+    }
+  });
+  if(segment.length>=2){
+    routePolyline=L.polyline(segment,{color:'#009ee0',weight:4,opacity:.8}).addTo(map);
+  } else if(routeMarkers.length>0){
+    // Haupt-Polyline ist das längste Segment
+    routePolyline=routeMarkers[0];
+  }
+  // Kleine Marker an Wegpunkten (nur die im Polygon)
+  const polygon=kmlP[routeGebietId];
   waypoints.slice(1).forEach((p,i)=>{
+    if(polygon&&!pointInPolygon(p,polygon))return;
     const m=L.circleMarker([p.lat,p.lng],{radius:5,color:'#009ee0',fillColor:'#fff',fillOpacity:1,weight:2}).addTo(map);
     routeMarkers.push(m);
   });
-  map.fitBounds(routePolyline.getBounds().pad(0.1));
+  // Bounds auf Polygon statt auf Route setzen
+  if(polygon){
+    const polyBounds=L.latLngBounds(polygon.map(c=>[c[0],c[1]]));
+    map.fitBounds(polyBounds.pad(0.05));
+  } else if(routePolyline){
+    map.fitBounds(routePolyline.getBounds().pad(0.1));
+  }
 }
 
 function clearRouteVisualization(){
-  routeMarkers.forEach(m=>{if(map)map.removeLayer(m)});routeMarkers=[];
-  if(routePolyline&&map){map.removeLayer(routePolyline);routePolyline=null}
-  if(routeStartMarker&&map){map.removeLayer(routeStartMarker);routeStartMarker=null}
+  routeMarkers.forEach(m=>{if(map)try{map.removeLayer(m)}catch(e){}});routeMarkers=[];
+  if(routePolyline&&map){try{map.removeLayer(routePolyline)}catch(e){}routePolyline=null}
+  if(routeStartMarker&&map){try{map.removeLayer(routeStartMarker)}catch(e){}routeStartMarker=null}
 }
 
 function toggleRouteVisualization(){
