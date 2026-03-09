@@ -2744,14 +2744,14 @@ function renderList(){
   document.getElementById('gebietList').innerHTML=gs.map(g=>{
     const istProblemgebietFremdes = curRole==='verteiler' && g.status==='problem' && g.verteilerId!==currentUser?.id;
     const statusLabel = istProblemgebietFremdes ? '🆘 Hilfe gesucht' : sl(g.status);
-    const verteilerInfo = g.verteiler?(curRole==='verteiler'?(g.verteilerId===currentUser?.id?'👤 Du':'👤 Zugewiesen'):'👤 '+g.verteiler.split(' ')[0]):'—';
+    const verteilerInfo = g.verteiler?(curRole==='verteiler'?(g.verteilerId===currentUser?.id?'👤 Du':'👤 Zugewiesen'):'👤 '+g.verteiler.split(' ')[0]):'⚠️ Verteiler fehlt';
     return `<div class="g-card status-${g.status} ${selId===g.id?'sel':''}" onclick="selGebiet('${g.id}')">
       <div class="g-top"><span class="g-name">${g.name}</span><span class="s-chip c-${g.status}">${statusLabel}</span></div>
       <div class="g-meta"><span>📦 ${g.stueckzahl}</span><span>${verteilerInfo}</span>${g.whatsapp?'<span class="wa">WA</span>':''}</div>
     </div>`;
   }).join('');
 }
-function sl(s){return{offen:'Nicht zugestellt',zugeteilt:'Zugestellt',fertig:'Verteilt ✓',problem:'Verteiler fehlt!'}[s]||s}
+function sl(s){return{offen:'Nicht zugestellt',zugeteilt:'Zugestellt',fertig:'Verteilt ✓',problem:'Nicht zugestellt'}[s]||s}
 function renderStats(){
   const gs=getVisibleGebiete();
   const tot=gs.reduce((a,g)=>a+g.stueckzahl,0),
@@ -2787,7 +2787,7 @@ function openDetail(id){
   h+=`<div class="d-sec"><div class="info-g">
     <div><div class="ii-label">Stückzahl</div><div class="ii-val" style="color:var(--blue)">${g.stueckzahl}</div></div>
     <div><div class="ii-label">Status</div><div class="ii-val">${sl(g.status)}</div></div>
-    <div class="ii-full"><div class="ii-label">Verteiler</div><div class="ii-val">${curRole==='verteiler'?(g.verteilerId?(g.verteilerId===currentUser?.id?g.verteiler:'Zugewiesen'):'—'):(g.verteiler||'—')}</div></div>
+    <div class="ii-full"><div class="ii-label">Verteiler</div><div class="ii-val">${curRole==='verteiler'?(g.verteilerId?(g.verteilerId===currentUser?.id?g.verteiler:'Zugewiesen'):'⚠️ Verteiler fehlt'):(g.verteiler||'⚠️ Verteiler fehlt')}</div></div>
   </div></div>`;
 
   h+=`<div class="d-sec"><div class="sec-hd">Status</div><div class="s-grid">
@@ -2844,7 +2844,7 @@ function openDetail(id){
   }
 
   if(isM){
-    const userOptions = `<option value="">— nicht zugewiesen</option>` +
+    const userOptions = `<option value="">— Verteiler fehlt</option>` +
       allUsers.map(u=>
         `<option value="${u.id}" data-name="${u.name}" ${g.verteilerId===u.id?'selected':''}>${u.name}${u.rolle==='verwalter'?' (Gebietsverwalter)':u.rolle==='kreisverwalter'?' (Kreisverwalter)':u.rolle==='admin'?' (Admin)':''}</option>`
       ).join('');
