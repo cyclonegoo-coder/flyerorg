@@ -462,7 +462,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v45</div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v46</div>
 
 <!-- NUTZER EINLADEN MODAL (nur Admin) -->
 <div class="modal-ov" id="inviteModalOv" onclick="if(event.target===this)closeInviteModal()">
@@ -2796,18 +2796,24 @@ function pointInPolygon(point,polygon){
   return inside;
 }
 
-// ── Straßen auf Polygon filtern und Geometrien vorbereiten ──
+// ── Straßen auf Polygon filtern — komplette Geometrien behalten! ──
 function prepareStreets(ways,gebietId){
   const polygon=kmlP[gebietId];
-  const streets=[];// {id, name, type, nodes:[{lat,lng}], midpoint:{lat,lng}}
+  const streets=[];
   const streetNames=new Set();
   ways.forEach(w=>{
-    // Nur Nodes innerhalb des Polygons behalten
-    const insideNodes=polygon?w.nodes.filter(n=>pointInPolygon(n,polygon)):w.nodes;
-    if(insideNodes.length<2)return;// zu wenig Punkte → überspringen
+    if(w.nodes.length<2)return;
+    // Mittelpunkt der Straße berechnen
+    const mid=w.nodes[Math.floor(w.nodes.length/2)];
+    // Straße behalten wenn: mindestens ein Node im Polygon liegt
+    // (= Straße berührt das Gebiet)
+    if(polygon){
+      const anyInside=w.nodes.some(n=>pointInPolygon(n,polygon));
+      if(!anyInside)return;// Straße komplett außerhalb → überspringen
+    }
     if(w.name)streetNames.add(w.name);
-    const mid=insideNodes[Math.floor(insideNodes.length/2)];
-    streets.push({id:w.id,name:w.name||'',type:w.type,nodes:insideNodes,midpoint:mid});
+    // KOMPLETTE Geometrie behalten (nicht einzelne Nodes filtern!)
+    streets.push({id:w.id,name:w.name||'',type:w.type,nodes:w.nodes,midpoint:mid});
   });
   return{streets,streetNames:[...streetNames]};
 }
