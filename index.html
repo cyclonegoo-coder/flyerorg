@@ -3337,14 +3337,18 @@ function showDrawToolbar(){
 // Prüft ob ein Nutzer im Landkreis des aktuellen KV aktiv ist
 function nutzerImLandkreis(user) {
   const kvLK = currentProfile?.verwalteter_landkreis;
-  if (!kvLK) return false;
+  // Kein Landkreis zugewiesen → alle Nutzer anzeigen (Fallback)
+  if (!kvLK) return true;
   // Admin → immer anzeigen (aber read-only)
   if (user.rolle === 'admin') return true;
+  // Eigener Account → immer anzeigen
+  if (user.id === currentUser?.id) return true;
   // KV im selben Landkreis?
-  if ((user.rolle === 'kreisverwalter') && user.verwalteter_landkreis === kvLK) return true;
+  if (user.rolle === 'kreisverwalter') return user.verwalteter_landkreis === kvLK;
   // Verwalter mit Regionen in GVs dieses LK?
   if (user.rolle === 'verwalter') {
     const verwReg = user.verwaltete_regionen || [];
+    if (verwReg.length === 0) return true; // Noch keine Regionen → anzeigen damit man welche zuweisen kann
     return verwReg.some(rId => {
       const reg = regionen[rId];
       if (!reg) return false;
@@ -3352,14 +3356,8 @@ function nutzerImLandkreis(user) {
       return gv && gv.landkreis_id === kvLK;
     });
   }
-  // Verteiler mit Gebieten in diesem LK?
-  if (user.rolle === 'verteiler') {
-    return Object.values(regionen).some(r => {
-      const gv = gebietsverbaende[r.gebietsverband_id];
-      if (!gv || gv.landkreis_id !== kvLK) return false;
-      return r.gebiete.some(g => g.verteilerId === user.id);
-    });
-  }
+  // Verteiler → immer anzeigen (können jedem Gebiet zugewiesen werden)
+  if (user.rolle === 'verteiler') return true;
   return false;
 }
 
