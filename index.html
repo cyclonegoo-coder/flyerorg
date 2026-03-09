@@ -940,11 +940,9 @@ async function loadKampagnen() {
 }
 
 async function sichereBasisKampagne() {
-  const basis = kampagnen.find(k => k.ist_basis);
-  if (basis) return;
-  // Auch ohne ist_basis-Flag nach erster Kampagne suchen (falls Spalte fehlt)
-  if (kampagnen.length > 0) return;
-  // Keine Kampagne → erstellen
+  const basis = kampagnen.find(k => k.ist_basis || k.name === 'Grundzuweisung');
+  if (basis) { basis.ist_basis = true; return; }
+  // Keine Basis-Kampagne → erstellen
   // Strategie 1: Mit ist_basis
   try {
     const { data, error } = await sb.from('kampagnen').insert({
