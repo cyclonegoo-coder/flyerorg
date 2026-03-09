@@ -458,7 +458,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v52</div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v53</div>
 
 <!-- NUTZER EINLADEN MODAL (nur Admin) -->
 <div class="modal-ov" id="inviteModalOv" onclick="if(event.target===this)closeInviteModal()">
@@ -2743,28 +2743,33 @@ async function printGebiet(gebietId){
     const canvas=await html2canvas(document.getElementById('map'),{useCORS:true,allowTaint:true,scale:2,logging:false});
     const imgData=canvas.toDataURL('image/png');
     restore();
-    // 8. Druckfenster: auto Hoch-/Querformat, Karte maximal groß
-    const orient=isLandscape?'landscape':'portrait';
+    // 8. Druckfenster: Karte so groß wie möglich
     const verteilerInfo=g.verteilerId?(g.verteiler||'Zugewiesen'):'Nicht zugewiesen';
+    const orient=isLandscape?'landscape':'portrait';
+    // Bild-Dimensionen für korrektes Seitenverhältnis
+    const imgW=canvas.width, imgH=canvas.height;
+    const imgRatio=imgW/imgH;
+    // A4: 277x190mm nutzbar (landscape) oder 190x277mm (portrait) bei 6mm margin
+    const pageW=isLandscape?277:190, pageH=isLandscape?190:277;
+    const infoH=12;// ca. 12mm für Titel+Meta
+    const availH=pageH-infoH;
+    // Bild soll volle Breite nutzen, Höhe anpassen
+    let imgCssW=pageW, imgCssH=pageW/imgRatio;
+    if(imgCssH>availH){imgCssH=availH;imgCssW=availH*imgRatio;}
     const pw=window.open('','_blank','width=900,height=700');
     if(!pw){toast('⚠️ Popup-Blocker! Bitte Popups erlauben.');return}
     pw.document.write(`<!DOCTYPE html><html><head><title>${g.name}</title>
 <style>
-  @page{size:A4 ${orient};margin:6mm}
+  @page{size:${orient};margin:6mm}
   *{margin:0;padding:0;box-sizing:border-box}
-  html,body{height:100%;overflow:hidden}
-  body{font-family:system-ui,sans-serif;display:flex;flex-direction:column;height:100vh;padding:4px}
-  .info{flex-shrink:0;padding:2px 0 4px}
-  .title{font-size:13pt;font-weight:700;margin-bottom:2px}
-  .meta{font-size:8pt;color:#444;line-height:1.4;border-bottom:1px solid #ccc;padding-bottom:4px}
-  .map-wrap{flex:1;min-height:0;overflow:hidden;display:flex;align-items:center;justify-content:center}
-  .map-img{max-width:100%;max-height:100%;object-fit:contain;border:1px solid #aaa}
+  body{font-family:system-ui,sans-serif}
+  .title{font-size:12pt;font-weight:700}
+  .meta{font-size:8pt;color:#444;border-bottom:1px solid #ccc;padding-bottom:3px;margin-bottom:3px}
+  img{width:${imgCssW}mm;height:${imgCssH}mm;border:1px solid #999;display:block}
 </style></head><body>
-  <div class="info">
-    <div class="title">${g.name}</div>
-    <div class="meta"><b>Datum:</b> ${new Date().toLocaleDateString('de-DE')} · <b>Stückzahl:</b> ${g.stueckzahl||0} · <b>Verteiler:</b> ${verteilerInfo}${g.hinweise?.length?' · <b>Hinweise:</b> '+g.hinweise.join(', '):''}</div>
-  </div>
-  <div class="map-wrap"><img class="map-img" src="${imgData}"/></div>
+  <div class="title">${g.name}</div>
+  <div class="meta"><b>Datum:</b> ${new Date().toLocaleDateString('de-DE')} · <b>Stückzahl:</b> ${g.stueckzahl||0} · <b>Verteiler:</b> ${verteilerInfo}${g.hinweise?.length?' · <b>Hinweise:</b> '+g.hinweise.join(', '):''}</div>
+  <img src="${imgData}"/>
 </body></html>`);
     pw.document.close();
     pw.onload=()=>setTimeout(()=>pw.print(),400);
