@@ -963,6 +963,37 @@ async function sichereBasisKampagne() {
   }
 }
 
+// Versucht eine lokale Kampagne in die DB zu persistieren.
+// Gibt die kampagne_id zurück (oder null bei Fehler).
+async function ensureKampagneInDB() {
+  if (!curKampagne) return null;
+  if (!curKampagne._local) return curKampagne.id;
+  // Versuch die Kampagne in DB zu erstellen
+  try {
+    const { data, error } = await sb.from('kampagnen').insert({
+      name: curKampagne.name || 'Grundzuweisung',
+      beschreibung: curKampagne.beschreibung || 'Basis-Verteiler-Zuweisungen',
+      ist_basis: curKampagne.ist_basis || false,
+      erstellt_von: currentUser?.id || null,
+      created_at: new Date()
+    }).select().single();
+    if (!error && data) {
+      // Alte lokale ID merken und durch DB-ID ersetzen
+      const oldId = curKampagne.id;
+      const idx = kampagnen.findIndex(k => k.id === oldId);
+      if (idx >= 0) kampagnen[idx] = data;
+      curKampagne = data;
+      console.log('Kampagne erfolgreich in DB persistiert:', data.id);
+      return data.id;
+    }
+    console.warn('Kampagne konnte nicht in DB erstellt werden:', error);
+    return null;
+  } catch(e) {
+    console.warn('ensureKampagneInDB fehlgeschlagen:', e);
+    return null;
+  }
+}
+
 function renderKampagnenDropdown() {
   const sel = document.getElementById('kampagneSelect');
   if (!sel) return;
@@ -2140,8 +2171,9 @@ async function handleAnfrage(anfrageId, entscheidung, neueStueckzahl, gebietId) 
     if (g) {
       g.stueckzahl = neueStueckzahl;
       await sb.from('gebiete').update({ stueckzahl: neueStueckzahl }).eq('id', gebietId);
-      const kampId = curKampagne?.id || null;
-      if (kampId && !curKampagne?._local) {
+      let kampId = curKampagne?.id || null;
+      if (!kampId || curKampagne?._local) kampId = await ensureKampagneInDB();
+      if (kampId) {
         await sb.from('gebiet_status').upsert({
           gebiet_id: gebietId, kampagne_id: kampId,
           stueckzahl: neueStueckzahl, status: g.status,
@@ -2176,8 +2208,9 @@ async function handleUebernahmeAnfrage(anfrageId, entscheidung, gebietId, vertei
       g.verteiler = verteiler?.name || '';
       // Status bleibt unverändert – Verteiler-Zuweisung ändert nicht den Status
       // In DB aktualisieren
-      const kampId = curKampagne?.id || null;
-      if (kampId && !curKampagne?._local) {
+      let kampId = curKampagne?.id || null;
+      if (!kampId || curKampagne?._local) kampId = await ensureKampagneInDB();
+      if (kampId) {
         await sb.from('gebiet_status').upsert({
           gebiet_id: gebietId, kampagne_id: kampId,
           verteiler_id: verteilerId, verteiler_name: g.verteiler,
@@ -2211,8 +2244,9 @@ async function handleZuweisungAnfrage(anfrageId, entscheidung, gebietId) {
       g.verteiler = currentProfile?.name || '';
       // Status bleibt unverändert – Verteiler-Zuweisung ändert nicht den Status
       // In DB aktualisieren
-      const kampId = curKampagne?.id || null;
-      if (kampId && !curKampagne?._local) {
+      let kampId = curKampagne?.id || null;
+      if (!kampId || curKampagne?._local) kampId = await ensureKampagneInDB();
+      if (kampId) {
         await sb.from('gebiet_status').upsert({
           gebiet_id: gebietId, kampagne_id: kampId,
           verteiler_id: currentUser.id, verteiler_name: g.verteiler,
@@ -2280,8 +2314,9 @@ async function handleAbgabeAnfrage(anfrageId, entscheidung, gebietId) {
       g.verteilerId = null;
       g.verteiler = '';
       g.status = 'offen';
-      const kampId = curKampagne?.id || null;
-      if (kampId && !curKampagne?._local) {
+      let kampId = curKampagne?.id || null;
+      if (!kampId || curKampagne?._local) kampId = await ensureKampagneInDB();
+      if (kampId) {
         await sb.from('gebiet_status').upsert({
           gebiet_id: gebietId, kampagne_id: kampId,
           verteiler_id: null, verteiler_name: null,
@@ -2981,8 +3016,11 @@ async function setSt(id,s){
   const col=getGebietFarbe(g);
   if(layers[id])layers[id].setStyle({fillColor:col.f,color:col.s,fillOpacity:.6});
   renderList();renderStats();openDetail(id);
-  const kampId = curKampagne?.id || null;
-  if (!kampId || curKampagne?._local) { toast(`✅ Status → ${sl(s)} (lokal)`); return; }
+  let kampId = curKampagne?.id || null;
+  if (!kampId || curKampagne?._local) {
+    kampId = await ensureKampagneInDB();
+    if (!kampId) { toast(`✅ Status → ${sl(s)} (lokal)`); return; }
+  }
   // Upsert in gebiet_status (composite PK: gebiet_id + kampagne_id)
   const { error } = await sb.from('gebiet_status').upsert({
     gebiet_id: id,
@@ -3006,8 +3044,11 @@ async function saveZ(id){
   const col=getGebietFarbe(g);
   if(layers[id])layers[id].setStyle({fillColor:col.f,color:col.s});
   renderList();renderStats();openDetail(id);
-  const kampId = curKampagne?.id || null;
-  if (!kampId || curKampagne?._local) { toast(`✅ Verteiler ${userName?'zugewiesen':'entfernt'} (lokal)`); return; }
+  let kampId = curKampagne?.id || null;
+  if (!kampId || curKampagne?._local) {
+    kampId = await ensureKampagneInDB();
+    if (!kampId) { toast(`✅ Verteiler ${userName?'zugewiesen':'entfernt'} (lokal)`); return; }
+  }
   // Upsert in gebiet_status (composite PK: gebiet_id + kampagne_id)
   const { error } = await sb.from('gebiet_status').upsert({
     gebiet_id: id,
@@ -3026,12 +3067,12 @@ async function saveSt2(id){
   if (!pruefeGebietZugriff(id)) return;
   if (curRole === 'verteiler') { toast('⚠️ Keine Berechtigung'); return; }
   const g=getG(id),v=parseInt(document.getElementById('inpS').value);
-  const kampId = curKampagne?.id || null;
-  const kampLocal = curKampagne?._local;
   if(!isNaN(v)&&v>0){
     g.stueckzahl=v;
     renderStats();openDetail(id);
-    if (kampId && !kampLocal) {
+    let kampId = curKampagne?.id || null;
+    if (!kampId || curKampagne?._local) { kampId = await ensureKampagneInDB(); }
+    if (kampId) {
       // Upsert in gebiet_status (composite PK: gebiet_id + kampagne_id)
       const {error}=await sb.from('gebiet_status').upsert({
         gebiet_id: id,
