@@ -228,18 +228,13 @@ textarea{min-height:68px}
 }
 /* ── PRINT STYLES ── */
 @media print{
-  body>*:not(#routePrintContainer):not(#map){display:none!important}
-  #map{position:relative!important;width:100%!important;height:50vh!important;border:1px solid #ccc!important}
+  body>*:not(#gebietPrintContainer):not(#map){display:none!important}
+  #map{position:relative!important;width:100%!important;height:60vh!important;border:1px solid #ccc!important}
   .sidebar,.detail-panel,.draw-toolbar,.draw-info,header,.modal-ov,.toast,.leaflet-control-zoom,.leg{display:none!important}
-  #routePrintContainer{display:block!important;padding:16px;font-family:system-ui,sans-serif}
-  .rp-header{font-size:16pt;font-weight:700;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:10px}
-  .rp-meta{font-size:9pt;color:#555;margin-bottom:14px;line-height:1.5}
-  .rp-item{border-bottom:1px solid #ddd;padding:7px 0;page-break-inside:avoid;display:flex;gap:10px;align-items:baseline}
-  .rp-num{font-weight:700;color:#009ee0;font-size:13pt;min-width:28px}
-  .rp-name{font-weight:600;font-size:11pt}
-  .rp-detail{font-size:9pt;color:#666}
+  #gebietPrintContainer{display:block!important;padding:16px;font-family:system-ui,sans-serif}
+  .gp-header{font-size:16pt;font-weight:700;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:10px}
+  .gp-meta{font-size:10pt;color:#555;margin-bottom:10px;line-height:1.6}
 }
-.route-marker{background:none!important;border:none!important}
 </style>
 </head>
 <body>
@@ -462,7 +457,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v48</div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v49</div>
 
 <!-- NUTZER EINLADEN MODAL (nur Admin) -->
 <div class="modal-ov" id="inviteModalOv" onclick="if(event.target===this)closeInviteModal()">
@@ -663,38 +658,6 @@ textarea{min-height:68px}
   </div>
 </div>
 
-<!-- ROUTE PLANNER MODAL -->
-<div class="modal-ov" id="routePlannerModalOv" onclick="if(event.target===this)closeRoutePlannerUI()">
-  <div class="modal" style="max-width:460px">
-    <div class="m-handle"></div>
-    <div class="m-title" id="routeModalTitle">🗺️ Laufweg planen</div>
-    <div style="display:flex;flex-direction:column;gap:10px;padding:0 18px 12px">
-      <div style="background:var(--surface2);padding:12px;border-radius:var(--r8)">
-        <div style="font-size:.7rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:8px">Startpunkt</div>
-        <button class="btn btn-g" id="gpsBtn" style="width:100%;font-size:.8rem" onclick="routePlannerGPS()">📍 Mein Standort (GPS)</button>
-        <button class="btn btn-g" style="width:100%;font-size:.8rem;margin-top:5px" onclick="routePlannerClickMode()">🖱️ Punkt auf Karte setzen</button>
-        <div id="startPointInfo" style="font-size:.75rem;color:var(--text3);text-align:center;padding:6px 0 0">Kein Startpunkt gewählt</div>
-      </div>
-      <div id="routeInfoBox" style="background:var(--surface2);padding:12px;border-radius:var(--r8)">
-        <div style="font-size:.7rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:6px">Gebiet</div>
-        <div id="routeGebietInfo" style="font-size:.8rem"></div>
-      </div>
-      <div id="routeStatsBox" style="background:var(--surface2);padding:12px;border-radius:var(--r8);display:none">
-        <div style="font-size:.7rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:6px">Berechneter Laufweg</div>
-        <div id="routeStatsList" style="font-size:.8rem;color:var(--text2);line-height:1.6"></div>
-      </div>
-      <div id="routeLoadingBox" style="display:none;text-align:center;padding:16px;color:var(--text3);font-size:.8rem">
-        <div style="font-size:1.5rem;margin-bottom:6px">⏳</div>
-        <div id="routeLoadingText">Straßen werden geladen...</div>
-      </div>
-    </div>
-    <div class="m-actions">
-      <button class="btn btn-g" id="printRouteBtn" style="display:none" onclick="printRoute()">🖨️ Drucken</button>
-      <button class="btn btn-g" onclick="closeRoutePlannerUI()">Schließen</button>
-      <button class="btn btn-p" id="calculateRouteBtn" onclick="calculateRoute()" disabled>Laufweg berechnen</button>
-    </div>
-  </div>
-</div>
 
 <script>
 // ============================================================
@@ -2432,9 +2395,6 @@ let curLK='alle',curGV='alle',curReg='alle',selId=null,curRole='verteiler',layer
 const scol={offen:{f:'#aeaeb2',s:'#8e8e93'},offen_zugewiesen:{f:'#cfd8dc',s:'#546e7a'},zugeteilt:{f:'#ff9500',s:'#c97800'},fertig:{f:'#42a5f5',s:'#1565c0'},problem:{f:'#ff3b30',s:'#c62828'}};
 function getGebietFarbe(g){if(!g.verteilerId)return scol.problem;return(g.status==='offen'&&g.verteilerId)?scol.offen_zugewiesen:(scol[g.status]||scol.offen);}
 
-// ── ROUTE PLANNER STATE ──
-let routeStartPoint=null,routeResult=null,routeMarkers=[],routePolyline=null,routeStartMarker=null;
-
 // ── HELPER: Rollen-Prüfungen ──
 function istVerwalterOderKreisverwalter() { return curRole === 'verwalter' || curRole === 'kreisverwalter'; }
 function istManager() { return curRole === 'admin' || istVerwalterOderKreisverwalter(); }
@@ -2706,10 +2666,8 @@ function drawPolygons(){
 }
 
 // ============================================================
-// ROUTE PLANNER – Straßen-Routing innerhalb eines Gebiets
+// GEBIET DRUCKEN
 // ============================================================
-
-let routeGebietId=null; // Aktuell geplantes Gebiet
 
 // ── Hilfsfunktionen ──
 function haversine(p1,p2){
@@ -2731,392 +2689,36 @@ function calcCentroid(gebietId){
   return{lat:50.94,lng:12.10};
 }
 
-// ── Overpass API: Straßen im Polygon laden ──
-async function fetchStreetsInPolygon(gebietId){
-  const coords=kmlP[gebietId];
-  if(!coords||coords.length<3)throw new Error('Keine Polygon-Koordinaten');
-  const polyStr=coords.map(c=>c[0]+' '+c[1]).join(' ');
-  // Strategie: Erst einfache schnelle Query, bei Fehler noch einfachere Fallback
-  const queries=[
-    // 1. Haupt-Query: Wohnstraßen + Straßen mit Gebäuden (timeout:60)
-    `[out:json][timeout:60];
-way["highway"~"^(residential|living_street)$"](poly:"${polyStr}")->.wohnstrassen;
-way["highway"~"^(unclassified|tertiary|secondary|pedestrian)$"](poly:"${polyStr}")->.andere;
-node(around.andere:30)["addr:housenumber"](poly:"${polyStr}")->.adressen;
-way.andere(bn.adressen)->.bewohnte_andere;
-(.wohnstrassen;.bewohnte_andere;);
-out body;>;out skel qt;`,
-    // 2. Fallback: Nur residential + living_street (sehr schnell, kein addr-Lookup)
-    `[out:json][timeout:60];
-way["highway"~"^(residential|living_street)$"](poly:"${polyStr}");
-out body;>;out skel qt;`,
-    // 3. Letzter Fallback: Alle begehbaren Straßen
-    `[out:json][timeout:60];
-way["highway"~"^(residential|living_street|unclassified|tertiary|pedestrian|footway|path)$"]["highway"!~"^(motorway|trunk|primary)$"](poly:"${polyStr}");
-out body;>;out skel qt;`
-  ];
-  let data=null;
-  for(let i=0;i<queries.length;i++){
-    try{
-      const resp=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:'data='+encodeURIComponent(queries[i])});
-      if(!resp.ok){
-        console.warn(`Overpass Query ${i+1} fehlgeschlagen: ${resp.status}`);
-        if(i<queries.length-1){toast(`⚠️ Overpass Timeout, versuche einfachere Abfrage...`);continue;}
-        throw new Error('Overpass API Fehler: '+resp.status);
-      }
-      data=await resp.json();
-      if(i>0)console.log(`Overpass Fallback-Query ${i+1} erfolgreich`);
-      break;
-    }catch(err){
-      if(i<queries.length-1){console.warn('Overpass Query Fehler, Fallback...',err);continue;}
-      throw err;
-    }
-  }
-  const nodes={};
-  data.elements.filter(e=>e.type==='node').forEach(n=>{nodes[n.id]={lat:n.lat,lng:n.lon}});
-  const ways=data.elements.filter(e=>e.type==='way'&&e.tags).map(w=>({
-    id:w.id,
-    name:w.tags?.name||'',
-    type:w.tags?.highway||'',
-    nodes:w.nodes.map(nid=>nodes[nid]).filter(Boolean)
-  })).filter(w=>w.nodes.length>=2);
-  return{ways,nodes};
-}
-
-// ── Point-in-Polygon Test (Ray-Casting) ──
-function pointInPolygon(point,polygon){
-  // polygon = [[lat,lng],...] , point = {lat,lng}
-  let inside=false;
-  const x=point.lng,y=point.lat;
-  for(let i=0,j=polygon.length-1;i<polygon.length;j=i++){
-    const xi=polygon[i][1],yi=polygon[i][0]; // lng,lat
-    const xj=polygon[j][1],yj=polygon[j][0];
-    if(((yi>y)!==(yj>y))&&(x<(xj-xi)*(y-yi)/(yj-yi)+xi))inside=!inside;
-  }
-  return inside;
-}
-
-// ── Straßen auf Polygon clippen: zusammenhängende Segmente INNERHALB behalten ──
-function prepareStreets(ways,gebietId){
-  const polygon=kmlP[gebietId];
-  const streets=[];
-  const streetNames=new Set();
-  ways.forEach(w=>{
-    if(w.nodes.length<2)return;
-    if(!polygon){
-      // Kein Polygon → alles behalten
-      if(w.name)streetNames.add(w.name);
-      const mid=w.nodes[Math.floor(w.nodes.length/2)];
-      streets.push({id:w.id,name:w.name||'',type:w.type,nodes:w.nodes,midpoint:mid});
-      return;
-    }
-    // Straße in zusammenhängende Segmente innerhalb des Polygons aufteilen
-    // Wenn Node drin → zum aktuellen Segment hinzufügen
-    // Wenn Node draußen → aktuelles Segment abschließen, neues beginnen
-    const segments=[];
-    let currentSeg=[];
-    w.nodes.forEach(n=>{
-      if(pointInPolygon(n,polygon)){
-        currentSeg.push(n);
-      } else {
-        // Node außerhalb: Segment abschließen wenn es Punkte hat
-        if(currentSeg.length>=2){
-          segments.push([...currentSeg]);
-        }
-        currentSeg=[];
-      }
-    });
-    // Letztes Segment
-    if(currentSeg.length>=2)segments.push(currentSeg);
-    // Jedes Segment als eigene "Straße" hinzufügen
-    if(segments.length>0&&w.name)streetNames.add(w.name);
-    segments.forEach((seg,si)=>{
-      const mid=seg[Math.floor(seg.length/2)];
-      streets.push({
-        id:w.id+(si>0?'_'+si:''),
-        name:w.name||'',
-        type:w.type,
-        nodes:seg,
-        midpoint:mid
-      });
-    });
-  });
-  return{streets,streetNames:[...streetNames]};
-}
-
-// ── TSP Nearest-Neighbor: Straßen in optimaler Reihenfolge ──
-// Verbindet immer zum nächstgelegenen Ende/Anfang einer noch nicht besuchten Straße
-function tspStreetOrder(start,streets){
-  if(streets.length===0)return[];
-  const remaining=streets.map((s,i)=>i);
-  const ordered=[];
-  let curPos=start;
-  while(remaining.length>0){
-    let bestIdx=-1,bestDist=Infinity,bestReverse=false;
-    remaining.forEach((si,ri)=>{
-      const s=streets[si];
-      const startNode=s.nodes[0];
-      const endNode=s.nodes[s.nodes.length-1];
-      const dStart=haversine(curPos,startNode);
-      const dEnd=haversine(curPos,endNode);
-      if(dStart<bestDist){bestDist=dStart;bestIdx=ri;bestReverse=false;}
-      if(dEnd<bestDist){bestDist=dEnd;bestIdx=ri;bestReverse=true;}
-    });
-    const streetIdx=remaining[bestIdx];
-    const s=streets[streetIdx];
-    const nodes=bestReverse?[...s.nodes].reverse():s.nodes;
-    ordered.push({...s,nodes,reversed:bestReverse});
-    curPos=nodes[nodes.length-1];// Ende der Straße = nächster Startpunkt
-    remaining.splice(bestIdx,1);
-  }
-  return ordered;
-}
-
-// ── Route-Geometrie aus Straßenreihenfolge zusammenbauen ──
-function buildRouteGeometry(start,orderedStreets){
-  const geometry=[];// [[lat,lng],...]
-  let totalDist=0;
-  // Startpunkt
-  geometry.push([start.lat,start.lng]);
-  let curPos=start;
-  orderedStreets.forEach(s=>{
-    // Verbindungslinie zum Anfang der nächsten Straße (gestrichelt = Fußweg)
-    const streetStart=s.nodes[0];
-    const connectDist=haversine(curPos,streetStart);
-    totalDist+=connectDist;
-    // Straßengeometrie entlang laufen
-    s.nodes.forEach(n=>{
-      geometry.push([n.lat,n.lng]);
-    });
-    // Gesamtlänge der Straße berechnen
-    for(let i=1;i<s.nodes.length;i++){
-      totalDist+=haversine(s.nodes[i-1],s.nodes[i]);
-    }
-    curPos=s.nodes[s.nodes.length-1];
-  });
-  // Gehzeit schätzen: ~4.5 km/h Durchschnitt beim Verteilen (langsamer wg. Briefkästen)
-  const durationMin=Math.round((totalDist/4.5)*60);
-  return{geometry,distance:totalDist,durationMin};
-}
-
-// ── UI: Modal öffnen ──
-function openRoutePlannerUI(gebietId){
-  routeGebietId=gebietId||selId;
-  if(!routeGebietId){toast('⚠️ Kein Gebiet ausgewählt');return}
-  const g=getG(routeGebietId);
-  if(!g){toast('⚠️ Gebiet nicht gefunden');return}
-  document.getElementById('routeModalTitle').textContent='🗺️ Laufweg: '+g.name;
-  document.getElementById('routeGebietInfo').innerHTML=`<strong>${g.name}</strong> · 📦 ${g.stueckzahl} Stück · ${sl(g.status)}`;
-  document.getElementById('routeStatsBox').style.display='none';
-  document.getElementById('routeLoadingBox').style.display='none';
-  document.getElementById('printRouteBtn').style.display='none';
-  updateStartInfo();
-  updateRouteBtn();
-  document.getElementById('routePlannerModalOv').classList.add('open');
-}
-
-function closeRoutePlannerUI(){
-  document.getElementById('routePlannerModalOv').classList.remove('open');
-}
-
-function updateRouteBtn(){
-  const has=!!routeStartPoint;
-  const btn=document.getElementById('calculateRouteBtn');
-  btn.disabled=!has;btn.style.opacity=has?'1':'.5';
-}
-
-// ── Startpunkt: GPS ──
-function routePlannerGPS(){
-  const btn=document.getElementById('gpsBtn');
-  btn.disabled=true;btn.textContent='⏳ Standort wird ermittelt...';
-  navigator.geolocation.getCurrentPosition(
-    pos=>{
-      routeStartPoint={lat:pos.coords.latitude,lng:pos.coords.longitude};
-      updateStartInfo();updateRouteBtn();
-      btn.disabled=false;btn.textContent='📍 Mein Standort (GPS)';
-      toast('✅ Standort ermittelt');
-    },
-    err=>{
-      toast('⚠️ GPS nicht verfügbar');
-      btn.disabled=false;btn.textContent='📍 Mein Standort (GPS)';
-    },
-    {enableHighAccuracy:true,timeout:10000}
-  );
-}
-
-// ── Startpunkt: Karte klicken ──
-function routePlannerClickMode(){
-  closeRoutePlannerUI();
-  toast('ℹ️ Klicke auf die Karte um den Startpunkt zu setzen');
-  const handler=e=>{
-    routeStartPoint={lat:e.latlng.lat,lng:e.latlng.lng};
-    updateStartInfo();
-    if(routeStartMarker)map.removeLayer(routeStartMarker);
-    routeStartMarker=L.marker([e.latlng.lat,e.latlng.lng],{
-      icon:L.divIcon({className:'route-marker',html:'<div style="width:28px;height:28px;background:#34c759;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.3)">S</div>',iconSize:[28,28],iconAnchor:[14,14]})
-    }).addTo(map);
-    map.off('click',handler);
-    toast('✅ Startpunkt gesetzt');
-    openRoutePlannerUI(routeGebietId);
-  };
-  map.on('click',handler);
-}
-
-function updateStartInfo(){
-  const el=document.getElementById('startPointInfo');
-  if(routeStartPoint){
-    el.innerHTML=`✅ <strong>${routeStartPoint.lat.toFixed(4)}, ${routeStartPoint.lng.toFixed(4)}</strong>`;
-    el.style.color='var(--green,#34c759)';
-  } else {
-    el.textContent='Kein Startpunkt gewählt';el.style.color='var(--text3)';
-  }
-}
-
-// ── Hauptfunktion: Route berechnen (ohne OSRM, direkte Straßengeometrien) ──
-async function calculateRoute(){
-  if(!routeStartPoint){toast('⚠️ Erst Startpunkt setzen');return}
-  if(!routeGebietId){toast('⚠️ Kein Gebiet');return}
-  const loadingBox=document.getElementById('routeLoadingBox');
-  const loadingText=document.getElementById('routeLoadingText');
-  const calcBtn=document.getElementById('calculateRouteBtn');
-  calcBtn.disabled=true;loadingBox.style.display='block';
-  try{
-    // 1. Straßen aus Overpass laden
-    loadingText.textContent='📡 Straßen werden geladen...';
-    const{ways}=await fetchStreetsInPolygon(routeGebietId);
-    if(ways.length===0){toast('⚠️ Keine Straßen im Gebiet gefunden');loadingBox.style.display='none';calcBtn.disabled=false;return}
-    // 2. Straßen auf Polygon filtern & vorbereiten
-    loadingText.textContent=`🗺️ ${ways.length} Straßen gefunden, filtere auf Gebiet...`;
-    const{streets,streetNames}=prepareStreets(ways,routeGebietId);
-    if(streets.length===0){toast('⚠️ Keine Straßen im Polygon');loadingBox.style.display='none';calcBtn.disabled=false;return}
-    // 3. TSP: Straßen in optimaler Laufreihenfolge sortieren
-    loadingText.textContent=`🚶 Optimiere Reihenfolge für ${streets.length} Straßenabschnitte...`;
-    const orderedStreets=tspStreetOrder(routeStartPoint,streets);
-    // 4. Route-Geometrie zusammenbauen (direkt aus Straßen-Nodes)
-    const routeData=buildRouteGeometry(routeStartPoint,orderedStreets);
-    // 5. Visualisierung
-    visualizeRoute(routeData,orderedStreets);
-    routeResult={routeData,orderedStreets,streetNames,gebietId:routeGebietId};
-    // 6. Stats anzeigen
-    const distKm=routeData.distance.toFixed(1);
-    const durMin=routeData.durationMin;
-    const statsBox=document.getElementById('routeStatsBox');
-    statsBox.style.display='block';
-    const namedStreets=streetNames.filter(Boolean).sort();
-    document.getElementById('routeStatsList').innerHTML=`
-      <div style="margin-bottom:8px">
-        <span style="font-size:1rem;font-weight:700">📏 ${distKm} km</span> ·
-        <span style="font-size:1rem;font-weight:700">⏱️ ~${durMin} min</span>
-      </div>
-      <div style="font-size:.75rem;font-weight:600;color:var(--text3);margin-bottom:4px">${streets.length} Straßenabschnitte (${namedStreets.length} benannt):</div>
-      <div style="font-size:.75rem;color:var(--text2);line-height:1.5">${namedStreets.join(', ')||'Nur unbenannte Wege'}</div>
-    `;
-    document.getElementById('printRouteBtn').style.display='inline-flex';
-    loadingBox.style.display='none';
-    toast(`✅ Laufweg: ${distKm} km · ~${durMin} min · ${namedStreets.length} Straßen`);
-  }catch(err){
-    console.error('Route calculation error:',err);
-    loadingBox.style.display='none';
-    toast('⚠️ Fehler: '+err.message);
-  }
-  calcBtn.disabled=false;
-}
-
-// ── Karten-Visualisierung (nur Straßengeometrien, keine Luftlinien) ──
-function visualizeRoute(routeData,orderedStreets){
-  clearRouteVisualization();
-  if(!map)return;
-  // Startpunkt-Marker
-  if(routeStartMarker)map.removeLayer(routeStartMarker);
-  routeStartMarker=L.marker([routeStartPoint.lat,routeStartPoint.lng],{
-    icon:L.divIcon({className:'route-marker',html:'<div style="width:30px;height:30px;background:#34c759;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.3)">S</div>',iconSize:[30,30],iconAnchor:[15,15]})
-  }).bindPopup('Startpunkt').addTo(map);
-  // NUR die echten Straßengeometrien zeichnen + Nummern
-  orderedStreets.forEach((s,idx)=>{
-    const streetCoords=s.nodes.map(n=>[n.lat,n.lng]);
-    const streetLine=L.polyline(streetCoords,{color:'#009ee0',weight:5,opacity:.85}).addTo(map);
-    if(s.name)streetLine.bindTooltip(s.name,{sticky:true,opacity:.9});
-    routeMarkers.push(streetLine);
-    // Nummer am Anfang der Straße
-    const streetStart=s.nodes[0];
-    const numMarker=L.marker([streetStart.lat,streetStart.lng],{
-      icon:L.divIcon({
-        className:'route-num',
-        html:`<div style="width:20px;height:20px;background:#009ee0;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;box-shadow:0 1px 4px rgba(0,0,0,.3)">${idx+1}</div>`,
-        iconSize:[20,20],iconAnchor:[10,10]
-      })
-    }).addTo(map);
-    if(s.name)numMarker.bindTooltip(`${idx+1}. ${s.name}`,{opacity:.9});
-    routeMarkers.push(numMarker);
-  });
-  // Unsichtbare Polyline für fitBounds und toggle
-  const allCoords=orderedStreets.flatMap(s=>s.nodes.map(n=>[n.lat,n.lng]));
-  routePolyline=L.polyline(allCoords,{opacity:0,weight:0}).addTo(map);
-  // Bounds auf Polygon
-  const polygon=kmlP[routeGebietId];
-  if(polygon){
-    const polyBounds=L.latLngBounds(polygon.map(c=>[c[0],c[1]]));
-    map.fitBounds(polyBounds.pad(0.05));
-  } else if(allCoords.length>0){
-    map.fitBounds(L.latLngBounds(allCoords).pad(0.1));
-  }
-}
-
-function clearRouteVisualization(){
-  routeMarkers.forEach(m=>{if(map)try{map.removeLayer(m)}catch(e){}});routeMarkers=[];
-  if(routePolyline&&map){try{map.removeLayer(routePolyline)}catch(e){}routePolyline=null}
-  if(routeStartMarker&&map){try{map.removeLayer(routeStartMarker)}catch(e){}routeStartMarker=null}
-}
-
-function toggleRouteVisualization(){
-  if(routePolyline&&map.hasLayer(routePolyline)){
-    map.removeLayer(routePolyline);
-    routeMarkers.forEach(m=>map.removeLayer(m));
-    if(routeStartMarker)map.removeLayer(routeStartMarker);
-    toast('Route ausgeblendet');
-  } else if(routeResult){
-    if(routePolyline)map.addLayer(routePolyline);
-    routeMarkers.forEach(m=>map.addLayer(m));
-    if(routeStartMarker)map.addLayer(routeStartMarker);
-    toast('Route eingeblendet');
-  }
-}
-
-// ── Druckfunktion ──
-function printRoute(){
-  if(!routeResult){toast('⚠️ Keine Route berechnet');return}
-  const{routeData,orderedStreets,streetNames,gebietId}=routeResult;
+// ── Gebiet drucken: Karte + Infos ausdrucken ──
+function printGebiet(gebietId){
   const g=getG(gebietId);
-  const distKm=routeData.distance.toFixed(1);
-  const durMin=routeData.durationMin;
-  const namedStreets=streetNames.filter(Boolean).sort();
-  // Geordnete Straßenliste mit Nummern (in Laufreihenfolge)
-  const streetList=orderedStreets.filter(s=>s.name).map((s,i)=>({num:i+1,name:s.name}));
-  // Duplikate zusammenfassen
-  const uniqueList=[];
-  streetList.forEach(s=>{
-    if(!uniqueList.some(u=>u.name===s.name))uniqueList.push(s);
-  });
-  let old=document.getElementById('routePrintContainer');if(old)old.remove();
-  const div=document.createElement('div');div.id='routePrintContainer';div.style.display='none';
+  if(!g){toast('⚠️ Gebiet nicht gefunden');return}
+  // Karte auf Gebiet zentrieren
+  const coords=kmlP[gebietId];
+  if(coords&&coords.length>2){
+    const bounds=L.latLngBounds(coords.map(c=>[c[0],c[1]]));
+    map.fitBounds(bounds.pad(0.05));
+  }
+  // Druckcontainer erstellen
+  let old=document.getElementById('gebietPrintContainer');if(old)old.remove();
+  const div=document.createElement('div');div.id='gebietPrintContainer';div.style.display='none';
+  const verteilerInfo=g.verteilerId?`<strong>Verteiler:</strong> ${g.verteiler||'Zugewiesen'}`:'<strong>Verteiler:</strong> Nicht zugewiesen';
   div.innerHTML=`
-    <div class="rp-header">🗺️ Laufweg: ${g?.name||'Gebiet'}</div>
-    <div class="rp-meta">
+    <div class="gp-header">${g.name}</div>
+    <div class="gp-meta">
       <strong>Datum:</strong> ${new Date().toLocaleDateString('de-DE')}<br>
-      <strong>Stückzahl:</strong> 📦 ${g?.stueckzahl||0} · <strong>Distanz:</strong> ${distKm} km · <strong>Gehzeit:</strong> ~${durMin} min
-    </div>
-    <div style="margin-bottom:12px">
-      <strong>Straßen in Laufreihenfolge (${uniqueList.length}):</strong><br>
-      ${uniqueList.map(s=>`<span class="rp-item" style="display:inline;border:none;padding:0"><span class="rp-num" style="min-width:auto">${s.num}.</span> ${s.name}</span>`).join(' · ')}
+      <strong>Status:</strong> ${sl(g.status)} · <strong>Stückzahl:</strong> ${g.stueckzahl||0}<br>
+      ${verteilerInfo}
+      ${g.hinweise&&g.hinweise.length?'<br><strong>Hinweise:</strong> '+g.hinweise.join(', '):''}
     </div>
   `;
   document.body.appendChild(div);
-  window.print();
-  setTimeout(()=>div.remove(),2000);
+  // Kurz warten bis Karte gerendert ist
+  setTimeout(()=>{
+    window.print();
+    setTimeout(()=>div.remove(),2000);
+  },300);
 }
-
-// ── Sichtbarkeit (nicht mehr in Sidebar, jetzt im Detail-Panel) ──
-function updateRoutePlannerVisibility(){}
 
 // ============================================================
 // SIDEBAR
@@ -3268,7 +2870,6 @@ function renderStats(){
   document.getElementById('statOffen').textContent=(tot-vert).toLocaleString('de');
   document.getElementById('progText').textContent=`${fn} / ${gs.length}`;
   document.getElementById('progFill').style.width=(gs.length?fn/gs.length*100:0)+'%';
-  updateRoutePlannerVisibility();
 }
 
 // ============================================================
@@ -3457,13 +3058,10 @@ function openDetail(id){
       <button class="btn btn-g" onclick="redrawGebiet('${g.id}')">🔄 Polygon neu zeichnen</button>
     </div></div>`;
   }
-  // Route-Planer Button (für Verteiler die dem Gebiet zugewiesen sind, oder Manager)
-  if((curRole==='verteiler'&&g.verteilerId===currentUser?.id)||istManager()){
-    h+=`<div class="d-sec"><div class="sec-hd">Routenplanung</div><div class="f-stack">
-      <button class="btn btn-p" onclick="openRoutePlannerUI('${g.id}')">🗺️ Laufweg planen</button>
-      ${routeResult?`<button class="btn btn-g" onclick="toggleRouteVisualization()">👁 Route ein/ausblenden</button>`:''}
-    </div></div>`;
-  }
+  // Gebiet drucken
+  h+=`<div class="d-sec"><div class="f-stack">
+    <button class="btn btn-g" onclick="printGebiet('${g.id}')">🖨️ Gebiet drucken</button>
+  </div></div>`;
   document.getElementById('detailBody').innerHTML=h;
   document.getElementById('detailPanel').classList.add('open');
 }
