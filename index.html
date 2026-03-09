@@ -462,7 +462,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v47</div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v48</div>
 
 <!-- NUTZER EINLADEN MODAL (nur Admin) -->
 <div class="modal-ov" id="inviteModalOv" onclick="if(event.target===this)closeInviteModal()">
@@ -2796,24 +2796,50 @@ function pointInPolygon(point,polygon){
   return inside;
 }
 
-// ── Straßen auf Polygon filtern — komplette Geometrien behalten! ──
+// ── Straßen auf Polygon clippen: zusammenhängende Segmente INNERHALB behalten ──
 function prepareStreets(ways,gebietId){
   const polygon=kmlP[gebietId];
   const streets=[];
   const streetNames=new Set();
   ways.forEach(w=>{
     if(w.nodes.length<2)return;
-    // Mittelpunkt der Straße berechnen
-    const mid=w.nodes[Math.floor(w.nodes.length/2)];
-    // Straße behalten wenn: mindestens ein Node im Polygon liegt
-    // (= Straße berührt das Gebiet)
-    if(polygon){
-      const anyInside=w.nodes.some(n=>pointInPolygon(n,polygon));
-      if(!anyInside)return;// Straße komplett außerhalb → überspringen
+    if(!polygon){
+      // Kein Polygon → alles behalten
+      if(w.name)streetNames.add(w.name);
+      const mid=w.nodes[Math.floor(w.nodes.length/2)];
+      streets.push({id:w.id,name:w.name||'',type:w.type,nodes:w.nodes,midpoint:mid});
+      return;
     }
-    if(w.name)streetNames.add(w.name);
-    // KOMPLETTE Geometrie behalten (nicht einzelne Nodes filtern!)
-    streets.push({id:w.id,name:w.name||'',type:w.type,nodes:w.nodes,midpoint:mid});
+    // Straße in zusammenhängende Segmente innerhalb des Polygons aufteilen
+    // Wenn Node drin → zum aktuellen Segment hinzufügen
+    // Wenn Node draußen → aktuelles Segment abschließen, neues beginnen
+    const segments=[];
+    let currentSeg=[];
+    w.nodes.forEach(n=>{
+      if(pointInPolygon(n,polygon)){
+        currentSeg.push(n);
+      } else {
+        // Node außerhalb: Segment abschließen wenn es Punkte hat
+        if(currentSeg.length>=2){
+          segments.push([...currentSeg]);
+        }
+        currentSeg=[];
+      }
+    });
+    // Letztes Segment
+    if(currentSeg.length>=2)segments.push(currentSeg);
+    // Jedes Segment als eigene "Straße" hinzufügen
+    if(segments.length>0&&w.name)streetNames.add(w.name);
+    segments.forEach((seg,si)=>{
+      const mid=seg[Math.floor(seg.length/2)];
+      streets.push({
+        id:w.id+(si>0?'_'+si:''),
+        name:w.name||'',
+        type:w.type,
+        nodes:seg,
+        midpoint:mid
+      });
+    });
   });
   return{streets,streetNames:[...streetNames]};
 }
