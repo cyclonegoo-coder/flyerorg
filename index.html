@@ -1377,8 +1377,8 @@ function renderUserList() {
            <option value="admin" ${u.rolle==='admin'?'selected':''}>Admin</option>`;
       rolleSelect = `<select onchange="changeRole('${u.id}',this.value)" style="font-size:.72rem;padding:2px 4px;border-radius:4px;border:1px solid var(--border);background:var(--surface1);cursor:pointer">${opts}</select>`;
     }
-    const regEdit = (!readOnly && (u.rolle === 'verwalter' || u.rolle === 'kreisverwalter' || u.rolle === 'admin'))
-      ? `<button onclick="openEditRegionenModal('${u.id}','${(u.name||'').replace(/'/g,"\\'")}',${JSON.stringify(u.verwaltete_regionen||[]).replace(/"/g,'&quot;')})" style="background:none;border:none;color:var(--blue);cursor:pointer;font-size:.8rem;padding:2px 4px;border-radius:4px" title="Regionen bearbeiten">🗺</button>`
+    const regEdit = (!readOnly && (u.rolle === 'verwalter' || u.rolle === 'kreisverwalter'))
+      ? `<button onclick="openEditZuweisungModal('${u.id}','${(u.name||'').replace(/'/g,"\\'")}','${u.rolle}',${JSON.stringify(u.verwaltete_regionen||[]).replace(/"/g,'&quot;')},'${(u.verwalteter_landkreis||'').replace(/'/g,"\\'")}')" style="background:none;border:none;color:var(--blue);cursor:pointer;font-size:.8rem;padding:2px 4px;border-radius:4px" title="${u.rolle==='kreisverwalter'?'Landkreis bearbeiten':'Regionen bearbeiten'}">🗺</button>`
       : '';
     const deleteBtn = readOnly ? '' : `<button onclick="deleteUser('${u.id}','${(u.name||'').replace(/'/g,"\\'")}')" style="background:none;border:none;color:var(--text4);cursor:pointer;font-size:.8rem;padding:2px 4px;border-radius:4px" title="Nutzer entfernen">🗑</button>`;
     return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--surface2);border-radius:var(--r8)">
@@ -1436,26 +1436,48 @@ function getRegionVerwalter(regionKey, excludeUserId) {
   });
 }
 
-function openEditRegionenModal(userId, userName, currentRegionen) {
-  document.getElementById('editRegModalTitle').textContent = `🗺 Regionen: ${userName}`;
+let editZuweisungRolle = 'verwalter'; // Rolle des Nutzers der bearbeitet wird
+
+function openEditZuweisungModal(userId, userName, zielRolle, currentRegionen, currentLandkreis) {
+  editZuweisungRolle = zielRolle;
   document.getElementById('editRegUserId').value = userId;
   const list = document.getElementById('editRegList');
-  const isKV = curRole === 'kreisverwalter';
-  const kvLK = currentProfile?.verwalteter_landkreis;
-  // KV sieht nur Regionen aus seinem Landkreis
-  const sichtbar = isKV
-    ? Object.entries(regionen).filter(([,r])=>{const gv=gebietsverbaende[r.gebietsverband_id];return gv&&gv.landkreis_id===kvLK;})
-    : Object.entries(regionen);
-  list.innerHTML = sichtbar.map(([k, r]) => {
-    const belegt = getRegionVerwalter(k, userId);
-    const checked = currentRegionen.includes(k) ? 'checked' : '';
-    const hint = belegt ? `<span style="font-size:.7rem;color:var(--text4);margin-left:4px">(auch: ${belegt.name})</span>` : '';
-    return `<label style="display:flex;align-items:center;gap:6px;font-size:.82rem;cursor:pointer">
-      <input type="checkbox" id="editReg_${k}" value="${k}" ${checked}>
-      <span>${r.name}${hint}</span>
-    </label>`;
-  }).join('');
+  const myIsKV = curRole === 'kreisverwalter';
+  const myLK = currentProfile?.verwalteter_landkreis;
+
+  if (zielRolle === 'kreisverwalter') {
+    // Kreisverwalter → Landkreis-Auswahl (Radio-Buttons, nur einer)
+    document.getElementById('editRegModalTitle').textContent = `🗺 Landkreis: ${userName}`;
+    const lkEntries = myIsKV ? Object.entries(landkreise).filter(([id])=>id===myLK) : Object.entries(landkreise);
+    list.innerHTML = lkEntries.map(([id, lk]) => {
+      const checked = currentLandkreis === id ? 'checked' : '';
+      return `<label style="display:flex;align-items:center;gap:6px;font-size:.82rem;cursor:pointer">
+        <input type="radio" name="editLK" value="${id}" ${checked}>
+        <span>${lk.name}</span>
+      </label>`;
+    }).join('') || '<div style="font-size:.78rem;color:var(--text4)">Keine Landkreise verfügbar</div>';
+  } else {
+    // Gebietsverwalter → Regionen-Auswahl (Checkboxen)
+    document.getElementById('editRegModalTitle').textContent = `🗺 Regionen: ${userName}`;
+    const sichtbar = myIsKV
+      ? Object.entries(regionen).filter(([,r])=>{const gv=gebietsverbaende[r.gebietsverband_id];return gv&&gv.landkreis_id===myLK;})
+      : Object.entries(regionen);
+    list.innerHTML = sichtbar.map(([k, r]) => {
+      const belegt = getRegionVerwalter(k, userId);
+      const checked = currentRegionen.includes(k) ? 'checked' : '';
+      const hint = belegt ? `<span style="font-size:.7rem;color:var(--text4);margin-left:4px">(auch: ${belegt.name})</span>` : '';
+      return `<label style="display:flex;align-items:center;gap:6px;font-size:.82rem;cursor:pointer">
+        <input type="checkbox" id="editReg_${k}" value="${k}" ${checked}>
+        <span>${r.name}${hint}</span>
+      </label>`;
+    }).join('');
+  }
   document.getElementById('editRegModalOv').classList.add('open');
+}
+
+// Legacy-Wrapper für Kompatibilität
+function openEditRegionenModal(userId, userName, currentRegionen) {
+  openEditZuweisungModal(userId, userName, 'verwalter', currentRegionen, '');
 }
 
 function closeEditRegModal() {
@@ -1464,15 +1486,27 @@ function closeEditRegModal() {
 
 async function saveRegionen() {
   const userId = document.getElementById('editRegUserId').value;
-  const selected = Array.from(document.querySelectorAll('#editRegList input[type=checkbox]:checked')).map(cb => cb.value);
-  const { error } = await sb.from('user_profiles').update({ verwaltete_regionen: selected, verwaltete_gebietsverbaende: selected }).eq('id', userId);
-  if (error) { toast('⚠️ Fehler: ' + (error.message || error.code)); console.error('saveRegionen error:', error); return; }
-  // Lokal aktualisieren
   const u = allUsers.find(u => u.id === userId);
-  if (u) { u.verwaltete_regionen = selected; u.verwaltete_gebietsverbaende = selected; }
-  renderUserList();
-  closeEditRegModal();
-  toast('✅ Regionen gespeichert');
+
+  if (editZuweisungRolle === 'kreisverwalter') {
+    // Landkreis speichern
+    const selectedLK = document.querySelector('#editRegList input[name="editLK"]:checked')?.value || null;
+    const { error } = await sb.from('user_profiles').update({ verwalteter_landkreis: selectedLK }).eq('id', userId);
+    if (error) { toast('⚠️ Fehler: ' + (error.message || error.code)); return; }
+    if (u) u.verwalteter_landkreis = selectedLK;
+    renderUserList();
+    closeEditRegModal();
+    toast('✅ Landkreis gespeichert');
+  } else {
+    // Regionen speichern
+    const selected = Array.from(document.querySelectorAll('#editRegList input[type=checkbox]:checked')).map(cb => cb.value);
+    const { error } = await sb.from('user_profiles').update({ verwaltete_regionen: selected, verwaltete_gebietsverbaende: selected }).eq('id', userId);
+    if (error) { toast('⚠️ Fehler: ' + (error.message || error.code)); return; }
+    if (u) { u.verwaltete_regionen = selected; u.verwaltete_gebietsverbaende = selected; }
+    renderUserList();
+    closeEditRegModal();
+    toast('✅ Regionen gespeichert');
+  }
 }
 
 function renderInviteRegionen() {
