@@ -226,6 +226,20 @@ textarea{min-height:68px}
   @keyframes fadeScale{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
   .m-handle{display:none}
 }
+/* ── PRINT STYLES ── */
+@media print{
+  body>*:not(#routePrintContainer):not(#map){display:none!important}
+  #map{position:relative!important;width:100%!important;height:50vh!important;border:1px solid #ccc!important}
+  .sidebar,.detail-panel,.draw-toolbar,.draw-info,header,.modal-ov,.toast,.leaflet-control-zoom,.leg{display:none!important}
+  #routePrintContainer{display:block!important;padding:16px;font-family:system-ui,sans-serif}
+  .rp-header{font-size:16pt;font-weight:700;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:10px}
+  .rp-meta{font-size:9pt;color:#555;margin-bottom:14px;line-height:1.5}
+  .rp-item{border-bottom:1px solid #ddd;padding:7px 0;page-break-inside:avoid;display:flex;gap:10px;align-items:baseline}
+  .rp-num{font-weight:700;color:#009ee0;font-size:13pt;min-width:28px}
+  .rp-name{font-weight:600;font-size:11pt}
+  .rp-detail{font-size:9pt;color:#666}
+}
+.route-marker{background:none!important;border:none!important}
 </style>
 </head>
 <body>
@@ -354,6 +368,10 @@ textarea{min-height:68px}
     <div class="prog-wrap">
       <div class="prog-row"><span>Fortschritt</span><span id="progText">–</span></div>
       <div class="prog-track"><div class="prog-fill" id="progFill" style="width:0%"></div></div>
+    </div>
+    <div id="routePlannerSection" style="display:none;padding:8px 10px 4px;border-top:1px solid var(--sep)">
+      <button class="btn btn-p" style="width:100%;font-size:.8rem" onclick="openRoutePlannerUI()">🗺️ Route planen</button>
+      <button id="routeToggleBtn" class="btn btn-g" style="width:100%;font-size:.75rem;margin-top:4px;display:none" onclick="toggleRouteVisualization()">👁 Route ausblenden</button>
     </div>
     <div class="g-list" id="gebietList"></div>
   </div>
@@ -644,6 +662,38 @@ textarea{min-height:68px}
     <div class="m-actions" style="margin-top:12px">
       <button class="btn btn-g" onclick="resetKampForm()">Abbrechen</button>
       <button class="btn btn-p" id="kampSaveBtn" onclick="saveKampagne()">Erstellen</button>
+    </div>
+  </div>
+</div>
+
+<!-- ROUTE PLANNER MODAL -->
+<div class="modal-ov" id="routePlannerModalOv" onclick="if(event.target===this)closeRoutePlannerUI()">
+  <div class="modal" style="max-width:460px">
+    <div class="m-handle"></div>
+    <div class="m-title">🗺️ Route planen</div>
+    <div style="display:flex;flex-direction:column;gap:10px;padding:0 18px 12px">
+      <div style="background:var(--surface2);padding:12px;border-radius:var(--r8)">
+        <div style="font-size:.7rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:8px">Startpunkt</div>
+        <button class="btn btn-g" id="gpsBtn" style="width:100%;font-size:.8rem" onclick="routePlannerGPS()">📍 Mein Standort (GPS)</button>
+        <button class="btn btn-g" style="width:100%;font-size:.8rem;margin-top:5px" onclick="routePlannerClickMode()">🖱️ Punkt auf Karte setzen</button>
+        <div id="startPointInfo" style="font-size:.75rem;color:var(--text3);text-align:center;padding:6px 0 0">Kein Startpunkt gewählt</div>
+      </div>
+      <div style="background:var(--surface2);padding:12px;border-radius:var(--r8)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div style="font-size:.7rem;font-weight:600;color:var(--text3);text-transform:uppercase">Meine Gebiete</div>
+          <label style="font-size:.7rem;color:var(--text3);cursor:pointer"><input type="checkbox" id="routeSelectAll" checked onchange="routeToggleAll(this.checked)"> Alle</label>
+        </div>
+        <div id="routeGebietList" style="max-height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:3px"></div>
+      </div>
+      <div id="routeStatsBox" style="background:var(--surface2);padding:12px;border-radius:var(--r8);display:none">
+        <div style="font-size:.7rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:6px">Berechnete Route</div>
+        <div id="routeStatsList" style="font-size:.75rem;color:var(--text2);line-height:1.6;max-height:200px;overflow-y:auto"></div>
+      </div>
+    </div>
+    <div class="m-actions">
+      <button class="btn btn-g" id="printRouteBtn" style="display:none" onclick="printRoute()">🖨️ Drucken</button>
+      <button class="btn btn-g" onclick="closeRoutePlannerUI()">Schließen</button>
+      <button class="btn btn-p" id="calculateRouteBtn" onclick="calculateRoute()" disabled>Route berechnen</button>
     </div>
   </div>
 </div>
@@ -2384,6 +2434,9 @@ let curLK='alle',curGV='alle',curReg='alle',selId=null,curRole='verteiler',layer
 const scol={offen:{f:'#aeaeb2',s:'#8e8e93'},offen_zugewiesen:{f:'#cfd8dc',s:'#546e7a'},zugeteilt:{f:'#ff9500',s:'#c97800'},fertig:{f:'#42a5f5',s:'#1565c0'},problem:{f:'#ff3b30',s:'#c62828'}};
 function getGebietFarbe(g){if(!g.verteilerId)return scol.problem;return(g.status==='offen'&&g.verteilerId)?scol.offen_zugewiesen:(scol[g.status]||scol.offen);}
 
+// ── ROUTE PLANNER STATE ──
+let routeStartPoint=null,routeResult=null,routeMarkers=[],routePolyline=null,routeStartMarker=null;
+
 // ── HELPER: Rollen-Prüfungen ──
 function istVerwalterOderKreisverwalter() { return curRole === 'verwalter' || curRole === 'kreisverwalter'; }
 function istManager() { return curRole === 'admin' || istVerwalterOderKreisverwalter(); }
@@ -2655,6 +2708,262 @@ function drawPolygons(){
 }
 
 // ============================================================
+// ROUTE PLANNER
+// ============================================================
+
+// ── Hilfsfunktionen ──
+function haversine(p1,p2){
+  const R=6371,dLat=(p2.lat-p1.lat)*Math.PI/180,dLng=(p2.lng-p1.lng)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2+Math.cos(p1.lat*Math.PI/180)*Math.cos(p2.lat*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+function calcCentroid(gebietId){
+  const coords=kmlP[gebietId];
+  if(coords&&coords.length>0){
+    let sLat=0,sLng=0;
+    coords.forEach(c=>{sLat+=c[0];sLng+=c[1]});
+    return{lat:sLat/coords.length,lng:sLng/coords.length};
+  }
+  // Fallback: getCoords
+  for(const[rk,r]of Object.entries(regionen)){
+    const idx=r.gebiete.findIndex(g=>g.id===gebietId);
+    if(idx>=0){
+      const c=getCoords(rk,idx,r.gebiete.length,gebietId);
+      let sLat=0,sLng=0;
+      c.forEach(p=>{sLat+=p[0];sLng+=p[1]});
+      return{lat:sLat/c.length,lng:sLng/c.length};
+    }
+  }
+  return{lat:50.94,lng:12.10};
+}
+
+function tspNearestNeighbor(start,points){
+  if(points.length===0)return[];
+  if(points.length===1)return[points[0]];
+  const visited=new Set();
+  const route=[];
+  // Finde nächsten Punkt zum Start
+  let cur=null,minD=Infinity;
+  points.forEach(p=>{const d=haversine(start,p.c);if(d<minD){minD=d;cur=p}});
+  visited.add(cur.id);route.push(cur);
+  // Greedy: immer den nächsten unbesuchten
+  while(visited.size<points.length){
+    let next=null,minD=Infinity;
+    points.forEach(p=>{
+      if(!visited.has(p.id)){const d=haversine(cur.c,p.c);if(d<minD){minD=d;next=p}}
+    });
+    if(!next)break;
+    visited.add(next.id);route.push(next);cur=next;
+  }
+  return route;
+}
+
+// ── Gesamtdistanz berechnen ──
+function calcRouteDist(start,route){
+  let total=0,prev=start;
+  route.forEach(p=>{total+=haversine(prev,p.c);prev=p.c});
+  return total;
+}
+
+// ── UI: Modal öffnen ──
+function openRoutePlannerUI(){
+  const meineGebiete=getVisibleGebiete().filter(g=>g.verteilerId===currentUser?.id);
+  if(meineGebiete.length===0){toast('⚠️ Keine Gebiete zugewiesen');return}
+  // Gebiete-Checkboxen rendern
+  document.getElementById('routeGebietList').innerHTML=meineGebiete.map(g=>
+    `<label style="display:flex;align-items:center;gap:6px;padding:5px 6px;background:var(--surface);border-radius:6px;cursor:pointer;font-size:.75rem">
+      <input type="checkbox" class="routeGebietCb" value="${g.id}" checked onchange="updateRouteBtn()">
+      <span style="flex:1"><strong>${g.name}</strong> · 📦 ${g.stueckzahl}</span>
+    </label>`
+  ).join('');
+  document.getElementById('routeSelectAll').checked=true;
+  document.getElementById('routeStatsBox').style.display='none';
+  document.getElementById('printRouteBtn').style.display='none';
+  updateRouteBtn();
+  document.getElementById('routePlannerModalOv').classList.add('open');
+}
+
+function closeRoutePlannerUI(){
+  document.getElementById('routePlannerModalOv').classList.remove('open');
+}
+
+function routeToggleAll(checked){
+  document.querySelectorAll('.routeGebietCb').forEach(cb=>cb.checked=checked);
+  updateRouteBtn();
+}
+
+function updateRouteBtn(){
+  const has=routeStartPoint&&document.querySelectorAll('.routeGebietCb:checked').length>0;
+  const btn=document.getElementById('calculateRouteBtn');
+  btn.disabled=!has;btn.style.opacity=has?'1':'.5';
+}
+
+// ── Startpunkt: GPS ──
+function routePlannerGPS(){
+  const btn=document.getElementById('gpsBtn');
+  btn.disabled=true;btn.textContent='⏳ Standort wird ermittelt...';
+  navigator.geolocation.getCurrentPosition(
+    pos=>{
+      routeStartPoint={lat:pos.coords.latitude,lng:pos.coords.longitude};
+      updateStartInfo();updateRouteBtn();
+      btn.disabled=false;btn.textContent='📍 Mein Standort (GPS)';
+      toast('✅ Standort ermittelt');
+    },
+    err=>{
+      toast('⚠️ GPS nicht verfügbar');
+      btn.disabled=false;btn.textContent='📍 Mein Standort (GPS)';
+    },
+    {enableHighAccuracy:true,timeout:10000}
+  );
+}
+
+// ── Startpunkt: Karte klicken ──
+function routePlannerClickMode(){
+  closeRoutePlannerUI();
+  toast('ℹ️ Klicke auf die Karte um den Startpunkt zu setzen');
+  const handler=e=>{
+    routeStartPoint={lat:e.latlng.lat,lng:e.latlng.lng};
+    updateStartInfo();
+    // Startpunkt-Marker setzen
+    if(routeStartMarker)map.removeLayer(routeStartMarker);
+    routeStartMarker=L.marker([e.latlng.lat,e.latlng.lng],{
+      icon:L.divIcon({className:'route-marker',html:'<div style="width:28px;height:28px;background:#34c759;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.3)">S</div>',iconSize:[28,28],iconAnchor:[14,14]})
+    }).addTo(map);
+    map.off('click',handler);
+    toast('✅ Startpunkt gesetzt');
+    openRoutePlannerUI();
+    updateRouteBtn();
+  };
+  map.on('click',handler);
+}
+
+function updateStartInfo(){
+  const el=document.getElementById('startPointInfo');
+  if(routeStartPoint){
+    el.innerHTML=`✅ <strong>${routeStartPoint.lat.toFixed(4)}, ${routeStartPoint.lng.toFixed(4)}</strong>`;
+    el.style.color='var(--green,#34c759)';
+  } else {
+    el.textContent='Kein Startpunkt gewählt';el.style.color='var(--text3)';
+  }
+}
+
+// ── Route berechnen ──
+function calculateRoute(){
+  if(!routeStartPoint){toast('⚠️ Erst Startpunkt setzen');return}
+  const selIds=new Set([...document.querySelectorAll('.routeGebietCb:checked')].map(cb=>cb.value));
+  if(selIds.size===0){toast('⚠️ Mindestens ein Gebiet auswählen');return}
+  const meineGebiete=getVisibleGebiete().filter(g=>selIds.has(g.id));
+  // Centroids berechnen
+  const points=meineGebiete.map(g=>({id:g.id,name:g.name,stueckzahl:g.stueckzahl,hinweise:g.hinweise||[],c:calcCentroid(g.id)}));
+  // TSP lösen
+  const sorted=tspNearestNeighbor(routeStartPoint,points);
+  routeResult=sorted;
+  // Visualisierung
+  visualizeRoute(sorted);
+  // Stats anzeigen
+  const dist=calcRouteDist(routeStartPoint,sorted);
+  const statsBox=document.getElementById('routeStatsBox');
+  statsBox.style.display='block';
+  document.getElementById('routeStatsList').innerHTML=
+    `<div style="margin-bottom:8px;font-size:.7rem;color:var(--text3)">📏 ~${dist.toFixed(1)} km Luftlinie · ⏱️ ~${Math.round(dist/4.5*60)} min Gehzeit</div>`+
+    sorted.map((p,i)=>
+      `<div style="padding:5px 6px;background:var(--surface);border-left:3px solid #009ee0;border-radius:4px;margin-bottom:4px">
+        <div style="font-weight:600;font-size:.8rem">${i+1}. ${p.name}</div>
+        <div style="font-size:.7rem;color:var(--text3)">📦 ${p.stueckzahl} Stück</div>
+      </div>`
+    ).join('');
+  document.getElementById('printRouteBtn').style.display='inline-flex';
+  document.getElementById('routeToggleBtn').style.display='block';
+  toast(`✅ Route: ${sorted.length} Gebiete · ~${dist.toFixed(1)} km`);
+}
+
+// ── Karten-Visualisierung ──
+function visualizeRoute(sorted){
+  clearRouteVisualization();
+  if(!map||!sorted||sorted.length===0)return;
+  const pts=[[routeStartPoint.lat,routeStartPoint.lng]];
+  // Startpunkt-Marker
+  if(routeStartMarker)map.removeLayer(routeStartMarker);
+  routeStartMarker=L.marker(pts[0],{
+    icon:L.divIcon({className:'route-marker',html:'<div style="width:30px;height:30px;background:#34c759;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.3)">S</div>',iconSize:[30,30],iconAnchor:[15,15]})
+  }).bindPopup('Startpunkt').addTo(map);
+  // Nummerierte Marker
+  sorted.forEach((p,i)=>{
+    const pos=[p.c.lat,p.c.lng];
+    pts.push(pos);
+    const m=L.marker(pos,{
+      icon:L.divIcon({className:'route-marker',html:`<div style="width:30px;height:30px;background:#009ee0;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.3)">${i+1}</div>`,iconSize:[30,30],iconAnchor:[15,15]})
+    }).bindPopup(`<strong>Halt ${i+1}: ${p.name}</strong><br>📦 ${p.stueckzahl} Stück`).addTo(map);
+    routeMarkers.push(m);
+  });
+  // Polyline
+  routePolyline=L.polyline(pts,{color:'#009ee0',weight:3,opacity:.7,dashArray:'8,6'}).addTo(map);
+  map.fitBounds(L.latLngBounds(pts).pad(0.1));
+}
+
+function clearRouteVisualization(){
+  routeMarkers.forEach(m=>{if(map)map.removeLayer(m)});routeMarkers=[];
+  if(routePolyline&&map){map.removeLayer(routePolyline);routePolyline=null}
+  if(routeStartMarker&&map){map.removeLayer(routeStartMarker);routeStartMarker=null}
+}
+
+function toggleRouteVisualization(){
+  const btn=document.getElementById('routeToggleBtn');
+  if(routePolyline&&map.hasLayer(routePolyline)){
+    map.removeLayer(routePolyline);
+    routeMarkers.forEach(m=>map.removeLayer(m));
+    if(routeStartMarker)map.removeLayer(routeStartMarker);
+    btn.textContent='👁 Route einblenden';
+  } else if(routeResult){
+    if(routePolyline)map.addLayer(routePolyline);
+    routeMarkers.forEach(m=>map.addLayer(m));
+    if(routeStartMarker)map.addLayer(routeStartMarker);
+    btn.textContent='👁 Route ausblenden';
+  }
+}
+
+// ── Druckfunktion ──
+function printRoute(){
+  if(!routeResult||routeResult.length===0){toast('⚠️ Keine Route berechnet');return}
+  const dist=calcRouteDist(routeStartPoint,routeResult);
+  // Temporären Print-Container erstellen
+  let old=document.getElementById('routePrintContainer');if(old)old.remove();
+  const div=document.createElement('div');div.id='routePrintContainer';div.style.display='none';
+  div.innerHTML=`
+    <div class="rp-header">🗺️ Verteilroute</div>
+    <div class="rp-meta">
+      <strong>Datum:</strong> ${new Date().toLocaleDateString('de-DE')}<br>
+      <strong>Gebiete:</strong> ${routeResult.length} · <strong>Distanz:</strong> ~${dist.toFixed(1)} km Luftlinie · <strong>Gehzeit:</strong> ~${Math.round(dist/4.5*60)} min
+    </div>
+    ${routeResult.map((p,i)=>`
+      <div class="rp-item">
+        <div class="rp-num">${i+1}</div>
+        <div>
+          <div class="rp-name">${p.name}</div>
+          <div class="rp-detail">📦 ${p.stueckzahl} Stück · Status: ${sl(getG(p.id)?.status||'offen')}</div>
+        </div>
+      </div>
+    `).join('')}
+  `;
+  document.body.appendChild(div);
+  window.print();
+  setTimeout(()=>div.remove(),2000);
+}
+
+// ── Route-Section Sichtbarkeit ──
+function updateRoutePlannerVisibility(){
+  const sec=document.getElementById('routePlannerSection');
+  if(!sec)return;
+  if(curRole==='verteiler'){
+    const hat=getVisibleGebiete().some(g=>g.verteilerId===currentUser?.id);
+    sec.style.display=hat?'block':'none';
+  } else {
+    sec.style.display='none';
+  }
+}
+
+// ============================================================
 // SIDEBAR
 // ============================================================
 function getFilteredGV(){ return curLK==='alle' ? Object.entries(gebietsverbaende) : Object.entries(gebietsverbaende).filter(([,gv])=>gv.landkreis_id===curLK); }
@@ -2804,6 +3113,7 @@ function renderStats(){
   document.getElementById('statOffen').textContent=(tot-vert).toLocaleString('de');
   document.getElementById('progText').textContent=`${fn} / ${gs.length}`;
   document.getElementById('progFill').style.width=(gs.length?fn/gs.length*100:0)+'%';
+  updateRoutePlannerVisibility();
 }
 
 // ============================================================
