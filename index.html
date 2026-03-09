@@ -925,8 +925,10 @@ async function loadKampagnen() {
     const { data, error } = await sb.from('kampagnen').select('*').order('created_at', { ascending: false });
     if (!error && data && data.length > 0) {
       kampagnen = data;
+      console.log('loadKampagnen: '+data.length+' Kampagne(n) geladen:', data.map(k=>k.name+' ('+k.id+')').join(', '));
     } else {
       kampagnen = [];
+      console.warn('loadKampagnen: Keine Kampagnen geladen', error ? JSON.stringify(error) : '');
     }
   } catch(e) {
     console.warn('loadKampagnen failed:', e);
@@ -942,33 +944,26 @@ async function loadKampagnen() {
 async function sichereBasisKampagne() {
   const basis = kampagnen.find(k => k.ist_basis || k.name === 'Grundzuweisung');
   if (basis) { basis.ist_basis = true; return; }
-  // Keine Basis-Kampagne → erstellen
-  // Strategie 1: Mit ist_basis
-  try {
-    const { data, error } = await sb.from('kampagnen').insert({
-      name: 'Grundzuweisung',
-      beschreibung: 'Basis-Verteiler-Zuweisungen',
-      ist_basis: true,
-      erstellt_von: currentUser?.id || null,
-      created_at: new Date()
-    }).select().single();
-    if (!error && data) { kampagnen.unshift(data); return; }
-    console.warn('sichereBasisKampagne Strategie 1:', JSON.stringify(error));
-  } catch(e) {
-    console.warn('sichereBasisKampagne Strategie 1 Exception:', e);
+  // Falls genau eine Kampagne existiert, diese als Basis verwenden
+  if (kampagnen.length === 1) { kampagnen[0].ist_basis = true; return; }
+  // Keine Basis-Kampagne lokal → versuche aus DB zu laden oder zu erstellen
+  const insertStrategien = [
+    { name: 'Grundzuweisung', beschreibung: 'Basis-Verteiler-Zuweisungen', ist_basis: true },
+    { name: 'Grundzuweisung', beschreibung: 'Basis-Verteiler-Zuweisungen' },
+    { name: 'Grundzuweisung' }
+  ];
+  for (let i = 0; i < insertStrategien.length; i++) {
+    try {
+      const { data, error } = await sb.from('kampagnen').insert(insertStrategien[i]).select().single();
+      if (!error && data) { kampagnen.unshift(data); console.log('Basis-Kampagne erstellt (Strategie '+(i+1)+')'); return; }
+      console.warn('sichereBasisKampagne Strategie '+(i+1)+':', JSON.stringify(error));
+    } catch(e) { console.warn('sichereBasisKampagne Strategie '+(i+1)+' Exception:', e); }
   }
-  // Strategie 2: Ohne ist_basis (falls Spalte fehlt)
+  // Fallback: Existierende Kampagne aus DB laden
   try {
-    const { data, error } = await sb.from('kampagnen').insert({
-      name: 'Grundzuweisung',
-      beschreibung: 'Basis-Verteiler-Zuweisungen',
-      erstellt_von: currentUser?.id || null
-    }).select().single();
-    if (!error && data) { kampagnen.unshift(data); return; }
-    console.warn('sichereBasisKampagne Strategie 2:', JSON.stringify(error));
-  } catch(e) {
-    console.warn('sichereBasisKampagne Strategie 2 Exception:', e);
-  }
+    const { data } = await sb.from('kampagnen').select('*').limit(1).single();
+    if (data) { data.ist_basis = true; kampagnen.unshift(data); console.log('Existierende Kampagne als Basis verwendet:', data.id); return; }
+  } catch(e) { console.warn('sichereBasisKampagne DB-Fallback:', e); }
   // Letzter Fallback: Lokal
   kampagnen.unshift({ id: crypto.randomUUID(), name: 'Grundzuweisung', beschreibung: 'Basis-Verteiler-Zuweisungen', ist_basis: true, _local: true });
 }
@@ -978,60 +973,31 @@ async function sichereBasisKampagne() {
 async function ensureKampagneInDB() {
   if (!curKampagne) return null;
   if (!curKampagne._local) return curKampagne.id;
-  // Strategie 1: Mit allen Feldern (inkl. ist_basis)
-  try {
-    const { data, error } = await sb.from('kampagnen').insert({
-      name: curKampagne.name || 'Grundzuweisung',
-      beschreibung: curKampagne.beschreibung || 'Basis-Verteiler-Zuweisungen',
-      ist_basis: curKampagne.ist_basis || false,
-      erstellt_von: currentUser?.id || null,
-      created_at: new Date()
-    }).select().single();
-    if (!error && data) {
-      const oldId = curKampagne.id;
-      const idx = kampagnen.findIndex(k => k.id === oldId);
-      if (idx >= 0) kampagnen[idx] = data;
-      curKampagne = data;
-      console.log('Kampagne in DB persistiert (Strategie 1):', data.id);
-      return data.id;
-    }
-    console.warn('ensureKampagneInDB Strategie 1 fehlgeschlagen:', JSON.stringify(error));
-  } catch(e) {
-    console.warn('ensureKampagneInDB Strategie 1 Exception:', e);
+  function replaceCur(data) {
+    const oldId = curKampagne.id;
+    const idx = kampagnen.findIndex(k => k.id === oldId);
+    if (idx >= 0) kampagnen[idx] = data; else kampagnen.unshift(data);
+    curKampagne = data;
+    return data.id;
   }
-  // Strategie 2: Nur Pflichtfelder (ohne ist_basis, falls Spalte fehlt)
-  try {
-    const { data, error } = await sb.from('kampagnen').insert({
-      name: curKampagne.name || 'Grundzuweisung',
-      beschreibung: curKampagne.beschreibung || 'Basis-Verteiler-Zuweisungen',
-      erstellt_von: currentUser?.id || null
-    }).select().single();
-    if (!error && data) {
-      const oldId = curKampagne.id;
-      const idx = kampagnen.findIndex(k => k.id === oldId);
-      if (idx >= 0) kampagnen[idx] = data;
-      curKampagne = data;
-      console.log('Kampagne in DB persistiert (Strategie 2):', data.id);
-      return data.id;
-    }
-    console.warn('ensureKampagneInDB Strategie 2 fehlgeschlagen:', JSON.stringify(error));
-  } catch(e) {
-    console.warn('ensureKampagneInDB Strategie 2 Exception:', e);
+  // Insert-Strategien: immer weniger Spalten bis eine klappt
+  const insertStrategien = [
+    { name: 'Grundzuweisung', beschreibung: 'Basis-Verteiler-Zuweisungen', ist_basis: true },
+    { name: 'Grundzuweisung', beschreibung: 'Basis-Verteiler-Zuweisungen' },
+    { name: 'Grundzuweisung' }
+  ];
+  for (let i = 0; i < insertStrategien.length; i++) {
+    try {
+      const { data, error } = await sb.from('kampagnen').insert(insertStrategien[i]).select().single();
+      if (!error && data) { console.log('ensureKampagneInDB: Insert Strategie '+(i+1)+' OK:', data.id); return replaceCur(data); }
+      console.warn('ensureKampagneInDB Insert '+(i+1)+':', JSON.stringify(error));
+    } catch(e) { console.warn('ensureKampagneInDB Insert '+(i+1)+' Exception:', e); }
   }
-  // Strategie 3: Prüfen ob vielleicht inzwischen eine Basis-Kampagne existiert
+  // Fallback: Existierende Kampagne aus DB laden
   try {
     const { data } = await sb.from('kampagnen').select('*').limit(1).single();
-    if (data) {
-      const oldId = curKampagne.id;
-      const idx = kampagnen.findIndex(k => k.id === oldId);
-      if (idx >= 0) kampagnen[idx] = data;
-      curKampagne = data;
-      console.log('Existierende Kampagne gefunden (Strategie 3):', data.id);
-      return data.id;
-    }
-  } catch(e) {
-    console.warn('ensureKampagneInDB Strategie 3 fehlgeschlagen:', e);
-  }
+    if (data) { console.log('ensureKampagneInDB: Existierende Kampagne:', data.id); return replaceCur(data); }
+  } catch(e) { console.warn('ensureKampagneInDB Fallback:', e); }
   return null;
 }
 
