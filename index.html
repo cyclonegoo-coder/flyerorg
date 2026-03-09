@@ -458,7 +458,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v53</div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v54</div>
 
 <!-- NUTZER EINLADEN MODAL (nur Admin) -->
 <div class="modal-ov" id="inviteModalOv" onclick="if(event.target===this)closeInviteModal()">
@@ -2739,15 +2739,30 @@ async function printGebiet(gebietId){
     map.invalidateSize();
   };
   try{
-    // 7. Screenshot
-    const canvas=await html2canvas(document.getElementById('map'),{useCORS:true,allowTaint:true,scale:2,logging:false});
-    const imgData=canvas.toDataURL('image/png');
+    // 7. Screenshot + auf Polygon-Bereich zuschneiden
+    const scale=2;
+    const fullCanvas=await html2canvas(document.getElementById('map'),{useCORS:true,allowTaint:true,scale,logging:false});
+    // Polygon-Bounds in Pixel-Koordinaten umrechnen
+    const pxSW=map.latLngToContainerPoint(sw);
+    const pxNE=map.latLngToContainerPoint(ne);
+    const pad=15;// 15px Padding um das Polygon
+    const cropX=Math.max(0,(Math.min(pxSW.x,pxNE.x)-pad))*scale;
+    const cropY=Math.max(0,(Math.min(pxSW.y,pxNE.y)-pad))*scale;
+    const cropW=(Math.abs(pxNE.x-pxSW.x)+pad*2)*scale;
+    const cropH=(Math.abs(pxNE.y-pxSW.y)+pad*2)*scale;
+    // Zugeschnittene Canvas erstellen
+    const cropCanvas=document.createElement('canvas');
+    cropCanvas.width=Math.min(cropW,fullCanvas.width-cropX);
+    cropCanvas.height=Math.min(cropH,fullCanvas.height-cropY);
+    const ctx=cropCanvas.getContext('2d');
+    ctx.drawImage(fullCanvas,cropX,cropY,cropCanvas.width,cropCanvas.height,0,0,cropCanvas.width,cropCanvas.height);
+    const imgData=cropCanvas.toDataURL('image/png');
     restore();
     // 8. Druckfenster: Karte so groß wie möglich
     const verteilerInfo=g.verteilerId?(g.verteiler||'Zugewiesen'):'Nicht zugewiesen';
     const orient=isLandscape?'landscape':'portrait';
     // Bild-Dimensionen für korrektes Seitenverhältnis
-    const imgW=canvas.width, imgH=canvas.height;
+    const imgW=cropCanvas.width, imgH=cropCanvas.height;
     const imgRatio=imgW/imgH;
     // A4: 277x190mm nutzbar (landscape) oder 190x277mm (portrait) bei 6mm margin
     const pageW=isLandscape?277:190, pageH=isLandscape?190:277;
