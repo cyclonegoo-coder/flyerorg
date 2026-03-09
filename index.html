@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
 <style>
 :root {
@@ -457,7 +458,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v50</div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v51</div>
 
 <!-- NUTZER EINLADEN MODAL (nur Admin) -->
 <div class="modal-ov" id="inviteModalOv" onclick="if(event.target===this)closeInviteModal()">
@@ -2689,17 +2690,18 @@ function calcCentroid(gebietId){
   return{lat:50.94,lng:12.10};
 }
 
-// ── Gebiet drucken: Karte (ohne Statusfarben) + Infos ──
-function printGebiet(gebietId){
+// ── Gebiet drucken: Karte als Bild erfassen + Infos ──
+async function printGebiet(gebietId){
   const g=getG(gebietId);
   if(!g){toast('⚠️ Gebiet nicht gefunden');return}
+  toast('🖨️ Druckansicht wird erstellt...');
   // 1. Karte auf Gebiet zentrieren
   const coords=kmlP[gebietId];
   if(coords&&coords.length>2){
     const bounds=L.latLngBounds(coords.map(c=>[c[0],c[1]]));
     map.fitBounds(bounds.pad(0.1));
   }
-  // 2. Alle Polygone temporär ausblenden, nur das aktuelle Gebiet mit neutralem Rand zeigen
+  // 2. Polygon-Styles temporär ändern: nur Rand, keine Füllung
   const savedStyles={};
   Object.entries(layers).forEach(([id,poly])=>{
     if(!poly||!poly.setStyle)return;
@@ -2711,52 +2713,64 @@ function printGebiet(gebietId){
       opacity:poly.options.opacity
     };
     if(id===gebietId){
-      // Aktuelles Gebiet: nur schwarzer Rand, keine Füllung
       poly.setStyle({color:'#333',fillColor:'transparent',fillOpacity:0,weight:3,opacity:1});
     } else {
-      // Alle anderen Gebiete: komplett ausblenden
       poly.setStyle({fillOpacity:0,opacity:0,weight:0});
     }
   });
-  // 3. Sidebar und Detail-Panel zuklappen
-  const sidebar=document.getElementById('sidebar');
-  const detailPanel=document.getElementById('detailPanel');
-  const sidebarWasOpen=sidebar?.classList.contains('open');
-  const detailWasOpen=detailPanel?.classList.contains('open');
-  if(sidebar)sidebar.classList.remove('open');
-  if(detailPanel)detailPanel.classList.remove('open');
-  // 4. Karte invalidieren (damit Tiles korrekt laden)
-  map.invalidateSize();
-  // 5. Druckcontainer erstellen
-  let old=document.getElementById('gebietPrintContainer');if(old)old.remove();
-  const div=document.createElement('div');div.id='gebietPrintContainer';div.style.display='none';
-  const verteilerInfo=g.verteilerId?`<strong>Verteiler:</strong> ${g.verteiler||'Zugewiesen'}`:'<strong>Verteiler:</strong> Nicht zugewiesen';
-  div.innerHTML=`
-    <div class="gp-header">${g.name}</div>
-    <div class="gp-meta">
-      <strong>Datum:</strong> ${new Date().toLocaleDateString('de-DE')} ·
-      <strong>Stückzahl:</strong> ${g.stueckzahl||0} ·
-      ${verteilerInfo}
-      ${g.hinweise&&g.hinweise.length?' · <strong>Hinweise:</strong> '+g.hinweise.join(', '):''}
-    </div>
-  `;
-  document.body.appendChild(div);
-  // 6. Warten bis Tiles geladen, dann drucken
-  setTimeout(()=>{
-    window.print();
-    // 7. Alles wiederherstellen
-    setTimeout(()=>{
-      div.remove();
-      // Polygon-Styles zurücksetzen
-      Object.entries(savedStyles).forEach(([id,style])=>{
-        if(layers[id]&&layers[id].setStyle)layers[id].setStyle(style);
-      });
-      // Panels wiederherstellen
-      if(sidebarWasOpen&&sidebar)sidebar.classList.add('open');
-      if(detailWasOpen&&detailPanel)detailPanel.classList.add('open');
-      map.invalidateSize();
-    },500);
-  },600);
+  // 3. Kurz warten bis Tiles geladen + Styles angewendet
+  await new Promise(r=>setTimeout(r,800));
+  // 4. Karte als Bild erfassen mit html2canvas
+  try{
+    const mapEl=document.getElementById('map');
+    const canvas=await html2canvas(mapEl,{
+      useCORS:true,
+      allowTaint:true,
+      scale:2, // Höhere Auflösung für Druck
+      logging:false
+    });
+    const imgData=canvas.toDataURL('image/png');
+    // 5. Polygon-Styles sofort wiederherstellen
+    Object.entries(savedStyles).forEach(([id,style])=>{
+      if(layers[id]&&layers[id].setStyle)layers[id].setStyle(style);
+    });
+    // 6. Druckfenster öffnen
+    const verteilerInfo=g.verteilerId?(g.verteiler||'Zugewiesen'):'Nicht zugewiesen';
+    const printWin=window.open('','_blank','width=900,height=700');
+    if(!printWin){toast('⚠️ Popup-Blocker! Bitte Popups erlauben.');return}
+    printWin.document.write(`<!DOCTYPE html><html><head><title>${g.name} – Gebietskarte</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:system-ui,-apple-system,sans-serif;padding:12px}
+  .header{font-size:18pt;font-weight:700;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:8px}
+  .meta{font-size:10pt;color:#444;margin-bottom:12px;line-height:1.6}
+  .map-img{width:100%;border:1px solid #ccc;border-radius:4px}
+  @media print{body{padding:0}.map-img{border:1px solid #999}}
+</style></head><body>
+  <div class="header">${g.name}</div>
+  <div class="meta">
+    <strong>Datum:</strong> ${new Date().toLocaleDateString('de-DE')} ·
+    <strong>Stückzahl:</strong> ${g.stueckzahl||0} ·
+    <strong>Verteiler:</strong> ${verteilerInfo}
+    ${g.hinweise&&g.hinweise.length?' · <strong>Hinweise:</strong> '+g.hinweise.join(', '):''}
+  </div>
+  <img class="map-img" src="${imgData}" />
+</body></html>`);
+    printWin.document.close();
+    // 7. Warten bis Bild geladen, dann drucken
+    printWin.onload=()=>{
+      setTimeout(()=>{printWin.print();},300);
+    };
+    // Fallback falls onload nicht feuert
+    setTimeout(()=>{try{printWin.print()}catch(e){}},1500);
+  }catch(err){
+    console.error('Print error:',err);
+    // Styles wiederherstellen bei Fehler
+    Object.entries(savedStyles).forEach(([id,style])=>{
+      if(layers[id]&&layers[id].setStyle)layers[id].setStyle(style);
+    });
+    toast('⚠️ Fehler beim Erstellen der Druckansicht: '+err.message);
+  }
 }
 
 // ============================================================
