@@ -458,7 +458,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v54</div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v55</div>
 
 <!-- NUTZER EINLADEN MODAL (nur Admin) -->
 <div class="modal-ov" id="inviteModalOv" onclick="if(event.target===this)closeInviteModal()">
@@ -2697,20 +2697,18 @@ async function printGebiet(gebietId){
   const coords=kmlP[gebietId];
   if(!coords||coords.length<3){toast('⚠️ Kein Polygon vorhanden');return}
   toast('🖨️ Druckansicht wird erstellt...');
-  // 1. Polygon-Bounds + Seitenformat bestimmen
+
+  // 1. Polygon-Bounds + Seitenverhältnis bestimmen
   const bounds=L.latLngBounds(coords.map(c=>[c[0],c[1]]));
-  const sw=bounds.getSouthWest(),ne=bounds.getNorthEast();
-  // Breite/Höhe in Grad (Näherung für Seitenverhältnis)
-  const polyW=Math.abs(ne.lng-sw.lng)*Math.cos((sw.lat+ne.lat)/2*Math.PI/180);
-  const polyH=Math.abs(ne.lat-sw.lat);
+  const midLat=(bounds.getSouth()+bounds.getNorth())/2;
+  const polyW=Math.abs(bounds.getEast()-bounds.getWest())*Math.cos(midLat*Math.PI/180);
+  const polyH=Math.abs(bounds.getNorth()-bounds.getSouth());
   const isLandscape=polyW>polyH;
-  // 2. Karte exakt auf Polygon setzen (nur 3% Padding)
-  map.fitBounds(bounds.pad(0.03));
-  // 3. UI-Elemente temporär ausblenden
+
+  // 2. UI ausblenden + Polygon-Styles setzen
   map.closePopup();
   const hideEls=['.leaflet-control-zoom','.leaflet-control-attribution'];
   hideEls.forEach(sel=>{const el=document.querySelector(sel);if(el)el.style.display='none'});
-  // 4. Polygone: nur aktuelles mit Rand, Rest weg
   const savedStyles={};
   Object.entries(layers).forEach(([id,poly])=>{
     if(!poly||!poly.setStyle)return;
@@ -2719,76 +2717,85 @@ async function printGebiet(gebietId){
     if(id===gebietId)poly.setStyle({color:'#222',fillColor:'transparent',fillOpacity:0,weight:3,opacity:1});
     else poly.setStyle({fillOpacity:0,opacity:0,weight:0});
   });
-  // 5. Panels zu für maximale Kartenfläche
   const sidebar=document.getElementById('sidebar');
   const detailPanel=document.getElementById('detailPanel');
   const sidebarWas=sidebar?.classList.contains('open');
   const detailWas=detailPanel?.classList.contains('open');
   if(sidebar)sidebar.classList.remove('open');
   if(detailPanel)detailPanel.classList.remove('open');
+
+  // 3. Map-Container auf Polygon-Seitenverhältnis zuschneiden
+  //    So füllt fitBounds das Polygon exakt in den Container — kein nachträgliches Cropping nötig
+  const mapEl=document.getElementById('map');
+  const origStyle={pos:mapEl.style.position,w:mapEl.style.width,h:mapEl.style.height,
+    t:mapEl.style.top,l:mapEl.style.left,z:mapEl.style.zIndex};
+  const polyRatio=polyW/polyH;
+  // Feste Größe für den Screenshot-Container (groß genug für gute Auflösung)
+  const captureW=1200;
+  const captureH=Math.round(captureW/polyRatio);
+  mapEl.style.position='fixed';
+  mapEl.style.top='0';
+  mapEl.style.left='0';
+  mapEl.style.width=captureW+'px';
+  mapEl.style.height=captureH+'px';
+  mapEl.style.zIndex='99999';
   map.invalidateSize();
-  map.fitBounds(bounds.pad(0.03));
-  // 6. Warten bis Tiles geladen
-  await new Promise(r=>setTimeout(r,1200));
-  // Hilfsfunktion: alles wiederherstellen
+  // 5% Padding damit die Kontur vollständig sichtbar ist (inkl. Strichstärke)
+  map.fitBounds(bounds.pad(0.05));
+
+  // 4. Warten bis Tiles geladen
+  await new Promise(r=>setTimeout(r,1500));
+
   const restore=()=>{
+    mapEl.style.position=origStyle.pos;
+    mapEl.style.width=origStyle.w;
+    mapEl.style.height=origStyle.h;
+    mapEl.style.top=origStyle.t;
+    mapEl.style.left=origStyle.l;
+    mapEl.style.zIndex=origStyle.z;
     Object.entries(savedStyles).forEach(([id,style])=>{if(layers[id]?.setStyle)layers[id].setStyle(style)});
     hideEls.forEach(sel=>{const el=document.querySelector(sel);if(el)el.style.display=''});
     if(sidebarWas&&sidebar)sidebar.classList.add('open');
     if(detailWas&&detailPanel)detailPanel.classList.add('open');
     map.invalidateSize();
   };
+
   try{
-    // 7. Screenshot + auf Polygon-Bereich zuschneiden
+    // 5. Screenshot — kein Cropping nötig, Container hat bereits Polygon-Seitenverhältnis
     const scale=2;
-    const fullCanvas=await html2canvas(document.getElementById('map'),{useCORS:true,allowTaint:true,scale,logging:false});
-    // Polygon-Bounds in Pixel-Koordinaten umrechnen
-    const pxSW=map.latLngToContainerPoint(sw);
-    const pxNE=map.latLngToContainerPoint(ne);
-    const pad=15;// 15px Padding um das Polygon
-    const cropX=Math.max(0,(Math.min(pxSW.x,pxNE.x)-pad))*scale;
-    const cropY=Math.max(0,(Math.min(pxSW.y,pxNE.y)-pad))*scale;
-    const cropW=(Math.abs(pxNE.x-pxSW.x)+pad*2)*scale;
-    const cropH=(Math.abs(pxNE.y-pxSW.y)+pad*2)*scale;
-    // Zugeschnittene Canvas erstellen
-    const cropCanvas=document.createElement('canvas');
-    cropCanvas.width=Math.min(cropW,fullCanvas.width-cropX);
-    cropCanvas.height=Math.min(cropH,fullCanvas.height-cropY);
-    const ctx=cropCanvas.getContext('2d');
-    ctx.drawImage(fullCanvas,cropX,cropY,cropCanvas.width,cropCanvas.height,0,0,cropCanvas.width,cropCanvas.height);
-    const imgData=cropCanvas.toDataURL('image/png');
+    const canvas=await html2canvas(mapEl,{useCORS:true,allowTaint:true,scale,logging:false});
+    const imgData=canvas.toDataURL('image/png');
     restore();
-    // 8. Druckfenster: Karte so groß wie möglich
+
+    // 6. Druckfenster mit passender Orientierung
     const verteilerInfo=g.verteilerId?(g.verteiler||'Zugewiesen'):'Nicht zugewiesen';
     const orient=isLandscape?'landscape':'portrait';
-    // Bild-Dimensionen für korrektes Seitenverhältnis
-    const imgW=cropCanvas.width, imgH=cropCanvas.height;
-    const imgRatio=imgW/imgH;
-    // A4: 277x190mm nutzbar (landscape) oder 190x277mm (portrait) bei 6mm margin
-    const pageW=isLandscape?277:190, pageH=isLandscape?190:277;
-    const infoH=12;// ca. 12mm für Titel+Meta
+    const imgRatio=canvas.width/canvas.height;
+    // A4 nutzbar: 285x192mm (landscape) oder 192x285mm (portrait) bei 4mm margin
+    const pageW=isLandscape?285:192, pageH=isLandscape?192:285;
+    const infoH=14;// ca. 14mm für Titel+Meta
     const availH=pageH-infoH;
-    // Bild soll volle Breite nutzen, Höhe anpassen
     let imgCssW=pageW, imgCssH=pageW/imgRatio;
     if(imgCssH>availH){imgCssH=availH;imgCssW=availH*imgRatio;}
+
     const pw=window.open('','_blank','width=900,height=700');
     if(!pw){toast('⚠️ Popup-Blocker! Bitte Popups erlauben.');return}
     pw.document.write(`<!DOCTYPE html><html><head><title>${g.name}</title>
 <style>
-  @page{size:${orient};margin:6mm}
+  @page{size:${orient};margin:4mm}
   *{margin:0;padding:0;box-sizing:border-box}
-  body{font-family:system-ui,sans-serif}
-  .title{font-size:12pt;font-weight:700}
-  .meta{font-size:8pt;color:#444;border-bottom:1px solid #ccc;padding-bottom:3px;margin-bottom:3px}
-  img{width:${imgCssW}mm;height:${imgCssH}mm;border:1px solid #999;display:block}
+  body{font-family:system-ui,sans-serif;padding:2mm}
+  .title{font-size:13pt;font-weight:700}
+  .meta{font-size:9pt;color:#444;border-bottom:1px solid #ccc;padding-bottom:3px;margin-bottom:4px}
+  img{width:${imgCssW}mm;height:${imgCssH}mm;display:block}
 </style></head><body>
   <div class="title">${g.name}</div>
   <div class="meta"><b>Datum:</b> ${new Date().toLocaleDateString('de-DE')} · <b>Stückzahl:</b> ${g.stueckzahl||0} · <b>Verteiler:</b> ${verteilerInfo}${g.hinweise?.length?' · <b>Hinweise:</b> '+g.hinweise.join(', '):''}</div>
   <img src="${imgData}"/>
 </body></html>`);
     pw.document.close();
-    pw.onload=()=>setTimeout(()=>pw.print(),400);
-    setTimeout(()=>{try{pw.print()}catch(e){}},2000);
+    pw.onload=()=>setTimeout(()=>pw.print(),500);
+    setTimeout(()=>{try{pw.print()}catch(e){}},2500);
   }catch(err){
     console.error('Print error:',err);
     restore();
