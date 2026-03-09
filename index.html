@@ -2734,18 +2734,23 @@ function calcCentroid(gebietId){
 async function fetchStreetsInPolygon(gebietId){
   const coords=kmlP[gebietId];
   if(!coords||coords.length<3)throw new Error('Keine Polygon-Koordinaten');
-  // Polygon als String für Overpass (lat lng lat lng ...)
   const polyStr=coords.map(c=>c[0]+' '+c[1]).join(' ');
-  // Overpass Query: Alle Straßen (highway=residential|living_street|pedestrian|unclassified|tertiary|secondary|service) im Polygon
-  const query=`[out:json][timeout:25];
-(
-  way["highway"~"^(residential|living_street|pedestrian|unclassified|tertiary|secondary|service|footway|path|track)$"](poly:"${polyStr}");
-);
+  // Overpass Query: Nur Straßen mit Gebäuden die Hausnummern haben
+  // 1. Alle Gebäude mit Hausnummern im Polygon finden
+  // 2. Straßen in der Nähe dieser Gebäude (=bewohnte Straßen)
+  const query=`[out:json][timeout:30];
+// Alle Wohnstraßen im Polygon (residential + living_street haben per Definition Häuser)
+way["highway"~"^(residential|living_street)$"](poly:"${polyStr}")->.wohnstrassen;
+// Alle anderen Straßen die Gebäude mit Hausnummern in der Nähe haben
+way["highway"~"^(unclassified|tertiary|secondary|pedestrian)$"](poly:"${polyStr}")->.andere;
+node(around.andere:30)["addr:housenumber"](poly:"${polyStr}")->.adressen;
+way.andere(bn.adressen)->.bewohnte_andere;
+// Ergebnis: Wohnstraßen + bewohnte andere Straßen
+(.wohnstrassen;.bewohnte_andere;);
 out body;>;out skel qt;`;
   const resp=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:'data='+encodeURIComponent(query)});
   if(!resp.ok)throw new Error('Overpass API Fehler: '+resp.status);
   const data=await resp.json();
-  // Nodes und Ways extrahieren
   const nodes={};
   data.elements.filter(e=>e.type==='node').forEach(n=>{nodes[n.id]={lat:n.lat,lng:n.lon}});
   const ways=data.elements.filter(e=>e.type==='way'&&e.tags).map(w=>({
@@ -2757,30 +2762,36 @@ out body;>;out skel qt;`;
   return{ways,nodes};
 }
 
-// ── Wegpunkte entlang der Straßen sampeln ──
-function sampleWaypoints(ways,maxPoints=25){
-  // Alle Nodes aus allen Ways sammeln
-  const allPoints=[];
+// ── Wegpunkte: JEDE Straße bekommt mindestens einen Punkt ──
+function sampleWaypoints(ways){
   const streetNames=new Set();
+  // Pro Straße: Mittelpunkt als Pflicht-Wegpunkt
+  // Lange Straßen bekommen zusätzlich Start und Ende
+  const streetPoints=[];// {point, streetName}
   ways.forEach(w=>{
     if(w.name)streetNames.add(w.name);
-    // Start, Mitte, Ende jedes Ways
-    allPoints.push(w.nodes[0]);
-    if(w.nodes.length>2)allPoints.push(w.nodes[Math.floor(w.nodes.length/2)]);
-    allPoints.push(w.nodes[w.nodes.length-1]);
+    const mid=w.nodes[Math.floor(w.nodes.length/2)];
+    streetPoints.push({point:mid,street:w.name||'Weg '+w.id});
+    // Bei langen Straßen (>100m) auch Start und Ende
+    const startNode=w.nodes[0],endNode=w.nodes[w.nodes.length-1];
+    if(haversine(startNode,endNode)>0.1){// >100m
+      streetPoints.push({point:startNode,street:w.name||'Weg '+w.id});
+      streetPoints.push({point:endNode,street:w.name||'Weg '+w.id});
+    }
   });
-  // Duplikate entfernen (nah beieinander < 30m)
+  // Duplikate entfernen: Punkte die <20m beieinander liegen, aber sicherstellen
+  // dass jede benannte Straße mindestens einen Punkt behält
+  const streetHasPoint=new Map();// streetName → boolean
   const unique=[];
-  allPoints.forEach(p=>{
-    if(!unique.some(u=>haversine(u,p)<0.03))unique.push(p);
+  streetPoints.forEach(sp=>{
+    const tooClose=unique.some(u=>haversine(u,sp.point)<0.02);
+    const streetAlreadyCovered=streetHasPoint.get(sp.street);
+    // Behalten wenn: nicht zu nah ODER Straße hat noch keinen Punkt
+    if(!tooClose||!streetAlreadyCovered){
+      unique.push(sp.point);
+      streetHasPoint.set(sp.street,true);
+    }
   });
-  // Wenn zu viele: gleichmäßig ausdünnen
-  if(unique.length>maxPoints){
-    const step=Math.ceil(unique.length/maxPoints);
-    const sampled=[];
-    for(let i=0;i<unique.length;i+=step)sampled.push(unique[i]);
-    return{points:sampled,streetNames:[...streetNames]};
-  }
   return{points:unique,streetNames:[...streetNames]};
 }
 
@@ -2905,15 +2916,32 @@ async function calculateRoute(){
     loadingText.textContent='📡 Straßen werden geladen...';
     const{ways}=await fetchStreetsInPolygon(routeGebietId);
     if(ways.length===0){toast('⚠️ Keine Straßen im Gebiet gefunden');loadingBox.style.display='none';calcBtn.disabled=false;return}
-    // 2. Wegpunkte sampeln
+    // 2. Wegpunkte: Jede Straße bekommt mindestens einen Punkt
     loadingText.textContent=`🗺️ ${ways.length} Straßen gefunden, optimiere Route...`;
-    const{points,streetNames}=sampleWaypoints(ways,25);
+    const{points,streetNames}=sampleWaypoints(ways);
     // 3. TSP: Optimale Reihenfolge
     const ordered=tspNearestNeighbor(routeStartPoint,points);
-    // 4. OSRM: Echte Gehroute
-    loadingText.textContent='🚶 Berechne Gehroute...';
+    // 4. OSRM: Echte Gehroute (bei vielen Punkten in Segmente aufteilen)
+    loadingText.textContent=`🚶 Berechne Gehroute (${ordered.length} Wegpunkte)...`;
     const allWaypoints=[routeStartPoint,...ordered];
-    const osrmRoute=await fetchOSRMRoute(allWaypoints);
+    let osrmRoute;
+    if(allWaypoints.length<=100){
+      osrmRoute=await fetchOSRMRoute(allWaypoints);
+    } else {
+      // In Segmente à 90 Punkte aufteilen (mit Überlappung)
+      osrmRoute={geometry:[],distance:0,duration:0,steps:[]};
+      const chunkSize=90;
+      for(let i=0;i<allWaypoints.length;i+=chunkSize-1){
+        const chunk=allWaypoints.slice(i,i+chunkSize);
+        if(chunk.length<2)break;
+        loadingText.textContent=`🚶 Route Segment ${Math.floor(i/chunkSize)+1}...`;
+        const seg=await fetchOSRMRoute(chunk);
+        osrmRoute.geometry.push(...seg.geometry);
+        osrmRoute.distance+=seg.distance;
+        osrmRoute.duration+=seg.duration;
+        osrmRoute.steps.push(...seg.steps);
+      }
+    }
     // 5. Visualisierung
     visualizeRoute(osrmRoute,allWaypoints);
     routeResult={osrmRoute,waypoints:allWaypoints,streetNames,gebietId:routeGebietId};
