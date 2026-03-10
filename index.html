@@ -11,7 +11,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://unpkg.com/leaflet-image@0.4.0/leaflet-image.js"></script>
 
 <style>
 :root {
@@ -458,7 +458,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v62</div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v63</div>
 
 <!-- NUTZER EINLADEN MODAL (nur Admin) -->
 <div class="modal-ov" id="inviteModalOv" onclick="if(event.target===this)closeInviteModal()">
@@ -2762,15 +2762,16 @@ async function printGebiet(gebietId){
   };
 
   try{
-    const scale=2;
-    // 6. Screenshot der vollen Karte — KEIN Cropping!
-    //    fitBounds + zoomSnap=0 hat das Polygon bereits zentriert.
-    //    html2canvas hat Offset-Probleme mit Leaflet-Transforms beim Cropping.
-    const fullCanvas=await html2canvas(mapEl,{useCORS:true,allowTaint:true,scale,logging:false});
+    // 6. Screenshot mit leaflet-image (rendert Tiles + SVG korrekt, kein CSS-Transform-Problem)
+    const fullCanvas=await new Promise((resolve,reject)=>{
+      leafletImage(map,function(err,canvas){
+        if(err)reject(err); else resolve(canvas);
+      });
+    });
     const imgData=fullCanvas.toDataURL('image/png');
     restore();
 
-    // 7. Druckfenster — Seitenverhältnis aus Viewport
+    // 7. Druckfenster — Seitenverhältnis aus Canvas
     const verteilerInfo=g.verteilerId?(g.verteiler||'Zugewiesen'):'Nicht zugewiesen';
     const imgRatio=fullCanvas.width/fullCanvas.height;
     const orient=imgRatio>1?'landscape':'portrait';
