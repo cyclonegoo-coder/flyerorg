@@ -458,7 +458,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v58</div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v59</div>
 
 <!-- NUTZER EINLADEN MODAL (nur Admin) -->
 <div class="modal-ov" id="inviteModalOv" onclick="if(event.target===this)closeInviteModal()">
@@ -2737,40 +2737,32 @@ async function printGebiet(gebietId){
   if(sidebar)sidebar.classList.remove('open');
   if(detailPanel)detailPanel.classList.remove('open');
 
-  // 3. Map-Container auf Polygon-Seitenverhältnis zuschneiden
-  //    So füllt fitBounds das Polygon exakt in den Container — kein nachträgliches Cropping nötig
+  // 3. Großen quadratischen Container erstellen, zoomSnap=0 für exakten Zoom
   const mapEl=document.getElementById('map');
   const origStyle={pos:mapEl.style.position,w:mapEl.style.width,h:mapEl.style.height,
     t:mapEl.style.top,l:mapEl.style.left,z:mapEl.style.zIndex};
-  const polyRatio=polyW/polyH;
-  // Feste Größe für den Screenshot-Container (groß genug für gute Auflösung)
-  const captureW=1200;
-  const captureH=Math.round(captureW/polyRatio);
+  const captureSize=1400;// Quadratisch — wird nach Screenshot zugeschnitten
   mapEl.style.position='fixed';
   mapEl.style.top='0';
   mapEl.style.left='0';
-  mapEl.style.width=captureW+'px';
-  mapEl.style.height=captureH+'px';
+  mapEl.style.width=captureSize+'px';
+  mapEl.style.height=captureSize+'px';
   mapEl.style.zIndex='99999';
-  // zoomSnap auf 0 setzen: erlaubt exakten (nicht-ganzzahligen) Zoom
-  // Ohne das rastet Leaflet auf ganze Zoom-Stufen ein → zu viel Rand
   const origZoomSnap=map.options.zoomSnap;
   map.options.zoomSnap=0;
   map.options.zoomDelta=0.1;
-  // Leaflet muss den neuen Container vollständig erkennen
   map.invalidateSize({animate:false});
-  await new Promise(r=>setTimeout(r,200));
+  await new Promise(r=>setTimeout(r,300));
   map.invalidateSize({animate:false});
-  // fitBounds mit kleinem Pixel-Padding (10px für Linienstärke)
-  map.fitBounds(bounds,{animate:false,padding:[10,10]});
-  await new Promise(r=>setTimeout(r,100));
-  map.fitBounds(bounds,{animate:false,padding:[10,10]});
+  // fitBounds mit 15px Padding für die Konturlinie
+  map.fitBounds(bounds,{animate:false,padding:[15,15]});
+  await new Promise(r=>setTimeout(r,150));
+  map.fitBounds(bounds,{animate:false,padding:[15,15]});
 
   // 4. Warten bis Tiles geladen
-  await new Promise(r=>setTimeout(r,1800));
+  await new Promise(r=>setTimeout(r,2000));
 
   const restore=()=>{
-    // zoomSnap wiederherstellen
     map.options.zoomSnap=origZoomSnap;
     map.options.zoomDelta=origZoomSnap||1;
     mapEl.style.position=origStyle.pos;
@@ -2781,7 +2773,6 @@ async function printGebiet(gebietId){
     mapEl.style.zIndex=origStyle.z;
     Object.entries(savedStyles).forEach(([id,style])=>{if(layers[id]?.setStyle)layers[id].setStyle(style)});
     hideEls.forEach(sel=>{const el=document.querySelector(sel);if(el)el.style.display=''});
-    // Grenzen-Layer und Overlays wiederherstellen
     if(hadGrenzen&&grenzenLayer)grenzenLayer.addTo(map);
     hiddenOverlays.forEach(l=>{try{l.addTo(map)}catch(e){}});
     if(sidebarWas&&sidebar)sidebar.classList.add('open');
@@ -2790,22 +2781,36 @@ async function printGebiet(gebietId){
   };
 
   try{
-    // 5. Screenshot — kein Cropping nötig, Container hat bereits Polygon-Seitenverhältnis
     const scale=2;
-    const canvas=await html2canvas(mapEl,{useCORS:true,allowTaint:true,scale,logging:false});
-    const imgData=canvas.toDataURL('image/png');
+    // 5. Screenshot des quadratischen Containers
+    const fullCanvas=await html2canvas(mapEl,{useCORS:true,allowTaint:true,scale,logging:false});
+
+    // 6. Pixel-Koordinaten der Polygon-Bounds berechnen und zuschneiden
+    const sw=bounds.getSouthWest(), ne=bounds.getNorthEast();
+    const pxNW=map.latLngToContainerPoint([ne.lat,sw.lng]);// oben-links
+    const pxSE=map.latLngToContainerPoint([sw.lat,ne.lng]);// unten-rechts
+    const pad=20;// Pixel-Padding für Konturlinie (weight:3) + etwas Luft
+    const cx=Math.max(0,pxNW.x-pad)*scale;
+    const cy=Math.max(0,pxNW.y-pad)*scale;
+    const cw=Math.min((pxSE.x-pxNW.x+pad*2)*scale, fullCanvas.width-cx);
+    const ch=Math.min((pxSE.y-pxNW.y+pad*2)*scale, fullCanvas.height-cy);
+
+    const cropCanvas=document.createElement('canvas');
+    cropCanvas.width=cw;
+    cropCanvas.height=ch;
+    cropCanvas.getContext('2d').drawImage(fullCanvas,cx,cy,cw,ch,0,0,cw,ch);
+    const imgData=cropCanvas.toDataURL('image/png');
     restore();
 
-    // 6. Druckfenster mit passender Orientierung
+    // 7. Druckfenster — Orientierung nach Crop-Seitenverhältnis
     const verteilerInfo=g.verteilerId?(g.verteiler||'Zugewiesen'):'Nicht zugewiesen';
-    const orient=isLandscape?'landscape':'portrait';
-    const imgRatio=canvas.width/canvas.height;
-    // A4 nutzbar: 285x192mm (landscape) oder 192x285mm (portrait) bei 4mm margin
-    const pageW=isLandscape?285:192, pageH=isLandscape?192:285;
-    const infoH=14;// ca. 14mm für Titel+Meta
+    const cropRatio=cw/ch;
+    const orient=cropRatio>1?'landscape':'portrait';
+    const pageW=orient==='landscape'?285:192, pageH=orient==='landscape'?192:285;
+    const infoH=14;
     const availH=pageH-infoH;
-    let imgCssW=pageW, imgCssH=pageW/imgRatio;
-    if(imgCssH>availH){imgCssH=availH;imgCssW=availH*imgRatio;}
+    let imgCssW=pageW, imgCssH=pageW/cropRatio;
+    if(imgCssH>availH){imgCssH=availH;imgCssW=availH*cropRatio;}
 
     const pw=window.open('','_blank','width=900,height=700');
     if(!pw){toast('⚠️ Popup-Blocker! Bitte Popups erlauben.');return}
