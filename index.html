@@ -458,7 +458,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v55</div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v56</div>
 
 <!-- NUTZER EINLADEN MODAL (nur Admin) -->
 <div class="modal-ov" id="inviteModalOv" onclick="if(event.target===this)closeInviteModal()">
@@ -2739,12 +2739,18 @@ async function printGebiet(gebietId){
   mapEl.style.width=captureW+'px';
   mapEl.style.height=captureH+'px';
   mapEl.style.zIndex='99999';
-  map.invalidateSize();
-  // 5% Padding damit die Kontur vollständig sichtbar ist (inkl. Strichstärke)
-  map.fitBounds(bounds.pad(0.05));
+  // Leaflet muss den neuen Container vollständig erkennen
+  map.invalidateSize({animate:false});
+  await new Promise(r=>setTimeout(r,200));
+  // fitBounds OHNE Animation und nochmals invalidateSize für saubere Pixel-Berechnung
+  map.invalidateSize({animate:false});
+  map.fitBounds(bounds.pad(0.05),{animate:false,padding:[0,0]});
+  // Nochmals setzen nach kurzem Tick (Leaflet braucht manchmal 2 Zyklen)
+  await new Promise(r=>setTimeout(r,100));
+  map.fitBounds(bounds.pad(0.05),{animate:false,padding:[0,0]});
 
   // 4. Warten bis Tiles geladen
-  await new Promise(r=>setTimeout(r,1500));
+  await new Promise(r=>setTimeout(r,1800));
 
   const restore=()=>{
     mapEl.style.position=origStyle.pos;
