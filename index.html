@@ -458,7 +458,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v60</div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v61</div>
 
 <!-- NUTZER EINLADEN MODAL (nur Admin) -->
 <div class="modal-ov" id="inviteModalOv" onclick="if(event.target===this)closeInviteModal()">
@@ -2735,10 +2735,14 @@ async function printGebiet(gebietId){
   const origZoomSnap=map.options.zoomSnap;
   map.options.zoomSnap=0;
   map.options.zoomDelta=0.1;
+  // Warten bis Sidebar-Animation fertig (CSS transition ~300ms)
+  await new Promise(r=>setTimeout(r,500));
   map.invalidateSize({animate:false});
-  await new Promise(r=>setTimeout(r,300));
+  await new Promise(r=>setTimeout(r,100));
   map.fitBounds(bounds,{animate:false,padding:[30,30]});
   await new Promise(r=>setTimeout(r,200));
+  // Nochmals sicherheitshalber
+  map.invalidateSize({animate:false});
   map.fitBounds(bounds,{animate:false,padding:[30,30]});
 
   // 5. Warten bis Tiles geladen
@@ -2759,26 +2763,41 @@ async function printGebiet(gebietId){
 
   try{
     const scale=2;
-    // 6. Screenshot der vollen Karte
+
+    // 6. Crop-Koordinaten aus der SVG-BoundingBox des Polygon-Pfads lesen
+    //    Das ist die TATSÄCHLICHE Bildschirmposition — kein Leaflet-Koordinaten-Umrechnung nötig
+    const polyLayer=layers[gebietId];
+    const pathEl=polyLayer?._path;// SVG <path> Element des Polygons
+    const mapRect=mapEl.getBoundingClientRect();
+    let minX,minY,maxX,maxY;
+    if(pathEl){
+      const pathRect=pathEl.getBoundingClientRect();
+      minX=pathRect.left-mapRect.left;
+      minY=pathRect.top-mapRect.top;
+      maxX=pathRect.right-mapRect.left;
+      maxY=pathRect.bottom-mapRect.top;
+    }else{
+      // Fallback: Leaflet-Koordinaten
+      coords.forEach(c=>{
+        const pt=map.latLngToContainerPoint([c[0],c[1]]);
+        if(!minX||pt.x<minX)minX=pt.x; if(!minY||pt.y<minY)minY=pt.y;
+        if(!maxX||pt.x>maxX)maxX=pt.x; if(!maxY||pt.y>maxY)maxY=pt.y;
+      });
+    }
+
+    // 7. Screenshot der vollen Karte
     const fullCanvas=await html2canvas(mapEl,{useCORS:true,allowTaint:true,scale,logging:false});
 
-    // 7. Pixel-BBox aus ALLEN Polygon-Punkten berechnen (nicht nur bounds-Ecken)
-    let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
-    coords.forEach(c=>{
-      const pt=map.latLngToContainerPoint([c[0],c[1]]);
-      if(pt.x<minX)minX=pt.x; if(pt.y<minY)minY=pt.y;
-      if(pt.x>maxX)maxX=pt.x; if(pt.y>maxY)maxY=pt.y;
-    });
-    const pad=25;// Pixel-Padding für Linienstärke + Rand
+    // 8. Zuschneiden auf Polygon-BBox + Padding
+    const pad=20;
     const cx=Math.max(0,(minX-pad))*scale;
     const cy=Math.max(0,(minY-pad))*scale;
     const cw=Math.min((maxX-minX+pad*2)*scale, fullCanvas.width-cx);
     const ch=Math.min((maxY-minY+pad*2)*scale, fullCanvas.height-cy);
 
-    // Debug: logge Crop-Koordinaten
     console.log('Print crop:',{minX,minY,maxX,maxY,cx,cy,cw,ch,
-      canvasW:fullCanvas.width,canvasH:fullCanvas.height,
-      mapW:mapEl.offsetWidth,mapH:mapEl.offsetHeight});
+      canvasW:fullCanvas.width,canvasH:fullCanvas.height,mapRect,
+      usedSVG:!!pathEl});
 
     const cropCanvas=document.createElement('canvas');
     cropCanvas.width=cw; cropCanvas.height=ch;
