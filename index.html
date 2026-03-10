@@ -458,7 +458,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v61</div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v62</div>
 
 <!-- NUTZER EINLADEN MODAL (nur Admin) -->
 <div class="modal-ov" id="inviteModalOv" onclick="if(event.target===this)closeInviteModal()">
@@ -2763,57 +2763,22 @@ async function printGebiet(gebietId){
 
   try{
     const scale=2;
-
-    // 6. Crop-Koordinaten aus der SVG-BoundingBox des Polygon-Pfads lesen
-    //    Das ist die TATSÄCHLICHE Bildschirmposition — kein Leaflet-Koordinaten-Umrechnung nötig
-    const polyLayer=layers[gebietId];
-    const pathEl=polyLayer?._path;// SVG <path> Element des Polygons
-    const mapRect=mapEl.getBoundingClientRect();
-    let minX,minY,maxX,maxY;
-    if(pathEl){
-      const pathRect=pathEl.getBoundingClientRect();
-      minX=pathRect.left-mapRect.left;
-      minY=pathRect.top-mapRect.top;
-      maxX=pathRect.right-mapRect.left;
-      maxY=pathRect.bottom-mapRect.top;
-    }else{
-      // Fallback: Leaflet-Koordinaten
-      coords.forEach(c=>{
-        const pt=map.latLngToContainerPoint([c[0],c[1]]);
-        if(!minX||pt.x<minX)minX=pt.x; if(!minY||pt.y<minY)minY=pt.y;
-        if(!maxX||pt.x>maxX)maxX=pt.x; if(!maxY||pt.y>maxY)maxY=pt.y;
-      });
-    }
-
-    // 7. Screenshot der vollen Karte
+    // 6. Screenshot der vollen Karte — KEIN Cropping!
+    //    fitBounds + zoomSnap=0 hat das Polygon bereits zentriert.
+    //    html2canvas hat Offset-Probleme mit Leaflet-Transforms beim Cropping.
     const fullCanvas=await html2canvas(mapEl,{useCORS:true,allowTaint:true,scale,logging:false});
-
-    // 8. Zuschneiden auf Polygon-BBox + Padding
-    const pad=20;
-    const cx=Math.max(0,(minX-pad))*scale;
-    const cy=Math.max(0,(minY-pad))*scale;
-    const cw=Math.min((maxX-minX+pad*2)*scale, fullCanvas.width-cx);
-    const ch=Math.min((maxY-minY+pad*2)*scale, fullCanvas.height-cy);
-
-    console.log('Print crop:',{minX,minY,maxX,maxY,cx,cy,cw,ch,
-      canvasW:fullCanvas.width,canvasH:fullCanvas.height,mapRect,
-      usedSVG:!!pathEl});
-
-    const cropCanvas=document.createElement('canvas');
-    cropCanvas.width=cw; cropCanvas.height=ch;
-    cropCanvas.getContext('2d').drawImage(fullCanvas,cx,cy,cw,ch,0,0,cw,ch);
-    const imgData=cropCanvas.toDataURL('image/png');
+    const imgData=fullCanvas.toDataURL('image/png');
     restore();
 
-    // 8. Druckfenster
+    // 7. Druckfenster — Seitenverhältnis aus Viewport
     const verteilerInfo=g.verteilerId?(g.verteiler||'Zugewiesen'):'Nicht zugewiesen';
-    const cropRatio=cw/ch;
-    const orient=cropRatio>1?'landscape':'portrait';
+    const imgRatio=fullCanvas.width/fullCanvas.height;
+    const orient=imgRatio>1?'landscape':'portrait';
     const pageW=orient==='landscape'?285:192, pageH=orient==='landscape'?192:285;
     const infoH=14;
     const availH=pageH-infoH;
-    let imgCssW=pageW, imgCssH=pageW/cropRatio;
-    if(imgCssH>availH){imgCssH=availH;imgCssW=availH*cropRatio;}
+    let imgCssW=pageW, imgCssH=pageW/imgRatio;
+    if(imgCssH>availH){imgCssH=availH;imgCssW=availH*imgRatio;}
 
     const pw=window.open('','_blank','width=900,height=700');
     if(!pw){toast('⚠️ Popup-Blocker! Bitte Popups erlauben.');return}
