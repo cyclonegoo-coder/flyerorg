@@ -335,9 +335,10 @@ textarea{min-height:68px}
   <div class="h-right">
     <!-- Admin: Nutzer einladen -->
     <button id="anfragenBtn" onclick="openAnfragenModal()" title="Offene Anfragen" style="display:none;position:relative;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--orange)'" onmouseout="this.style.color='var(--text3)'">🔔<span id="anfragenBadge" style="display:none;position:absolute;top:-2px;right:-2px;background:var(--red);color:#fff;font-size:.55rem;font-weight:700;min-width:14px;height:14px;border-radius:7px;align-items:center;justify-content:center;padding:0 3px">0</span></button>
-    <button id="manageUsersBtn" onclick="openManageUsersModal()" title="Nutzerverwaltung" style="display:none;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='var(--text3)'">👥</button>
+    <button id="bulkPdfBtn" onclick="openBulkPdfModal()" title="Gebiete-PDF exportieren" style="display:none;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='var(--text3)'">📄</button>
     <button id="hierarchyBtn" onclick="openHierarchyModal()" title="Gebietsstruktur verwalten" style="display:none;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='var(--text3)'">🏗</button>
     <button id="inviteUserBtn" onclick="openInviteModal()" title="Nutzer einladen" style="display:none;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='var(--text3)'">➕👤</button>
+    <button id="manageUsersBtn" onclick="openManageUsersModal()" title="Nutzerverwaltung" style="display:none;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='var(--text3)'">👥</button>
     <!-- User pill with role badge -->
     <div class="user-pill" onclick="openProfilModal()" title="Mein Profil">
       <div class="user-avatar" id="userAvatar">?</div>
@@ -458,7 +459,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v71</div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v73</div>
 
 <!-- NUTZER EINLADEN MODAL (nur Admin) -->
 <div class="modal-ov" id="inviteModalOv" onclick="if(event.target===this)closeInviteModal()">
@@ -1910,6 +1911,10 @@ async function showApp() {
     document.getElementById('manageUsersBtn').style.display = 'block';
     document.getElementById('hierarchyBtn').style.display = 'block';
   }
+  // PDF-Export für Manager (Admin, Kreisverwalter, Gebietsverwalter)
+  if (rolle === 'admin' || rolle === 'kreisverwalter' || rolle === 'verwalter') {
+    document.getElementById('bulkPdfBtn').style.display = 'block';
+  }
   // Anfragen-Glocke für alle Rollen (Admin/Verwalter: offene Anfragen, Verteiler: Rückmeldungen)
   document.getElementById('anfragenBtn').style.display = 'inline-block';
   await loadAllUsers();
@@ -2875,7 +2880,7 @@ function openBulkPdfModal(){
     },0);
     h+=`<div style="margin-bottom:2px">
       <div style="display:flex;align-items:center;gap:0;padding:8px 6px 4px;border-bottom:1px solid var(--sep)">
-        <span class="bpdf-arrow" onclick="bpdfToggleCollapse(this)" style="cursor:pointer;font-size:.7rem;width:18px;text-align:center;user-select:none;transition:transform .15s;transform:rotate(90deg)">▶</span>
+        <span class="bpdf-arrow" onclick="bpdfToggleCollapse(this)" style="cursor:pointer;font-size:.7rem;width:18px;text-align:center;user-select:none;transition:transform .15s;transform:rotate(0deg)">▶</span>
         <label style="display:flex;align-items:center;gap:6px;font-size:.82rem;font-weight:700;color:var(--text);cursor:pointer;flex:1">
           <input type="checkbox" class="bpdf-lk" data-lk="${lkId}" onchange="bpdfToggleLK(this)" checked>
           <span>🏛 ${lk.name}</span><span style="font-size:.68rem;font-weight:400;color:var(--text4);margin-left:auto">${lkGebietCount} Gebiete</span>
@@ -2895,7 +2900,7 @@ function openBulkPdfModal(){
       const gvGebietCount=regEntries.reduce((s,[,r])=>s+r.gebiete.filter(g=>kmlP[g.id]&&kmlP[g.id].length>=3).length,0);
       h+=`<div style="margin-left:16px">
         <div style="display:flex;align-items:center;gap:0;padding:5px 4px 3px">
-          <span class="bpdf-arrow" onclick="bpdfToggleCollapse(this)" style="cursor:pointer;font-size:.6rem;width:16px;text-align:center;user-select:none;transition:transform .15s;transform:rotate(90deg)">▶</span>
+          <span class="bpdf-arrow" onclick="bpdfToggleCollapse(this)" style="cursor:pointer;font-size:.6rem;width:16px;text-align:center;user-select:none;transition:transform .15s;transform:rotate(0deg)">▶</span>
           <label style="display:flex;align-items:center;gap:6px;font-size:.78rem;font-weight:600;color:var(--text2);cursor:pointer;flex:1">
             <input type="checkbox" class="bpdf-gv" data-gv="${gvId}" data-lk="${lkId}" onchange="bpdfToggleGV(this)" checked>
             <span>📁 ${gv.name}</span><span style="font-size:.65rem;font-weight:400;color:var(--text4);margin-left:auto">${gvGebietCount}</span>
@@ -2908,7 +2913,7 @@ function openBulkPdfModal(){
         if(!gebiete.length)return;
         h+=`<div style="margin-left:16px">
           <div style="display:flex;align-items:center;gap:0;padding:4px 4px 2px">
-            <span class="bpdf-arrow" onclick="bpdfToggleCollapse(this)" style="cursor:pointer;font-size:.55rem;width:14px;text-align:center;user-select:none;transition:transform .15s;transform:rotate(90deg)">▶</span>
+            <span class="bpdf-arrow" onclick="bpdfToggleCollapse(this)" style="cursor:pointer;font-size:.55rem;width:14px;text-align:center;user-select:none;transition:transform .15s;transform:rotate(0deg)">▶</span>
             <label style="display:flex;align-items:center;gap:6px;font-size:.75rem;font-weight:500;color:var(--text2);cursor:pointer;flex:1">
               <input type="checkbox" class="bpdf-reg" data-reg="${rId}" data-gv="${gvId}" data-lk="${lkId}" onchange="bpdfToggleReg(this)" checked>
               <span>📍 ${r.name}</span><span style="font-size:.63rem;font-weight:400;color:var(--text4);margin-left:auto">${gebiete.length}</span>
@@ -2929,9 +2934,10 @@ function openBulkPdfModal(){
     h+=`</div></div>`;
   });
   cont.innerHTML=h;
-  // Initialisiere maxHeight für alle klappbaren Bereiche (offen)
+  // Initialisiere alle Bereiche eingeklappt
   requestAnimationFrame(()=>{
-    cont.querySelectorAll('.bpdf-children').forEach(el=>{el.style.transition='max-height .2s ease';el.style.maxHeight=el.scrollHeight+'px';});
+    cont.querySelectorAll('.bpdf-children').forEach(el=>{el.style.transition='max-height .2s ease';el.style.maxHeight='0px';});
+    cont.querySelectorAll('.bpdf-arrow').forEach(el=>{el.style.transform='rotate(0deg)';});
   });
   bpdfUpdateCount();
   document.getElementById('bulkPdfModalOv').classList.add('open');
@@ -2946,6 +2952,11 @@ function bpdfToggleCollapse(arrow){
   const open=children.style.maxHeight!=='0px';
   if(open){children.style.maxHeight='0px';arrow.style.transform='rotate(0deg)';}
   else{children.style.maxHeight=children.scrollHeight+'px';arrow.style.transform='rotate(90deg)';}
+  // Eltern-Container ebenfalls updaten
+  setTimeout(()=>{
+    let el=children.parentElement?.closest('.bpdf-children');
+    while(el){if(el.style.maxHeight!=='0px')el.style.maxHeight=el.scrollHeight+'px';el=el.parentElement?.closest('.bpdf-children');}
+  },220);
 }
 
 function bpdfToggleLK(el){
