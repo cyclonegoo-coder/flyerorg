@@ -2832,6 +2832,184 @@ async function bulkPrintGebiete(){
 }
 
 // ============================================================
+// BULK PDF MODAL
+// ============================================================
+function openBulkPdfModal(){
+  const cont=document.getElementById('bulkPdfContent');
+  let h='';
+  // Bestimme sichtbare Landkreise/GVs/Regionen basierend auf Berechtigung
+  let lkEntries=[];
+  if(curRole==='admin'){
+    lkEntries=Object.entries(landkreise);
+  } else if(curRole==='kreisverwalter'){
+    const myLK=currentProfile?.verwalteter_landkreis;
+    if(myLK&&landkreise[myLK]) lkEntries=[[myLK,landkreise[myLK]]];
+  } else if(curRole==='verwalter'){
+    // Verwalter: Regionen ermitteln, daraus GVs und LKs ableiten
+    const verwReg=currentProfile?.verwaltete_regionen||[];
+    const lkIds=new Set();
+    verwReg.forEach(rId=>{
+      const reg=regionen[rId];
+      if(reg){const gv=gebietsverbaende[reg.gebietsverband_id];if(gv)lkIds.add(gv.landkreis_id);}
+    });
+    lkEntries=[...lkIds].map(id=>[id,landkreise[id]]).filter(([,lk])=>lk);
+  }
+  if(!lkEntries.length){cont.innerHTML='<div style="padding:12px;font-size:.82rem;color:var(--text3)">Keine Gebiete verfügbar.</div>';document.getElementById('bulkPdfModalOv').classList.add('open');return;}
+
+  lkEntries.sort((a,b)=>a[1].name.localeCompare(b[1].name));
+  lkEntries.forEach(([lkId,lk])=>{
+    // GVs in diesem Landkreis
+    let gvEntries=Object.entries(gebietsverbaende).filter(([,gv])=>gv.landkreis_id===lkId);
+    if(curRole==='verwalter'){
+      const verwReg=currentProfile?.verwaltete_regionen||[];
+      const erlaubteGVs=new Set();
+      verwReg.forEach(rId=>{const reg=regionen[rId];if(reg)erlaubteGVs.add(reg.gebietsverband_id);});
+      gvEntries=gvEntries.filter(([gvId])=>erlaubteGVs.has(gvId));
+    }
+    gvEntries.sort((a,b)=>a[1].name.localeCompare(b[1].name));
+    if(!gvEntries.length)return;
+
+    // Landkreis-Header mit Checkbox
+    const lkGebietCount=gvEntries.reduce((sum,[gvId])=>{
+      return sum+Object.entries(regionen).filter(([,r])=>r.gebietsverband_id===gvId).reduce((s,[,r])=>s+r.gebiete.filter(g=>kmlP[g.id]&&kmlP[g.id].length>=3).length,0);
+    },0);
+    h+=`<div style="margin-bottom:2px">
+      <label style="display:flex;align-items:center;gap:6px;padding:8px 6px 4px;font-size:.82rem;font-weight:700;color:var(--text);cursor:pointer;border-bottom:1px solid var(--sep)">
+        <input type="checkbox" class="bpdf-lk" data-lk="${lkId}" onchange="bpdfToggleLK(this)" checked>
+        <span>🏛 ${lk.name}</span><span style="font-size:.68rem;font-weight:400;color:var(--text4);margin-left:auto">${lkGebietCount} Gebiete</span>
+      </label>`;
+
+    gvEntries.forEach(([gvId,gv])=>{
+      let regEntries=Object.entries(regionen).filter(([,r])=>r.gebietsverband_id===gvId);
+      if(curRole==='verwalter'){
+        const verwReg=currentProfile?.verwaltete_regionen||[];
+        regEntries=regEntries.filter(([rId])=>verwReg.includes(rId));
+      }
+      regEntries.sort((a,b)=>a[1].name.localeCompare(b[1].name));
+      if(!regEntries.length)return;
+
+      const gvGebietCount=regEntries.reduce((s,[,r])=>s+r.gebiete.filter(g=>kmlP[g.id]&&kmlP[g.id].length>=3).length,0);
+      h+=`<div style="margin-left:16px">
+        <label style="display:flex;align-items:center;gap:6px;padding:5px 4px 3px;font-size:.78rem;font-weight:600;color:var(--text2);cursor:pointer">
+          <input type="checkbox" class="bpdf-gv" data-gv="${gvId}" data-lk="${lkId}" onchange="bpdfToggleGV(this)" checked>
+          <span>📁 ${gv.name}</span><span style="font-size:.65rem;font-weight:400;color:var(--text4);margin-left:auto">${gvGebietCount}</span>
+        </label>`;
+
+      regEntries.forEach(([rId,r])=>{
+        const gebiete=r.gebiete.filter(g=>kmlP[g.id]&&kmlP[g.id].length>=3);
+        if(!gebiete.length)return;
+        h+=`<div style="margin-left:16px">
+          <label style="display:flex;align-items:center;gap:6px;padding:4px 4px 2px;font-size:.75rem;font-weight:500;color:var(--text2);cursor:pointer">
+            <input type="checkbox" class="bpdf-reg" data-reg="${rId}" data-gv="${gvId}" data-lk="${lkId}" onchange="bpdfToggleReg(this)" checked>
+            <span>📍 ${r.name}</span><span style="font-size:.63rem;font-weight:400;color:var(--text4);margin-left:auto">${gebiete.length}</span>
+          </label>`;
+        h+=`<div style="margin-left:20px;display:flex;flex-direction:column;gap:1px" class="bpdf-gebiete-${rId}">`;
+        gebiete.forEach(g=>{
+          h+=`<label style="display:flex;align-items:center;gap:5px;padding:2px 4px;font-size:.72rem;color:var(--text3);cursor:pointer">
+            <input type="checkbox" class="bpdf-geb" data-geb="${g.id}" data-reg="${rId}" data-gv="${gvId}" data-lk="${lkId}" onchange="bpdfUpdateCount()" checked>
+            <span>${g.name}</span>
+          </label>`;
+        });
+        h+=`</div></div>`;
+      });
+      h+=`</div>`;
+    });
+    h+=`</div>`;
+  });
+  cont.innerHTML=h;
+  bpdfUpdateCount();
+  document.getElementById('bulkPdfModalOv').classList.add('open');
+}
+
+function closeBulkPdfModal(){document.getElementById('bulkPdfModalOv').classList.remove('open');}
+
+function bpdfToggleLK(el){
+  const lk=el.dataset.lk,c=el.checked;
+  document.querySelectorAll(`.bpdf-gv[data-lk="${lk}"],.bpdf-reg[data-lk="${lk}"],.bpdf-geb[data-lk="${lk}"]`).forEach(cb=>cb.checked=c);
+  bpdfUpdateCount();
+}
+function bpdfToggleGV(el){
+  const gv=el.dataset.gv,c=el.checked;
+  document.querySelectorAll(`.bpdf-reg[data-gv="${gv}"],.bpdf-geb[data-gv="${gv}"]`).forEach(cb=>cb.checked=c);
+  // Update parent LK
+  const lk=el.dataset.lk;
+  const allGV=document.querySelectorAll(`.bpdf-gv[data-lk="${lk}"]`);
+  const lkCb=document.querySelector(`.bpdf-lk[data-lk="${lk}"]`);
+  if(lkCb)lkCb.checked=[...allGV].every(cb=>cb.checked);
+  bpdfUpdateCount();
+}
+function bpdfToggleReg(el){
+  const reg=el.dataset.reg,c=el.checked;
+  document.querySelectorAll(`.bpdf-geb[data-reg="${reg}"]`).forEach(cb=>cb.checked=c);
+  // Update parent GV + LK
+  const gv=el.dataset.gv,lk=el.dataset.lk;
+  const allReg=document.querySelectorAll(`.bpdf-reg[data-gv="${gv}"]`);
+  const gvCb=document.querySelector(`.bpdf-gv[data-gv="${gv}"]`);
+  if(gvCb)gvCb.checked=[...allReg].every(cb=>cb.checked);
+  const allGV=document.querySelectorAll(`.bpdf-gv[data-lk="${lk}"]`);
+  const lkCb=document.querySelector(`.bpdf-lk[data-lk="${lk}"]`);
+  if(lkCb)lkCb.checked=[...allGV].every(cb=>cb.checked);
+  bpdfUpdateCount();
+}
+function bpdfUpdateCount(){
+  const checked=document.querySelectorAll('.bpdf-geb:checked');
+  const n=checked.length;
+  document.getElementById('bulkPdfCount').textContent=`${n} Gebiet${n!==1?'e':''} ausgewählt`;
+  document.getElementById('bulkPdfStartBtn').disabled=n===0;
+}
+
+async function startBulkPdfExport(){
+  const checked=[...document.querySelectorAll('.bpdf-geb:checked')].map(cb=>cb.dataset.geb);
+  if(!checked.length){toast('⚠️ Keine Gebiete ausgewählt');return;}
+  const allG=getAllGebiete();
+  const gs=checked.map(id=>allG.find(g=>g.id===id)).filter(g=>g&&kmlP[g.id]&&kmlP[g.id].length>=3);
+  if(!gs.length){toast('⚠️ Keine Gebiete mit Polygonen');return;}
+
+  const btn=document.getElementById('bulkPdfStartBtn');
+  const origText=btn.textContent;
+  btn.disabled=true;btn.textContent=`⏳ 0 / ${gs.length}...`;
+  try{
+    const {jsPDF}=window.jspdf;
+    let pdf=null;
+    for(let i=0;i<gs.length;i++){
+      const g=gs[i];
+      btn.textContent=`⏳ ${i+1} / ${gs.length} — ${g.name}`;
+      const coords=kmlP[g.id];
+      const canvas=await renderGebietCanvas(coords);
+      const imgRatio=canvas.width/canvas.height;
+      const orient=imgRatio>1?'landscape':'portrait';
+      if(i===0)pdf=new jsPDF({orientation:orient,unit:'mm',format:'a4'});
+      else pdf.addPage('a4',orient);
+      const pageW=orient==='landscape'?297:210, pageH=orient==='landscape'?210:297;
+      const margin=4;
+      const usableW=pageW-margin*2, usableH=pageH-margin*2;
+      pdf.setFontSize(12);pdf.setFont(undefined,'bold');
+      pdf.text(g.name,margin,margin+4);
+      pdf.setFontSize(8);pdf.setFont(undefined,'normal');
+      const verteilerInfo=g.verteilerId?(g.verteiler||'Zugewiesen'):'Nicht zugewiesen';
+      const metaText=`Datum: ${new Date().toLocaleDateString('de-DE')} · Stückzahl: ${g.stueckzahl||0} · Verteiler: ${verteilerInfo}`;
+      pdf.text(metaText,margin,margin+8);
+      const imgY=margin+10;
+      const availH=usableH-10;
+      let imgW=usableW, imgH=usableW/imgRatio;
+      if(imgH>availH){imgH=availH;imgW=availH*imgRatio;}
+      const imgX=margin+(usableW-imgW)/2;
+      pdf.addImage(canvas.toDataURL('image/jpeg',0.92),'JPEG',imgX,imgY,imgW,imgH);
+      if(i<gs.length-1)await new Promise(r=>setTimeout(r,300));
+    }
+    const kampagne=document.querySelector('.kam-sel')?.textContent||'Gebiete';
+    pdf.save(`${kampagne.trim()}_Gebiete_${new Date().toLocaleDateString('de-DE')}.pdf`);
+    toast(`✅ PDF mit ${gs.length} Gebieten erstellt!`);
+    closeBulkPdfModal();
+  }catch(err){
+    console.error('Bulk PDF error:',err);
+    toast('⚠️ Fehler: '+err.message);
+  }finally{
+    btn.disabled=false;btn.textContent=origText;
+  }
+}
+
+// ============================================================
 // SIDEBAR
 // ============================================================
 function getFilteredGV(){ return curLK==='alle' ? Object.entries(gebietsverbaende) : Object.entries(gebietsverbaende).filter(([,gv])=>gv.landkreis_id===curLK); }
