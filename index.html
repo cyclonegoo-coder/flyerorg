@@ -458,7 +458,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v56</div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v57</div>
 
 <!-- NUTZER EINLADEN MODAL (nur Admin) -->
 <div class="modal-ov" id="inviteModalOv" onclick="if(event.target===this)closeInviteModal()">
@@ -2709,6 +2709,19 @@ async function printGebiet(gebietId){
   map.closePopup();
   const hideEls=['.leaflet-control-zoom','.leaflet-control-attribution'];
   hideEls.forEach(sel=>{const el=document.querySelector(sel);if(el)el.style.display='none'});
+  // Grenzen-Layer (rote Linien) temporär entfernen
+  const hadGrenzen=grenzenLayer&&map.hasLayer(grenzenLayer);
+  if(hadGrenzen)map.removeLayer(grenzenLayer);
+  // Alle sonstigen Overlays (Marker, Zeichnungslinien) ausblenden
+  const hiddenOverlays=[];
+  map.eachLayer(l=>{
+    if(l instanceof L.TileLayer)return;// Tiles behalten
+    if(l._path||l._icon||l instanceof L.CircleMarker||l instanceof L.Polyline){
+      // Nicht die Gebiet-Polygone (die werden separat behandelt)
+      const isGebietPoly=Object.values(layers).includes(l);
+      if(!isGebietPoly){hiddenOverlays.push(l);map.removeLayer(l);}
+    }
+  });
   const savedStyles={};
   Object.entries(layers).forEach(([id,poly])=>{
     if(!poly||!poly.setStyle)return;
@@ -2744,10 +2757,10 @@ async function printGebiet(gebietId){
   await new Promise(r=>setTimeout(r,200));
   // fitBounds OHNE Animation und nochmals invalidateSize für saubere Pixel-Berechnung
   map.invalidateSize({animate:false});
-  map.fitBounds(bounds.pad(0.05),{animate:false,padding:[0,0]});
+  map.fitBounds(bounds.pad(0.02),{animate:false,padding:[0,0]});
   // Nochmals setzen nach kurzem Tick (Leaflet braucht manchmal 2 Zyklen)
   await new Promise(r=>setTimeout(r,100));
-  map.fitBounds(bounds.pad(0.05),{animate:false,padding:[0,0]});
+  map.fitBounds(bounds.pad(0.02),{animate:false,padding:[0,0]});
 
   // 4. Warten bis Tiles geladen
   await new Promise(r=>setTimeout(r,1800));
@@ -2761,6 +2774,9 @@ async function printGebiet(gebietId){
     mapEl.style.zIndex=origStyle.z;
     Object.entries(savedStyles).forEach(([id,style])=>{if(layers[id]?.setStyle)layers[id].setStyle(style)});
     hideEls.forEach(sel=>{const el=document.querySelector(sel);if(el)el.style.display=''});
+    // Grenzen-Layer und Overlays wiederherstellen
+    if(hadGrenzen&&grenzenLayer)grenzenLayer.addTo(map);
+    hiddenOverlays.forEach(l=>{try{l.addTo(map)}catch(e){}});
     if(sidebarWas&&sidebar)sidebar.classList.add('open');
     if(detailWas&&detailPanel)detailPanel.classList.add('open');
     map.invalidateSize();
