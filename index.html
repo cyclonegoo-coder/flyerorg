@@ -11,7 +11,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://unpkg.com/leaflet-image@0.4.0/leaflet-image.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
 <style>
 :root {
@@ -458,7 +458,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v63</div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v64</div>
 
 <!-- NUTZER EINLADEN MODAL (nur Admin) -->
 <div class="modal-ov" id="inviteModalOv" onclick="if(event.target===this)closeInviteModal()">
@@ -2762,13 +2762,43 @@ async function printGebiet(gebietId){
   };
 
   try{
-    // 6. Screenshot mit leaflet-image (rendert Tiles + SVG korrekt, kein CSS-Transform-Problem)
-    const fullCanvas=await new Promise((resolve,reject)=>{
-      leafletImage(map,function(err,canvas){
-        if(err)reject(err); else resolve(canvas);
-      });
+    // 6. Leaflet Transform-Fix für html2canvas
+    //    Leaflet nutzt translate3d() auf dem map-pane. html2canvas kann das nicht
+    //    korrekt rendern → Bild verschoben. Workaround: Transform temporär durch
+    //    left/top ersetzen, dann Screenshot, dann zurücksetzen.
+    const mapPane=mapEl.querySelector('.leaflet-map-pane');
+    const origTransform=mapPane.style.transform;
+    const transformMatch=origTransform.match(/translate3d\(\s*([^,]+),\s*([^,]+),\s*([^)]+)\)/);
+    if(transformMatch){
+      mapPane.style.transform='';
+      mapPane.style.left=transformMatch[1];
+      mapPane.style.top=transformMatch[2];
+    }
+    // Auch tile-panes und overlay-panes fixen
+    const allPanes=mapEl.querySelectorAll('.leaflet-tile-pane .leaflet-tile-container, .leaflet-overlay-pane');
+    const savedTransforms=[];
+    allPanes.forEach(p=>{
+      const t=p.style.transform;
+      savedTransforms.push(t);
+      const m=t.match(/translate3d\(\s*([^,]+),\s*([^,]+),\s*([^)]+)\)/);
+      if(m){p.style.transform='';p.style.left=m[1];p.style.top=m[2];}
     });
+
+    const scale=2;
+    const fullCanvas=await html2canvas(mapEl,{useCORS:true,allowTaint:true,scale,logging:false});
     const imgData=fullCanvas.toDataURL('image/png');
+
+    // Transforms wiederherstellen
+    if(transformMatch){
+      mapPane.style.transform=origTransform;
+      mapPane.style.left='';
+      mapPane.style.top='';
+    }
+    allPanes.forEach((p,i)=>{
+      p.style.transform=savedTransforms[i];
+      p.style.left='';
+      p.style.top='';
+    });
     restore();
 
     // 7. Druckfenster — Seitenverhältnis aus Canvas
