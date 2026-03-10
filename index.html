@@ -458,7 +458,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v69</div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v71</div>
 
 <!-- NUTZER EINLADEN MODAL (nur Admin) -->
 <div class="modal-ov" id="inviteModalOv" onclick="if(event.target===this)closeInviteModal()">
@@ -2874,10 +2874,14 @@ function openBulkPdfModal(){
       return sum+Object.entries(regionen).filter(([,r])=>r.gebietsverband_id===gvId).reduce((s,[,r])=>s+r.gebiete.filter(g=>kmlP[g.id]&&kmlP[g.id].length>=3).length,0);
     },0);
     h+=`<div style="margin-bottom:2px">
-      <label style="display:flex;align-items:center;gap:6px;padding:8px 6px 4px;font-size:.82rem;font-weight:700;color:var(--text);cursor:pointer;border-bottom:1px solid var(--sep)">
-        <input type="checkbox" class="bpdf-lk" data-lk="${lkId}" onchange="bpdfToggleLK(this)" checked>
-        <span>🏛 ${lk.name}</span><span style="font-size:.68rem;font-weight:400;color:var(--text4);margin-left:auto">${lkGebietCount} Gebiete</span>
-      </label>`;
+      <div style="display:flex;align-items:center;gap:0;padding:8px 6px 4px;border-bottom:1px solid var(--sep)">
+        <span class="bpdf-arrow" onclick="bpdfToggleCollapse(this)" style="cursor:pointer;font-size:.7rem;width:18px;text-align:center;user-select:none;transition:transform .15s;transform:rotate(90deg)">▶</span>
+        <label style="display:flex;align-items:center;gap:6px;font-size:.82rem;font-weight:700;color:var(--text);cursor:pointer;flex:1">
+          <input type="checkbox" class="bpdf-lk" data-lk="${lkId}" onchange="bpdfToggleLK(this)" checked>
+          <span>🏛 ${lk.name}</span><span style="font-size:.68rem;font-weight:400;color:var(--text4);margin-left:auto">${lkGebietCount} Gebiete</span>
+        </label>
+      </div>
+      <div class="bpdf-children" style="overflow:hidden">`;
 
     gvEntries.forEach(([gvId,gv])=>{
       let regEntries=Object.entries(regionen).filter(([,r])=>r.gebietsverband_id===gvId);
@@ -2890,38 +2894,59 @@ function openBulkPdfModal(){
 
       const gvGebietCount=regEntries.reduce((s,[,r])=>s+r.gebiete.filter(g=>kmlP[g.id]&&kmlP[g.id].length>=3).length,0);
       h+=`<div style="margin-left:16px">
-        <label style="display:flex;align-items:center;gap:6px;padding:5px 4px 3px;font-size:.78rem;font-weight:600;color:var(--text2);cursor:pointer">
-          <input type="checkbox" class="bpdf-gv" data-gv="${gvId}" data-lk="${lkId}" onchange="bpdfToggleGV(this)" checked>
-          <span>📁 ${gv.name}</span><span style="font-size:.65rem;font-weight:400;color:var(--text4);margin-left:auto">${gvGebietCount}</span>
-        </label>`;
+        <div style="display:flex;align-items:center;gap:0;padding:5px 4px 3px">
+          <span class="bpdf-arrow" onclick="bpdfToggleCollapse(this)" style="cursor:pointer;font-size:.6rem;width:16px;text-align:center;user-select:none;transition:transform .15s;transform:rotate(90deg)">▶</span>
+          <label style="display:flex;align-items:center;gap:6px;font-size:.78rem;font-weight:600;color:var(--text2);cursor:pointer;flex:1">
+            <input type="checkbox" class="bpdf-gv" data-gv="${gvId}" data-lk="${lkId}" onchange="bpdfToggleGV(this)" checked>
+            <span>📁 ${gv.name}</span><span style="font-size:.65rem;font-weight:400;color:var(--text4);margin-left:auto">${gvGebietCount}</span>
+          </label>
+        </div>
+        <div class="bpdf-children" style="overflow:hidden">`;
 
       regEntries.forEach(([rId,r])=>{
         const gebiete=r.gebiete.filter(g=>kmlP[g.id]&&kmlP[g.id].length>=3);
         if(!gebiete.length)return;
         h+=`<div style="margin-left:16px">
-          <label style="display:flex;align-items:center;gap:6px;padding:4px 4px 2px;font-size:.75rem;font-weight:500;color:var(--text2);cursor:pointer">
-            <input type="checkbox" class="bpdf-reg" data-reg="${rId}" data-gv="${gvId}" data-lk="${lkId}" onchange="bpdfToggleReg(this)" checked>
-            <span>📍 ${r.name}</span><span style="font-size:.63rem;font-weight:400;color:var(--text4);margin-left:auto">${gebiete.length}</span>
-          </label>`;
-        h+=`<div style="margin-left:20px;display:flex;flex-direction:column;gap:1px" class="bpdf-gebiete-${rId}">`;
+          <div style="display:flex;align-items:center;gap:0;padding:4px 4px 2px">
+            <span class="bpdf-arrow" onclick="bpdfToggleCollapse(this)" style="cursor:pointer;font-size:.55rem;width:14px;text-align:center;user-select:none;transition:transform .15s;transform:rotate(90deg)">▶</span>
+            <label style="display:flex;align-items:center;gap:6px;font-size:.75rem;font-weight:500;color:var(--text2);cursor:pointer;flex:1">
+              <input type="checkbox" class="bpdf-reg" data-reg="${rId}" data-gv="${gvId}" data-lk="${lkId}" onchange="bpdfToggleReg(this)" checked>
+              <span>📍 ${r.name}</span><span style="font-size:.63rem;font-weight:400;color:var(--text4);margin-left:auto">${gebiete.length}</span>
+            </label>
+          </div>
+          <div class="bpdf-children" style="overflow:hidden">
+          <div style="margin-left:24px;display:flex;flex-direction:column;gap:1px">`;
         gebiete.forEach(g=>{
           h+=`<label style="display:flex;align-items:center;gap:5px;padding:2px 4px;font-size:.72rem;color:var(--text3);cursor:pointer">
             <input type="checkbox" class="bpdf-geb" data-geb="${g.id}" data-reg="${rId}" data-gv="${gvId}" data-lk="${lkId}" onchange="bpdfUpdateCount()" checked>
             <span>${g.name}</span>
           </label>`;
         });
-        h+=`</div></div>`;
+        h+=`</div></div></div>`;
       });
-      h+=`</div>`;
+      h+=`</div></div>`;
     });
-    h+=`</div>`;
+    h+=`</div></div>`;
   });
   cont.innerHTML=h;
+  // Initialisiere maxHeight für alle klappbaren Bereiche (offen)
+  requestAnimationFrame(()=>{
+    cont.querySelectorAll('.bpdf-children').forEach(el=>{el.style.transition='max-height .2s ease';el.style.maxHeight=el.scrollHeight+'px';});
+  });
   bpdfUpdateCount();
   document.getElementById('bulkPdfModalOv').classList.add('open');
 }
 
 function closeBulkPdfModal(){document.getElementById('bulkPdfModalOv').classList.remove('open');}
+
+function bpdfToggleCollapse(arrow){
+  const parent=arrow.closest('div');
+  const children=parent.parentElement.querySelector(':scope > .bpdf-children');
+  if(!children)return;
+  const open=children.style.maxHeight!=='0px';
+  if(open){children.style.maxHeight='0px';arrow.style.transform='rotate(0deg)';}
+  else{children.style.maxHeight=children.scrollHeight+'px';arrow.style.transform='rotate(90deg)';}
+}
 
 function bpdfToggleLK(el){
   const lk=el.dataset.lk,c=el.checked;
@@ -3521,7 +3546,8 @@ async function deleteGebiet(id){
   const _g = getG(id);
   if(!confirm(`Gebiet "${_g ? _g.name : id}" wirklich löschen?`)) return;
 
-  // Zuerst aus DB löschen (gebiet_status + gebiete)
+  // Zuerst abhängige Tabellen löschen (anfragen, gebiet_status)
+  await sb.from('anfragen').delete().eq('gebiet_id', id);
   await sb.from('gebiet_status').delete().eq('gebiet_id', id);
   const { error } = await sb.from('gebiete').delete().eq('id',id);
   if (error) {
@@ -3994,6 +4020,12 @@ function editPolygon(id){
   closeDetail();
   editingGebietId=id;
   editOrigCoords=JSON.parse(JSON.stringify(kmlP[id]));
+
+  // Schließpunkt entfernen (letzter Punkt = erster Punkt bei geschlossenen Polygonen)
+  const coords=kmlP[id];
+  if(coords.length>3&&Math.abs(coords[0][0]-coords[coords.length-1][0])<1e-8&&Math.abs(coords[0][1]-coords[coords.length-1][1])<1e-8){
+    coords.pop();
+  }
 
   // Zoom to polygon
   map.fitBounds(layers[id].getBounds().pad(0.3));
