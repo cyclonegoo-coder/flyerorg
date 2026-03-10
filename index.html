@@ -365,9 +365,6 @@ textarea{min-height:68px}
       <div class="prog-row"><span>Fortschritt</span><span id="progText">–</span></div>
       <div class="prog-track"><div class="prog-fill" id="progFill" style="width:0%"></div></div>
     </div>
-    <div id="bulkPrintWrap" style="display:none;padding:4px 12px">
-      <button class="btn btn-g" onclick="bulkPrintGebiete()" style="width:100%;font-size:12px">🖨️ Alle Gebiete als PDF</button>
-    </div>
     <div class="g-list" id="gebietList"></div>
   </div>
 
@@ -461,7 +458,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v67</div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v68</div>
 
 <!-- NUTZER EINLADEN MODAL (nur Admin) -->
 <div class="modal-ov" id="inviteModalOv" onclick="if(event.target===this)closeInviteModal()">
@@ -2734,61 +2731,51 @@ async function renderGebietCanvas(coords,targetW=1600){
   return canvas;
 }
 
-// ── Einzelnes Gebiet drucken ──
-async function printGebiet(gebietId){
+// ── Einzelnes Gebiet als PDF exportieren ──
+async function exportGebietPDF(gebietId){
   const g=getG(gebietId);
   if(!g){toast('⚠️ Gebiet nicht gefunden');return}
   const coords=kmlP[gebietId];
   if(!coords||coords.length<3){toast('⚠️ Kein Polygon vorhanden');return}
-  toast('🖨️ Karte wird gerendert...');
+  toast('📄 PDF wird erstellt...');
   const canvas=await renderGebietCanvas(coords);
-
-  // Druckfenster
-  const imgData=canvas.toDataURL('image/png');
-  const verteilerInfo=g.verteilerId?(g.verteiler||'Zugewiesen'):'Nicht zugewiesen';
+  const {jsPDF}=window.jspdf;
   const imgRatio=canvas.width/canvas.height;
   const orient=imgRatio>1?'landscape':'portrait';
-  // A4 bei 4mm Margin: 289x202mm (landscape) oder 202x289mm (portrait)
-  const pageW=orient==='landscape'?289:202, pageH=orient==='landscape'?202:289;
-  const infoH=10;// Titel+Meta ~10mm
-  const availH=pageH-infoH;
-  let imgCssW=pageW, imgCssH=pageW/imgRatio;
-  if(imgCssH>availH){imgCssH=availH;imgCssW=availH*imgRatio;}
-
-  const pw=window.open('','_blank','width=900,height=700');
-  if(!pw){toast('⚠️ Popup-Blocker! Bitte Popups erlauben.');return}
-  pw.document.write(`<!DOCTYPE html><html><head><title>${g.name}</title>
-<style>
-  @page{size:${orient};margin:4mm}
-  *{margin:0;padding:0;box-sizing:border-box}
-  body{font-family:system-ui,sans-serif;padding:1mm}
-  .title{font-size:11pt;font-weight:700}
-  .meta{font-size:8pt;color:#444;margin-bottom:1px}
-  img{width:${imgCssW}mm;height:${imgCssH}mm;display:block}
-</style></head><body>
-  <div class="title">${g.name}</div>
-  <div class="meta"><b>Datum:</b> ${new Date().toLocaleDateString('de-DE')} · <b>Stückzahl:</b> ${g.stueckzahl||0} · <b>Verteiler:</b> ${verteilerInfo}${g.hinweise?.length?' · <b>Hinweise:</b> '+g.hinweise.join(', '):''}</div>
-  <img src="${imgData}"/>
-</body></html>`);
-  pw.document.close();
-  pw.onload=()=>setTimeout(()=>pw.print(),500);
-  setTimeout(()=>{try{pw.print()}catch(e){}},2500);
+  const pdf=new jsPDF({orientation:orient,unit:'mm',format:'a4'});
+  const pageW=orient==='landscape'?297:210, pageH=orient==='landscape'?210:297;
+  const margin=4;
+  const usableW=pageW-margin*2, usableH=pageH-margin*2;
+  pdf.setFontSize(12);pdf.setFont(undefined,'bold');
+  pdf.text(g.name,margin,margin+4);
+  pdf.setFontSize(8);pdf.setFont(undefined,'normal');
+  const verteilerInfo=g.verteilerId?(g.verteiler||'Zugewiesen'):'Nicht zugewiesen';
+  const metaText=`Datum: ${new Date().toLocaleDateString('de-DE')} · Stückzahl: ${g.stueckzahl||0} · Verteiler: ${verteilerInfo}${g.hinweise?.length?' · Hinweise: '+g.hinweise.join(', '):''}`;
+  pdf.text(metaText,margin,margin+8);
+  const imgY=margin+10;
+  const availH=usableH-10;
+  let imgW=usableW, imgH=usableW/imgRatio;
+  if(imgH>availH){imgH=availH;imgW=availH*imgRatio;}
+  const imgX=margin+(usableW-imgW)/2;
+  pdf.addImage(canvas.toDataURL('image/jpeg',0.92),'JPEG',imgX,imgY,imgW,imgH);
+  pdf.save(`${g.name.replace(/[^a-zA-ZäöüÄÖÜß0-9 _-]/g,'')}.pdf`);
+  toast('✅ PDF erstellt!');
 }
 
 // ── Alle sichtbaren Gebiete als PDF generieren ──
 async function bulkPrintGebiete(){
   const gs=getVisibleGebiete().filter(g=>kmlP[g.id]&&kmlP[g.id].length>=3);
   if(!gs.length){toast('⚠️ Keine Gebiete mit Polygonen vorhanden');return}
-  const btn=document.querySelector('#bulkPrintWrap button');
-  const origText=btn.textContent;
-  btn.disabled=true;
-  btn.textContent=`⏳ 0 / ${gs.length} Gebiete...`;
+  // Button finden (im Detail-Panel oder Sidebar)
+  const btn=event?.target||document.querySelector('[onclick*="bulkPrint"]');
+  const origText=btn?btn.textContent:'';
+  if(btn){btn.disabled=true;btn.textContent=`⏳ 0 / ${gs.length} Gebiete...`;}
   try{
     const {jsPDF}=window.jspdf;
     let pdf=null;
     for(let i=0;i<gs.length;i++){
       const g=gs[i];
-      btn.textContent=`⏳ ${i+1} / ${gs.length} — ${g.name}`;
+      if(btn)btn.textContent=`⏳ ${i+1} / ${gs.length} — ${g.name}`;
       const coords=kmlP[g.id];
       const canvas=await renderGebietCanvas(coords);
       const imgRatio=canvas.width/canvas.height;
@@ -2823,8 +2810,7 @@ async function bulkPrintGebiete(){
     console.error('Bulk PDF error:',err);
     toast('⚠️ Fehler: '+err.message);
   }finally{
-    btn.disabled=false;
-    btn.textContent=origText;
+    if(btn){btn.disabled=false;btn.textContent=origText;}
   }
 }
 
@@ -2978,9 +2964,6 @@ function renderStats(){
   document.getElementById('statOffen').textContent=(tot-vert).toLocaleString('de');
   document.getElementById('progText').textContent=`${fn} / ${gs.length}`;
   document.getElementById('progFill').style.width=(gs.length?fn/gs.length*100:0)+'%';
-  // Bulk-Print Button nur für Verwalter/Kreisverwalter/Admin anzeigen
-  const bpw=document.getElementById('bulkPrintWrap');
-  if(bpw)bpw.style.display=istManager()&&gs.length>0?'block':'none';
 }
 
 // ============================================================
@@ -3169,9 +3152,10 @@ function openDetail(id){
       <button class="btn btn-g" onclick="redrawGebiet('${g.id}')">🔄 Polygon neu zeichnen</button>
     </div></div>`;
   }
-  // Gebiet drucken
+  // PDF-Export
   h+=`<div class="d-sec"><div class="f-stack">
-    <button class="btn btn-g" onclick="printGebiet('${g.id}')">🖨️ Gebiet drucken</button>
+    <button class="btn btn-g" onclick="exportGebietPDF('${g.id}')">📄 Gebiet als PDF</button>
+    ${istManager()?'<button class="btn btn-g" onclick="bulkPrintGebiete()" style="font-size:12px">📄 Alle sichtbaren Gebiete als PDF</button>':''}
   </div></div>`;
   document.getElementById('detailBody').innerHTML=h;
   document.getElementById('detailPanel').classList.add('open');
