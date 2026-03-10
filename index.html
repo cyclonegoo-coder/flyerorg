@@ -458,7 +458,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v59</div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v60</div>
 
 <!-- NUTZER EINLADEN MODAL (nur Admin) -->
 <div class="modal-ov" id="inviteModalOv" onclick="if(event.target===this)closeInviteModal()">
@@ -2698,30 +2698,23 @@ async function printGebiet(gebietId){
   if(!coords||coords.length<3){toast('⚠️ Kein Polygon vorhanden');return}
   toast('🖨️ Druckansicht wird erstellt...');
 
-  // 1. Polygon-Bounds + Seitenverhältnis bestimmen
   const bounds=L.latLngBounds(coords.map(c=>[c[0],c[1]]));
-  const midLat=(bounds.getSouth()+bounds.getNorth())/2;
-  const polyW=Math.abs(bounds.getEast()-bounds.getWest())*Math.cos(midLat*Math.PI/180);
-  const polyH=Math.abs(bounds.getNorth()-bounds.getSouth());
-  const isLandscape=polyW>polyH;
 
-  // 2. UI ausblenden + Polygon-Styles setzen
+  // 1. UI ausblenden
   map.closePopup();
   const hideEls=['.leaflet-control-zoom','.leaflet-control-attribution'];
   hideEls.forEach(sel=>{const el=document.querySelector(sel);if(el)el.style.display='none'});
-  // Grenzen-Layer (rote Linien) temporär entfernen
   const hadGrenzen=grenzenLayer&&map.hasLayer(grenzenLayer);
   if(hadGrenzen)map.removeLayer(grenzenLayer);
-  // Alle sonstigen Overlays (Marker, Zeichnungslinien) ausblenden
   const hiddenOverlays=[];
   map.eachLayer(l=>{
-    if(l instanceof L.TileLayer)return;// Tiles behalten
-    if(l._path||l._icon||l instanceof L.CircleMarker||l instanceof L.Polyline){
-      // Nicht die Gebiet-Polygone (die werden separat behandelt)
-      const isGebietPoly=Object.values(layers).includes(l);
-      if(!isGebietPoly){hiddenOverlays.push(l);map.removeLayer(l);}
+    if(l instanceof L.TileLayer)return;
+    const isGebietPoly=Object.values(layers).includes(l);
+    if(!isGebietPoly&&(l._path||l._icon||l instanceof L.CircleMarker||l instanceof L.Polyline)){
+      hiddenOverlays.push(l);map.removeLayer(l);
     }
   });
+  // 2. Polygon-Styles: nur aktuelles mit schwarzem Rand
   const savedStyles={};
   Object.entries(layers).forEach(([id,poly])=>{
     if(!poly||!poly.setStyle)return;
@@ -2730,6 +2723,7 @@ async function printGebiet(gebietId){
     if(id===gebietId)poly.setStyle({color:'#222',fillColor:'transparent',fillOpacity:0,weight:3,opacity:1});
     else poly.setStyle({fillOpacity:0,opacity:0,weight:0});
   });
+  // 3. Sidebar/Panel schließen, Karte nutzt vollen Viewport
   const sidebar=document.getElementById('sidebar');
   const detailPanel=document.getElementById('detailPanel');
   const sidebarWas=sidebar?.classList.contains('open');
@@ -2737,40 +2731,23 @@ async function printGebiet(gebietId){
   if(sidebar)sidebar.classList.remove('open');
   if(detailPanel)detailPanel.classList.remove('open');
 
-  // 3. Großen quadratischen Container erstellen, zoomSnap=0 für exakten Zoom
-  const mapEl=document.getElementById('map');
-  const origStyle={pos:mapEl.style.position,w:mapEl.style.width,h:mapEl.style.height,
-    t:mapEl.style.top,l:mapEl.style.left,z:mapEl.style.zIndex};
-  const captureSize=1400;// Quadratisch — wird nach Screenshot zugeschnitten
-  mapEl.style.position='fixed';
-  mapEl.style.top='0';
-  mapEl.style.left='0';
-  mapEl.style.width=captureSize+'px';
-  mapEl.style.height=captureSize+'px';
-  mapEl.style.zIndex='99999';
+  // 4. zoomSnap=0 für exakten Zoom, dann fitBounds
   const origZoomSnap=map.options.zoomSnap;
   map.options.zoomSnap=0;
   map.options.zoomDelta=0.1;
   map.invalidateSize({animate:false});
   await new Promise(r=>setTimeout(r,300));
-  map.invalidateSize({animate:false});
-  // fitBounds mit 15px Padding für die Konturlinie
-  map.fitBounds(bounds,{animate:false,padding:[15,15]});
-  await new Promise(r=>setTimeout(r,150));
-  map.fitBounds(bounds,{animate:false,padding:[15,15]});
+  map.fitBounds(bounds,{animate:false,padding:[30,30]});
+  await new Promise(r=>setTimeout(r,200));
+  map.fitBounds(bounds,{animate:false,padding:[30,30]});
 
-  // 4. Warten bis Tiles geladen
+  // 5. Warten bis Tiles geladen
   await new Promise(r=>setTimeout(r,2000));
 
+  const mapEl=document.getElementById('map');
   const restore=()=>{
     map.options.zoomSnap=origZoomSnap;
     map.options.zoomDelta=origZoomSnap||1;
-    mapEl.style.position=origStyle.pos;
-    mapEl.style.width=origStyle.w;
-    mapEl.style.height=origStyle.h;
-    mapEl.style.top=origStyle.t;
-    mapEl.style.left=origStyle.l;
-    mapEl.style.zIndex=origStyle.z;
     Object.entries(savedStyles).forEach(([id,style])=>{if(layers[id]?.setStyle)layers[id].setStyle(style)});
     hideEls.forEach(sel=>{const el=document.querySelector(sel);if(el)el.style.display=''});
     if(hadGrenzen&&grenzenLayer)grenzenLayer.addTo(map);
@@ -2782,27 +2759,34 @@ async function printGebiet(gebietId){
 
   try{
     const scale=2;
-    // 5. Screenshot des quadratischen Containers
+    // 6. Screenshot der vollen Karte
     const fullCanvas=await html2canvas(mapEl,{useCORS:true,allowTaint:true,scale,logging:false});
 
-    // 6. Pixel-Koordinaten der Polygon-Bounds berechnen und zuschneiden
-    const sw=bounds.getSouthWest(), ne=bounds.getNorthEast();
-    const pxNW=map.latLngToContainerPoint([ne.lat,sw.lng]);// oben-links
-    const pxSE=map.latLngToContainerPoint([sw.lat,ne.lng]);// unten-rechts
-    const pad=20;// Pixel-Padding für Konturlinie (weight:3) + etwas Luft
-    const cx=Math.max(0,pxNW.x-pad)*scale;
-    const cy=Math.max(0,pxNW.y-pad)*scale;
-    const cw=Math.min((pxSE.x-pxNW.x+pad*2)*scale, fullCanvas.width-cx);
-    const ch=Math.min((pxSE.y-pxNW.y+pad*2)*scale, fullCanvas.height-cy);
+    // 7. Pixel-BBox aus ALLEN Polygon-Punkten berechnen (nicht nur bounds-Ecken)
+    let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+    coords.forEach(c=>{
+      const pt=map.latLngToContainerPoint([c[0],c[1]]);
+      if(pt.x<minX)minX=pt.x; if(pt.y<minY)minY=pt.y;
+      if(pt.x>maxX)maxX=pt.x; if(pt.y>maxY)maxY=pt.y;
+    });
+    const pad=25;// Pixel-Padding für Linienstärke + Rand
+    const cx=Math.max(0,(minX-pad))*scale;
+    const cy=Math.max(0,(minY-pad))*scale;
+    const cw=Math.min((maxX-minX+pad*2)*scale, fullCanvas.width-cx);
+    const ch=Math.min((maxY-minY+pad*2)*scale, fullCanvas.height-cy);
+
+    // Debug: logge Crop-Koordinaten
+    console.log('Print crop:',{minX,minY,maxX,maxY,cx,cy,cw,ch,
+      canvasW:fullCanvas.width,canvasH:fullCanvas.height,
+      mapW:mapEl.offsetWidth,mapH:mapEl.offsetHeight});
 
     const cropCanvas=document.createElement('canvas');
-    cropCanvas.width=cw;
-    cropCanvas.height=ch;
+    cropCanvas.width=cw; cropCanvas.height=ch;
     cropCanvas.getContext('2d').drawImage(fullCanvas,cx,cy,cw,ch,0,0,cw,ch);
     const imgData=cropCanvas.toDataURL('image/png');
     restore();
 
-    // 7. Druckfenster — Orientierung nach Crop-Seitenverhältnis
+    // 8. Druckfenster
     const verteilerInfo=g.verteilerId?(g.verteiler||'Zugewiesen'):'Nicht zugewiesen';
     const cropRatio=cw/ch;
     const orient=cropRatio>1?'landscape':'portrait';
