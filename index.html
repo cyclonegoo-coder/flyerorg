@@ -11,7 +11,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<!-- Keine externen Screenshot-Bibliotheken nötig — Tiles werden direkt gerendert -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <style>
 :root {
@@ -365,6 +365,9 @@ textarea{min-height:68px}
       <div class="prog-row"><span>Fortschritt</span><span id="progText">–</span></div>
       <div class="prog-track"><div class="prog-fill" id="progFill" style="width:0%"></div></div>
     </div>
+    <div id="bulkPrintWrap" style="display:none;padding:4px 12px">
+      <button class="btn btn-g" onclick="bulkPrintGebiete()" style="width:100%;font-size:12px">🖨️ Alle Gebiete als PDF</button>
+    </div>
     <div class="g-list" id="gebietList"></div>
   </div>
 
@@ -458,7 +461,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v66</div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v67</div>
 
 <!-- NUTZER EINLADEN MODAL (nur Admin) -->
 <div class="modal-ov" id="inviteModalOv" onclick="if(event.target===this)closeInviteModal()">
@@ -2690,96 +2693,63 @@ function calcCentroid(gebietId){
   return{lat:50.94,lng:12.10};
 }
 
-// ── Gebiet drucken: exakter Ausschnitt, auto Hoch-/Querformat, Karte als Bild ──
+// ── Karten-Rendering: OSM-Tiles + Polygon auf Canvas ──
+function _lng2x(lng,z){return((lng+180)/360)*Math.pow(2,z)*256;}
+function _lat2y(lat,z){const r=lat*Math.PI/180;return(1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*Math.pow(2,z)*256;}
+
+async function renderGebietCanvas(coords,targetW=1600){
+  const bounds=L.latLngBounds(coords.map(c=>[c[0],c[1]]));
+  const padded=bounds.pad(0.01);
+  let zoom=15;
+  for(let z=18;z>=10;z--){
+    if(_lng2x(padded.getEast(),z)-_lng2x(padded.getWest(),z)<=targetW){zoom=z;break;}
+  }
+  const pxL=_lng2x(padded.getWest(),zoom),pxT=_lat2y(padded.getNorth(),zoom);
+  const pxR=_lng2x(padded.getEast(),zoom),pxB=_lat2y(padded.getSouth(),zoom);
+  const pxW=Math.ceil(pxR-pxL),pxH=Math.ceil(pxB-pxT);
+  const canvas=document.createElement('canvas');
+  canvas.width=pxW;canvas.height=pxH;
+  const ctx=canvas.getContext('2d');
+  ctx.fillStyle='#f2efe9';ctx.fillRect(0,0,pxW,pxH);
+  const proms=[],srv=['a','b','c'];let si=0;
+  for(let tx=Math.floor(pxL/256);tx<=Math.floor(pxR/256);tx++){
+    for(let ty=Math.floor(pxT/256);ty<=Math.floor(pxB/256);ty++){
+      const s=srv[si++%3],dx=tx*256-pxL,dy=ty*256-pxT;
+      proms.push(new Promise(res=>{
+        const img=new Image();img.crossOrigin='anonymous';
+        img.onload=()=>{ctx.drawImage(img,dx,dy);res();};
+        img.onerror=()=>res();
+        img.src=`https://${s}.tile.openstreetmap.org/${zoom}/${tx}/${ty}.png`;
+      }));
+    }
+  }
+  await Promise.all(proms);
+  // Polygon zeichnen
+  ctx.beginPath();
+  coords.forEach((c,i)=>{
+    const px=_lng2x(c[1],zoom)-pxL,py=_lat2y(c[0],zoom)-pxT;
+    i===0?ctx.moveTo(px,py):ctx.lineTo(px,py);
+  });
+  ctx.closePath();ctx.strokeStyle='#222';ctx.lineWidth=3;ctx.lineJoin='round';ctx.stroke();
+  return canvas;
+}
+
+// ── Einzelnes Gebiet drucken ──
 async function printGebiet(gebietId){
   const g=getG(gebietId);
   if(!g){toast('⚠️ Gebiet nicht gefunden');return}
   const coords=kmlP[gebietId];
   if(!coords||coords.length<3){toast('⚠️ Kein Polygon vorhanden');return}
   toast('🖨️ Karte wird gerendert...');
+  const canvas=await renderGebietCanvas(coords);
 
-  // === KOMPLETT EIGENES RENDERING — kein html2canvas ===
-  // OSM-Tiles direkt laden + Polygon per Canvas-API zeichnen
-
-  const bounds=L.latLngBounds(coords.map(c=>[c[0],c[1]]));
-  const padded=bounds.pad(0.01);// 1% Padding — so nah wie möglich für max. Hausnummern-Lesbarkeit
-
-  // 1. Optimalen Zoom berechnen für ~1600px Breite (hohe Auflösung für Druck)
-  const canvasW=1600;
-  function lng2x(lng,z){return((lng+180)/360)*Math.pow(2,z)*256;}
-  function lat2y(lat,z){const r=lat*Math.PI/180;return(1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*Math.pow(2,z)*256;}
-  function x2lng(x,z){return x/Math.pow(2,z)/256*360-180;}
-  function y2lat(y,z){const n=Math.PI-2*Math.PI*y/Math.pow(2,z)/256;return 180/Math.PI*Math.atan(0.5*(Math.exp(n)-Math.exp(-n)));}
-
-  // Zoom finden bei dem Polygon ~1200px breit ist
-  let zoom=15;
-  for(let z=18;z>=10;z--){
-    const pxW=lng2x(padded.getEast(),z)-lng2x(padded.getWest(),z);
-    if(pxW<=canvasW){zoom=z;break;}
-  }
-
-  // 2. Pixel-Bounds des gepolsterten Bereichs
-  const pxLeft=lng2x(padded.getWest(),zoom);
-  const pxTop=lat2y(padded.getNorth(),zoom);
-  const pxRight=lng2x(padded.getEast(),zoom);
-  const pxBottom=lat2y(padded.getSouth(),zoom);
-  const pxW=Math.ceil(pxRight-pxLeft);
-  const pxH=Math.ceil(pxBottom-pxTop);
-
-  // 3. Benötigte Tiles berechnen
-  const tileMinX=Math.floor(pxLeft/256);
-  const tileMaxX=Math.floor(pxRight/256);
-  const tileMinY=Math.floor(pxTop/256);
-  const tileMaxY=Math.floor(pxBottom/256);
-
-  // 4. Canvas erstellen und Tiles laden
-  const canvas=document.createElement('canvas');
-  canvas.width=pxW;
-  canvas.height=pxH;
-  const ctx=canvas.getContext('2d');
-  ctx.fillStyle='#f2efe9';// OSM Hintergrundfarbe
-  ctx.fillRect(0,0,pxW,pxH);
-
-  const tilePromises=[];
-  const servers=['a','b','c'];
-  let si=0;
-  for(let tx=tileMinX;tx<=tileMaxX;tx++){
-    for(let ty=tileMinY;ty<=tileMaxY;ty++){
-      const s=servers[si%3];si++;
-      const url=`https://${s}.tile.openstreetmap.org/${zoom}/${tx}/${ty}.png`;
-      const drawX=tx*256-pxLeft;
-      const drawY=ty*256-pxTop;
-      tilePromises.push(new Promise(resolve=>{
-        const img=new Image();
-        img.crossOrigin='anonymous';
-        img.onload=()=>{ctx.drawImage(img,drawX,drawY);resolve();};
-        img.onerror=()=>resolve();// Fehlende Tiles ignorieren
-        img.src=url;
-      }));
-    }
-  }
-  await Promise.all(tilePromises);
-
-  // 5. Polygon zeichnen
-  ctx.beginPath();
-  coords.forEach((c,i)=>{
-    const px=lng2x(c[1],zoom)-pxLeft;
-    const py=lat2y(c[0],zoom)-pxTop;
-    if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py);
-  });
-  ctx.closePath();
-  ctx.strokeStyle='#222';
-  ctx.lineWidth=3;
-  ctx.lineJoin='round';
-  ctx.stroke();
-
-  // 6. Druckfenster
+  // Druckfenster
   const imgData=canvas.toDataURL('image/png');
   const verteilerInfo=g.verteilerId?(g.verteiler||'Zugewiesen'):'Nicht zugewiesen';
-  const imgRatio=pxW/pxH;
+  const imgRatio=canvas.width/canvas.height;
   const orient=imgRatio>1?'landscape':'portrait';
-  // A4 bei 2mm Margin: 293x206mm (landscape) oder 206x293mm (portrait)
-  const pageW=orient==='landscape'?293:206, pageH=orient==='landscape'?206:293;
+  // A4 bei 4mm Margin: 289x202mm (landscape) oder 202x289mm (portrait)
+  const pageW=orient==='landscape'?289:202, pageH=orient==='landscape'?202:289;
   const infoH=10;// Titel+Meta ~10mm
   const availH=pageH-infoH;
   let imgCssW=pageW, imgCssH=pageW/imgRatio;
@@ -2789,7 +2759,7 @@ async function printGebiet(gebietId){
   if(!pw){toast('⚠️ Popup-Blocker! Bitte Popups erlauben.');return}
   pw.document.write(`<!DOCTYPE html><html><head><title>${g.name}</title>
 <style>
-  @page{size:${orient};margin:2mm}
+  @page{size:${orient};margin:4mm}
   *{margin:0;padding:0;box-sizing:border-box}
   body{font-family:system-ui,sans-serif;padding:1mm}
   .title{font-size:11pt;font-weight:700}
@@ -2803,6 +2773,59 @@ async function printGebiet(gebietId){
   pw.document.close();
   pw.onload=()=>setTimeout(()=>pw.print(),500);
   setTimeout(()=>{try{pw.print()}catch(e){}},2500);
+}
+
+// ── Alle sichtbaren Gebiete als PDF generieren ──
+async function bulkPrintGebiete(){
+  const gs=getVisibleGebiete().filter(g=>kmlP[g.id]&&kmlP[g.id].length>=3);
+  if(!gs.length){toast('⚠️ Keine Gebiete mit Polygonen vorhanden');return}
+  const btn=document.querySelector('#bulkPrintWrap button');
+  const origText=btn.textContent;
+  btn.disabled=true;
+  btn.textContent=`⏳ 0 / ${gs.length} Gebiete...`;
+  try{
+    const {jsPDF}=window.jspdf;
+    let pdf=null;
+    for(let i=0;i<gs.length;i++){
+      const g=gs[i];
+      btn.textContent=`⏳ ${i+1} / ${gs.length} — ${g.name}`;
+      const coords=kmlP[g.id];
+      const canvas=await renderGebietCanvas(coords);
+      const imgRatio=canvas.width/canvas.height;
+      const orient=imgRatio>1?'landscape':'portrait';
+      if(i===0)pdf=new jsPDF({orientation:orient,unit:'mm',format:'a4'});
+      else pdf.addPage('a4',orient);
+      const pageW=orient==='landscape'?297:210, pageH=orient==='landscape'?210:297;
+      const margin=4;
+      const usableW=pageW-margin*2, usableH=pageH-margin*2;
+      // Titel + Meta
+      pdf.setFontSize(12);pdf.setFont(undefined,'bold');
+      pdf.text(g.name,margin,margin+4);
+      pdf.setFontSize(8);pdf.setFont(undefined,'normal');
+      const verteilerInfo=g.verteilerId?(g.verteiler||'Zugewiesen'):'Nicht zugewiesen';
+      const metaText=`Datum: ${new Date().toLocaleDateString('de-DE')} · Stückzahl: ${g.stueckzahl||0} · Verteiler: ${verteilerInfo}`;
+      pdf.text(metaText,margin,margin+8);
+      // Karte
+      const imgY=margin+10;
+      const availH=usableH-10;
+      let imgW=usableW, imgH=usableW/imgRatio;
+      if(imgH>availH){imgH=availH;imgW=availH*imgRatio;}
+      const imgX=margin+(usableW-imgW)/2;// Zentrieren
+      pdf.addImage(canvas.toDataURL('image/jpeg',0.92),'JPEG',imgX,imgY,imgW,imgH);
+      // Kurze Pause um Browser nicht zu blockieren + OSM Rate-Limiting
+      if(i<gs.length-1)await new Promise(r=>setTimeout(r,300));
+    }
+    // PDF speichern
+    const kampagne=document.querySelector('.kam-sel')?.textContent||'Gebiete';
+    pdf.save(`${kampagne.trim()}_Gebiete_${new Date().toLocaleDateString('de-DE')}.pdf`);
+    toast(`✅ PDF mit ${gs.length} Gebieten erstellt!`);
+  }catch(err){
+    console.error('Bulk PDF error:',err);
+    toast('⚠️ Fehler: '+err.message);
+  }finally{
+    btn.disabled=false;
+    btn.textContent=origText;
+  }
 }
 
 // ============================================================
@@ -2955,6 +2978,9 @@ function renderStats(){
   document.getElementById('statOffen').textContent=(tot-vert).toLocaleString('de');
   document.getElementById('progText').textContent=`${fn} / ${gs.length}`;
   document.getElementById('progFill').style.width=(gs.length?fn/gs.length*100:0)+'%';
+  // Bulk-Print Button nur für Verwalter/Kreisverwalter/Admin anzeigen
+  const bpw=document.getElementById('bulkPrintWrap');
+  if(bpw)bpw.style.display=istManager()&&gs.length>0?'block':'none';
 }
 
 // ============================================================
