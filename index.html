@@ -458,7 +458,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v65</div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v66</div>
 
 <!-- NUTZER EINLADEN MODAL (nur Admin) -->
 <div class="modal-ov" id="inviteModalOv" onclick="if(event.target===this)closeInviteModal()">
@@ -2702,10 +2702,10 @@ async function printGebiet(gebietId){
   // OSM-Tiles direkt laden + Polygon per Canvas-API zeichnen
 
   const bounds=L.latLngBounds(coords.map(c=>[c[0],c[1]]));
-  const padded=bounds.pad(0.05);// 5% Padding um Polygon
+  const padded=bounds.pad(0.01);// 1% Padding — so nah wie möglich für max. Hausnummern-Lesbarkeit
 
-  // 1. Optimalen Zoom berechnen für ~1200px Breite
-  const canvasW=1200;
+  // 1. Optimalen Zoom berechnen für ~1600px Breite (hohe Auflösung für Druck)
+  const canvasW=1600;
   function lng2x(lng,z){return((lng+180)/360)*Math.pow(2,z)*256;}
   function lat2y(lat,z){const r=lat*Math.PI/180;return(1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*Math.pow(2,z)*256;}
   function x2lng(x,z){return x/Math.pow(2,z)/256*360-180;}
@@ -2778,8 +2778,9 @@ async function printGebiet(gebietId){
   const verteilerInfo=g.verteilerId?(g.verteiler||'Zugewiesen'):'Nicht zugewiesen';
   const imgRatio=pxW/pxH;
   const orient=imgRatio>1?'landscape':'portrait';
-  const pageW=orient==='landscape'?285:192, pageH=orient==='landscape'?192:285;
-  const infoH=14;
+  // A4 bei 2mm Margin: 293x206mm (landscape) oder 206x293mm (portrait)
+  const pageW=orient==='landscape'?293:206, pageH=orient==='landscape'?206:293;
+  const infoH=10;// Titel+Meta ~10mm
   const availH=pageH-infoH;
   let imgCssW=pageW, imgCssH=pageW/imgRatio;
   if(imgCssH>availH){imgCssH=availH;imgCssW=availH*imgRatio;}
@@ -2788,11 +2789,11 @@ async function printGebiet(gebietId){
   if(!pw){toast('⚠️ Popup-Blocker! Bitte Popups erlauben.');return}
   pw.document.write(`<!DOCTYPE html><html><head><title>${g.name}</title>
 <style>
-  @page{size:${orient};margin:4mm}
+  @page{size:${orient};margin:2mm}
   *{margin:0;padding:0;box-sizing:border-box}
-  body{font-family:system-ui,sans-serif;padding:2mm}
-  .title{font-size:13pt;font-weight:700}
-  .meta{font-size:9pt;color:#444;border-bottom:1px solid #ccc;padding-bottom:3px;margin-bottom:4px}
+  body{font-family:system-ui,sans-serif;padding:1mm}
+  .title{font-size:11pt;font-weight:700}
+  .meta{font-size:8pt;color:#444;margin-bottom:1px}
   img{width:${imgCssW}mm;height:${imgCssH}mm;display:block}
 </style></head><body>
   <div class="title">${g.name}</div>
