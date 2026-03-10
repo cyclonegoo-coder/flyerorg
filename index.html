@@ -11,7 +11,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<!-- Keine externen Screenshot-Bibliotheken nötig — Tiles werden direkt gerendert -->
 
 <style>
 :root {
@@ -458,7 +458,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v64</div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v65</div>
 
 <!-- NUTZER EINLADEN MODAL (nur Admin) -->
 <div class="modal-ov" id="inviteModalOv" onclick="if(event.target===this)closeInviteModal()">
@@ -2696,124 +2696,97 @@ async function printGebiet(gebietId){
   if(!g){toast('⚠️ Gebiet nicht gefunden');return}
   const coords=kmlP[gebietId];
   if(!coords||coords.length<3){toast('⚠️ Kein Polygon vorhanden');return}
-  toast('🖨️ Druckansicht wird erstellt...');
+  toast('🖨️ Karte wird gerendert...');
+
+  // === KOMPLETT EIGENES RENDERING — kein html2canvas ===
+  // OSM-Tiles direkt laden + Polygon per Canvas-API zeichnen
 
   const bounds=L.latLngBounds(coords.map(c=>[c[0],c[1]]));
+  const padded=bounds.pad(0.05);// 5% Padding um Polygon
 
-  // 1. UI ausblenden
-  map.closePopup();
-  const hideEls=['.leaflet-control-zoom','.leaflet-control-attribution'];
-  hideEls.forEach(sel=>{const el=document.querySelector(sel);if(el)el.style.display='none'});
-  const hadGrenzen=grenzenLayer&&map.hasLayer(grenzenLayer);
-  if(hadGrenzen)map.removeLayer(grenzenLayer);
-  const hiddenOverlays=[];
-  map.eachLayer(l=>{
-    if(l instanceof L.TileLayer)return;
-    const isGebietPoly=Object.values(layers).includes(l);
-    if(!isGebietPoly&&(l._path||l._icon||l instanceof L.CircleMarker||l instanceof L.Polyline)){
-      hiddenOverlays.push(l);map.removeLayer(l);
+  // 1. Optimalen Zoom berechnen für ~1200px Breite
+  const canvasW=1200;
+  function lng2x(lng,z){return((lng+180)/360)*Math.pow(2,z)*256;}
+  function lat2y(lat,z){const r=lat*Math.PI/180;return(1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*Math.pow(2,z)*256;}
+  function x2lng(x,z){return x/Math.pow(2,z)/256*360-180;}
+  function y2lat(y,z){const n=Math.PI-2*Math.PI*y/Math.pow(2,z)/256;return 180/Math.PI*Math.atan(0.5*(Math.exp(n)-Math.exp(-n)));}
+
+  // Zoom finden bei dem Polygon ~1200px breit ist
+  let zoom=15;
+  for(let z=18;z>=10;z--){
+    const pxW=lng2x(padded.getEast(),z)-lng2x(padded.getWest(),z);
+    if(pxW<=canvasW){zoom=z;break;}
+  }
+
+  // 2. Pixel-Bounds des gepolsterten Bereichs
+  const pxLeft=lng2x(padded.getWest(),zoom);
+  const pxTop=lat2y(padded.getNorth(),zoom);
+  const pxRight=lng2x(padded.getEast(),zoom);
+  const pxBottom=lat2y(padded.getSouth(),zoom);
+  const pxW=Math.ceil(pxRight-pxLeft);
+  const pxH=Math.ceil(pxBottom-pxTop);
+
+  // 3. Benötigte Tiles berechnen
+  const tileMinX=Math.floor(pxLeft/256);
+  const tileMaxX=Math.floor(pxRight/256);
+  const tileMinY=Math.floor(pxTop/256);
+  const tileMaxY=Math.floor(pxBottom/256);
+
+  // 4. Canvas erstellen und Tiles laden
+  const canvas=document.createElement('canvas');
+  canvas.width=pxW;
+  canvas.height=pxH;
+  const ctx=canvas.getContext('2d');
+  ctx.fillStyle='#f2efe9';// OSM Hintergrundfarbe
+  ctx.fillRect(0,0,pxW,pxH);
+
+  const tilePromises=[];
+  const servers=['a','b','c'];
+  let si=0;
+  for(let tx=tileMinX;tx<=tileMaxX;tx++){
+    for(let ty=tileMinY;ty<=tileMaxY;ty++){
+      const s=servers[si%3];si++;
+      const url=`https://${s}.tile.openstreetmap.org/${zoom}/${tx}/${ty}.png`;
+      const drawX=tx*256-pxLeft;
+      const drawY=ty*256-pxTop;
+      tilePromises.push(new Promise(resolve=>{
+        const img=new Image();
+        img.crossOrigin='anonymous';
+        img.onload=()=>{ctx.drawImage(img,drawX,drawY);resolve();};
+        img.onerror=()=>resolve();// Fehlende Tiles ignorieren
+        img.src=url;
+      }));
     }
+  }
+  await Promise.all(tilePromises);
+
+  // 5. Polygon zeichnen
+  ctx.beginPath();
+  coords.forEach((c,i)=>{
+    const px=lng2x(c[1],zoom)-pxLeft;
+    const py=lat2y(c[0],zoom)-pxTop;
+    if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py);
   });
-  // 2. Polygon-Styles: nur aktuelles mit schwarzem Rand
-  const savedStyles={};
-  Object.entries(layers).forEach(([id,poly])=>{
-    if(!poly||!poly.setStyle)return;
-    savedStyles[id]={color:poly.options.color,fillColor:poly.options.fillColor,
-      fillOpacity:poly.options.fillOpacity,weight:poly.options.weight,opacity:poly.options.opacity};
-    if(id===gebietId)poly.setStyle({color:'#222',fillColor:'transparent',fillOpacity:0,weight:3,opacity:1});
-    else poly.setStyle({fillOpacity:0,opacity:0,weight:0});
-  });
-  // 3. Sidebar/Panel schließen, Karte nutzt vollen Viewport
-  const sidebar=document.getElementById('sidebar');
-  const detailPanel=document.getElementById('detailPanel');
-  const sidebarWas=sidebar?.classList.contains('open');
-  const detailWas=detailPanel?.classList.contains('open');
-  if(sidebar)sidebar.classList.remove('open');
-  if(detailPanel)detailPanel.classList.remove('open');
+  ctx.closePath();
+  ctx.strokeStyle='#222';
+  ctx.lineWidth=3;
+  ctx.lineJoin='round';
+  ctx.stroke();
 
-  // 4. zoomSnap=0 für exakten Zoom, dann fitBounds
-  const origZoomSnap=map.options.zoomSnap;
-  map.options.zoomSnap=0;
-  map.options.zoomDelta=0.1;
-  // Warten bis Sidebar-Animation fertig (CSS transition ~300ms)
-  await new Promise(r=>setTimeout(r,500));
-  map.invalidateSize({animate:false});
-  await new Promise(r=>setTimeout(r,100));
-  map.fitBounds(bounds,{animate:false,padding:[30,30]});
-  await new Promise(r=>setTimeout(r,200));
-  // Nochmals sicherheitshalber
-  map.invalidateSize({animate:false});
-  map.fitBounds(bounds,{animate:false,padding:[30,30]});
+  // 6. Druckfenster
+  const imgData=canvas.toDataURL('image/png');
+  const verteilerInfo=g.verteilerId?(g.verteiler||'Zugewiesen'):'Nicht zugewiesen';
+  const imgRatio=pxW/pxH;
+  const orient=imgRatio>1?'landscape':'portrait';
+  const pageW=orient==='landscape'?285:192, pageH=orient==='landscape'?192:285;
+  const infoH=14;
+  const availH=pageH-infoH;
+  let imgCssW=pageW, imgCssH=pageW/imgRatio;
+  if(imgCssH>availH){imgCssH=availH;imgCssW=availH*imgRatio;}
 
-  // 5. Warten bis Tiles geladen
-  await new Promise(r=>setTimeout(r,2000));
-
-  const mapEl=document.getElementById('map');
-  const restore=()=>{
-    map.options.zoomSnap=origZoomSnap;
-    map.options.zoomDelta=origZoomSnap||1;
-    Object.entries(savedStyles).forEach(([id,style])=>{if(layers[id]?.setStyle)layers[id].setStyle(style)});
-    hideEls.forEach(sel=>{const el=document.querySelector(sel);if(el)el.style.display=''});
-    if(hadGrenzen&&grenzenLayer)grenzenLayer.addTo(map);
-    hiddenOverlays.forEach(l=>{try{l.addTo(map)}catch(e){}});
-    if(sidebarWas&&sidebar)sidebar.classList.add('open');
-    if(detailWas&&detailPanel)detailPanel.classList.add('open');
-    map.invalidateSize();
-  };
-
-  try{
-    // 6. Leaflet Transform-Fix für html2canvas
-    //    Leaflet nutzt translate3d() auf dem map-pane. html2canvas kann das nicht
-    //    korrekt rendern → Bild verschoben. Workaround: Transform temporär durch
-    //    left/top ersetzen, dann Screenshot, dann zurücksetzen.
-    const mapPane=mapEl.querySelector('.leaflet-map-pane');
-    const origTransform=mapPane.style.transform;
-    const transformMatch=origTransform.match(/translate3d\(\s*([^,]+),\s*([^,]+),\s*([^)]+)\)/);
-    if(transformMatch){
-      mapPane.style.transform='';
-      mapPane.style.left=transformMatch[1];
-      mapPane.style.top=transformMatch[2];
-    }
-    // Auch tile-panes und overlay-panes fixen
-    const allPanes=mapEl.querySelectorAll('.leaflet-tile-pane .leaflet-tile-container, .leaflet-overlay-pane');
-    const savedTransforms=[];
-    allPanes.forEach(p=>{
-      const t=p.style.transform;
-      savedTransforms.push(t);
-      const m=t.match(/translate3d\(\s*([^,]+),\s*([^,]+),\s*([^)]+)\)/);
-      if(m){p.style.transform='';p.style.left=m[1];p.style.top=m[2];}
-    });
-
-    const scale=2;
-    const fullCanvas=await html2canvas(mapEl,{useCORS:true,allowTaint:true,scale,logging:false});
-    const imgData=fullCanvas.toDataURL('image/png');
-
-    // Transforms wiederherstellen
-    if(transformMatch){
-      mapPane.style.transform=origTransform;
-      mapPane.style.left='';
-      mapPane.style.top='';
-    }
-    allPanes.forEach((p,i)=>{
-      p.style.transform=savedTransforms[i];
-      p.style.left='';
-      p.style.top='';
-    });
-    restore();
-
-    // 7. Druckfenster — Seitenverhältnis aus Canvas
-    const verteilerInfo=g.verteilerId?(g.verteiler||'Zugewiesen'):'Nicht zugewiesen';
-    const imgRatio=fullCanvas.width/fullCanvas.height;
-    const orient=imgRatio>1?'landscape':'portrait';
-    const pageW=orient==='landscape'?285:192, pageH=orient==='landscape'?192:285;
-    const infoH=14;
-    const availH=pageH-infoH;
-    let imgCssW=pageW, imgCssH=pageW/imgRatio;
-    if(imgCssH>availH){imgCssH=availH;imgCssW=availH*imgRatio;}
-
-    const pw=window.open('','_blank','width=900,height=700');
-    if(!pw){toast('⚠️ Popup-Blocker! Bitte Popups erlauben.');return}
-    pw.document.write(`<!DOCTYPE html><html><head><title>${g.name}</title>
+  const pw=window.open('','_blank','width=900,height=700');
+  if(!pw){toast('⚠️ Popup-Blocker! Bitte Popups erlauben.');return}
+  pw.document.write(`<!DOCTYPE html><html><head><title>${g.name}</title>
 <style>
   @page{size:${orient};margin:4mm}
   *{margin:0;padding:0;box-sizing:border-box}
@@ -2826,14 +2799,9 @@ async function printGebiet(gebietId){
   <div class="meta"><b>Datum:</b> ${new Date().toLocaleDateString('de-DE')} · <b>Stückzahl:</b> ${g.stueckzahl||0} · <b>Verteiler:</b> ${verteilerInfo}${g.hinweise?.length?' · <b>Hinweise:</b> '+g.hinweise.join(', '):''}</div>
   <img src="${imgData}"/>
 </body></html>`);
-    pw.document.close();
-    pw.onload=()=>setTimeout(()=>pw.print(),500);
-    setTimeout(()=>{try{pw.print()}catch(e){}},2500);
-  }catch(err){
-    console.error('Print error:',err);
-    restore();
-    toast('⚠️ Fehler: '+err.message);
-  }
+  pw.document.close();
+  pw.onload=()=>setTimeout(()=>pw.print(),500);
+  setTimeout(()=>{try{pw.print()}catch(e){}},2500);
 }
 
 // ============================================================
