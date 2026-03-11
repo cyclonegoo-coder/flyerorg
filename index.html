@@ -78,6 +78,13 @@ header{height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturate(18
 .rb-kreisverwalter{background:#9c27b022;color:#9c27b0}
 .rb-verteiler{background:rgba(52,199,89,.12);color:var(--green)}
 .mob-btn{display:none;background:none;border:none;color:var(--blue);font-size:1.1rem;cursor:pointer;padding:4px 8px;border-radius:var(--r8)}
+.mob-overflow{position:relative;display:none}
+.mob-overflow-btn{background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--text3);padding:4px 8px;border-radius:var(--r8);line-height:1}
+.mob-overflow-menu{display:none;position:absolute;top:100%;right:0;background:var(--surface);border-radius:var(--r12);box-shadow:var(--sh-lg);min-width:200px;padding:6px 0;z-index:2000;border:1px solid var(--sep)}
+.mob-overflow-menu.open{display:block}
+.mob-overflow-item{display:flex;align-items:center;gap:8px;padding:10px 14px;font-size:.8rem;font-weight:500;color:var(--text2);cursor:pointer;border:none;background:none;width:100%;text-align:left;font-family:inherit;transition:background .1s}
+.mob-overflow-item:active{background:var(--surface3)}
+.leg-toggle{display:none;position:absolute;bottom:22px;left:10px;z-index:401;width:36px;height:36px;border-radius:var(--r12);border:none;background:rgba(255,255,255,.92);backdrop-filter:blur(12px);box-shadow:var(--sh);cursor:pointer;font-size:.9rem;align-items:center;justify-content:center}
 
 /* ── BODY ── */
 .app-body{display:flex;flex:1;overflow:hidden}
@@ -215,17 +222,62 @@ textarea{min-height:68px}
 @media(max-width:768px){
   .sidebar{position:absolute;left:0;top:0;bottom:0;z-index:600;transform:translateX(-292px);transition:transform .3s cubic-bezier(.32,.72,0,1);box-shadow:var(--sh-lg)}
   .sidebar.open{transform:translateX(0)}
-  .detail-panel{position:absolute;right:0;top:0;bottom:0;z-index:600;width:100%;box-shadow:var(--sh-lg)}
   .mob-btn{display:block}
   .role-sw{display:none}
   .draw-toolbar{display:none!important}
   .draw-info{display:none!important}
+  /* Step 1: Header overflow menu */
+  .mob-overflow{display:block}
+  #bulkPdfBtn,#hierarchyBtn,#inviteUserBtn,#manageUsersBtn,#logbuchBtn,#missingVerteilerBtn{display:none!important}
+  .user-name,.role-badge{display:none}
+  .user-pill{padding:4px;border-radius:50%}
+  .h-right{gap:4px}
+  .h-center{min-width:0}
+  .h-title{font-size:.78rem}
+  .kampagne-select{max-width:140px;font-size:.65rem}
+  /* Step 2: Sidebar stats compact, no progress */
+  .prog-wrap{display:none}
+  .sb-top{padding:8px 8px 4px}
+  .stats{gap:4px}
+  .stat{padding:6px 4px}
+  .stat-n{font-size:1rem}
+  .stat-l{font-size:.5rem}
+  /* Step 3: Breadcrumbs scroll */
+  .breadcrumb{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:4px}
+  .breadcrumb::-webkit-scrollbar{height:0}
+  .bc-btn{font-size:.68rem;padding:3px 8px}
+  /* Step 4: Touch-friendly cards */
+  .g-card{padding:12px;min-height:44px}
+  .g-name{font-size:.85rem}
+  .g-meta{font-size:.72rem}
+  /* Step 5: Collapsible legend */
+  .leg-toggle{display:flex}
+  .map-legend{display:none;bottom:64px}
+  .map-legend.leg-open{display:block}
+  /* Step 6: Detail panel as bottom-sheet */
+  .detail-panel{position:fixed;left:0;right:0;bottom:0;top:auto;width:100%;height:55vh;transform:translateY(100%);transition:transform .3s cubic-bezier(.32,.72,0,1);border-radius:16px 16px 0 0;border-left:none;border-top:1px solid var(--sep);box-shadow:0 -4px 20px rgba(0,0,0,.15);z-index:700}
+  .detail-panel.open{transform:translateY(0)}
+  .detail-panel.full{height:90vh}
+  .d-handle{display:block!important}
+  .s-btn{padding:10px 8px;font-size:.75rem;min-height:44px}
+  .s-grid{grid-template-columns:1fr 1fr;gap:6px}
+  .f-stack .btn{min-height:44px;font-size:.8rem}
 }
 @media(min-width:769px){
   .modal-ov{align-items:center;padding:20px}
   .modal{border-radius:20px;animation:fadeScale .2s ease}
   @keyframes fadeScale{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
   .m-handle{display:none}
+}
+/* Step 7: TABLET */
+@media(min-width:769px) and (max-width:1024px){
+  .sidebar{width:220px}
+  .detail-panel{position:absolute;right:0;top:0;bottom:0;z-index:600;width:292px;box-shadow:var(--sh-lg)}
+  .stat-n{font-size:1rem}
+  .prog-wrap{padding:6px 8px 4px}
+  .h-right{gap:4px}
+  .user-name{max-width:50px}
+  .kampagne-select{max-width:160px}
 }
 /* ── PRINT STYLES ── */
 @media print{
@@ -341,6 +393,18 @@ textarea{min-height:68px}
     <button id="manageUsersBtn" onclick="openManageUsersModal()" title="Nutzerverwaltung" style="display:none;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='var(--text3)'">👥</button>
     <button id="logbuchBtn" onclick="openLogbuchModal()" title="Logbuch" style="display:none;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='var(--text3)'">📋</button>
     <button id="missingVerteilerBtn" onclick="jumpToMissingVerteiler()" title="Gebiete ohne Verteiler" style="display:none;position:relative;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--orange)'" onmouseout="this.style.color='var(--text3)'">🆘<span id="missingVerteilerBadge" style="display:none;position:absolute;top:-2px;right:-2px;background:var(--orange);color:#fff;font-size:.55rem;font-weight:700;min-width:14px;height:14px;border-radius:7px;align-items:center;justify-content:center;padding:0 3px">0</span></button>
+    <!-- Mobile overflow menu -->
+    <div class="mob-overflow" id="mobOverflow">
+      <button class="mob-overflow-btn" onclick="toggleOverflowMenu(event)">⋯</button>
+      <div class="mob-overflow-menu" id="mobOverflowMenu">
+        <button class="mob-overflow-item" onclick="openBulkPdfModal();closeMobMenu()">📄 PDF exportieren</button>
+        <button class="mob-overflow-item" onclick="openHierarchyModal();closeMobMenu()">🏗 Gebietsstruktur</button>
+        <button class="mob-overflow-item" onclick="openInviteModal();closeMobMenu()">➕ Nutzer einladen</button>
+        <button class="mob-overflow-item" onclick="openManageUsersModal();closeMobMenu()">👥 Nutzerverwaltung</button>
+        <button class="mob-overflow-item" onclick="openLogbuchModal();closeMobMenu()">📋 Logbuch</button>
+        <button class="mob-overflow-item" onclick="jumpToMissingVerteiler();closeMobMenu()">🆘 Verteiler fehlen</button>
+      </div>
+    </div>
     <!-- User pill with role badge -->
     <div class="user-pill" onclick="openProfilModal()" title="Mein Profil">
       <div class="user-avatar" id="userAvatar">?</div>
@@ -382,7 +446,8 @@ textarea{min-height:68px}
       <button class="draw-btn" id="drawCancelBtn" onclick="drawCancel()" title="Abbrechen" disabled>❌</button>
     </div>
     <div class="draw-info" id="drawInfo"></div>
-    <div class="map-legend">
+    <button class="leg-toggle" onclick="toggleLegend()">ℹ️</button>
+    <div class="map-legend" id="mapLegend">
       <div class="leg-title">Verteiler-Status</div>
       <div class="leg-row"><div class="leg-dot" style="background:#ff3b30"></div>Verteiler fehlt</div>
       <div class="leg-row"><div class="leg-dot" style="background:#cfd8dc;border:2px solid #546e7a"></div>Zugewiesen</div>
@@ -405,6 +470,7 @@ textarea{min-height:68px}
 
   <!-- DETAIL PANEL -->
   <div class="detail-panel" id="detailPanel">
+    <div class="d-handle" style="display:none;width:34px;height:4px;background:var(--surface3);border-radius:2px;margin:8px auto 0"></div>
     <div class="d-header">
       <div class="d-hinfo">
         <div class="d-name" id="detailTitle"></div>
@@ -461,7 +527,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v75 · <a href="#" onclick="document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v76 · <a href="#" onclick="document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this)this.classList.remove('open')">
@@ -3602,6 +3668,8 @@ function selGebiet(id){
   selId=id;renderList();
   Object.entries(layers).forEach(([gid,l])=>l.setStyle({fillOpacity:gid===id?.6:.22,weight:gid===id?3:2}));
   openDetail(id);
+  // Mobile: Sidebar schließen wenn Gebiet gewählt
+  if(window.innerWidth<=768) document.getElementById('sidebar').classList.remove('open');
 }
 function getG(id){for(const r of Object.values(regionen)){const g=r.gebiete.find(g=>g.id===id);if(g)return g}}
 
@@ -3780,16 +3848,16 @@ function openDetail(id){
       ${window.innerWidth>=768?`<button class="btn btn-g" onclick="redrawGebiet('${g.id}')">🔄 Polygon neu zeichnen</button>`:''}
       <button class="btn btn-d" onclick="deleteGebiet('${g.id}')">Gebiet löschen</button>
     </div></div>`;
-  } else if(istVerwalterOderKreisverwalter() && window.innerWidth>=768 && verwalterHatGebietZugriff(id)){
+  } else if(istVerwalterOderKreisverwalter() && verwalterHatGebietZugriff(id)){
     h+=`<div class="d-sec"><div class="sec-hd">Geodaten</div><div class="f-stack">
       ${kmlP[g.id]?`<button class="btn btn-g" onclick="editPolygon('${g.id}')">✏️ Polygon bearbeiten</button>`:''}
-      <button class="btn btn-g" onclick="redrawGebiet('${g.id}')">🔄 Polygon neu zeichnen</button>
+      ${window.innerWidth>=768?`<button class="btn btn-g" onclick="redrawGebiet('${g.id}')">🔄 Polygon neu zeichnen</button>`:''}
+      <button class="btn btn-d" onclick="deleteGebiet('${g.id}')">Gebiet löschen</button>
     </div></div>`;
   }
   // PDF-Export
   h+=`<div class="d-sec"><div class="f-stack">
     <button class="btn btn-g" onclick="exportGebietPDF('${g.id}')">📄 Gebiet als PDF</button>
-    ${istManager()?'<button class="btn btn-g" onclick="openBulkPdfModal()" style="font-size:12px">📄 Gebiete-PDF exportieren</button>':''}
   </div></div>`;
   document.getElementById('detailBody').innerHTML=h;
   document.getElementById('detailPanel').classList.add('open');
@@ -4014,7 +4082,8 @@ async function deleteHinweis(hinweisId, gebietId) {
 }
 
 async function deleteGebiet(id){
-  if (curRole !== 'admin' && !(curRole === 'kreisverwalter' && verwalterHatGebietZugriff(id))) { toast('⚠️ Keine Berechtigung'); return; }
+  if (!pruefeGebietZugriff(id)) { toast('⚠️ Keine Berechtigung'); return; }
+  if (curRole === 'verteiler') { toast('⚠️ Keine Berechtigung'); return; }
   const _g = getG(id);
   const _gName=_g?.name||id;
   if(!confirm(`Gebiet "${_gName}" wirklich löschen?`)) return;
@@ -4067,6 +4136,51 @@ async function submitAnfrage(){
 // MISC
 // ============================================================
 function toggleSidebar(){document.getElementById('sidebar').classList.toggle('open')}
+
+// ── Mobile: Overflow-Menü ──
+function toggleOverflowMenu(e){e&&e.stopPropagation();document.getElementById('mobOverflowMenu').classList.toggle('open');}
+function closeMobMenu(){document.getElementById('mobOverflowMenu').classList.remove('open');}
+document.addEventListener('click',function(e){const m=document.getElementById('mobOverflowMenu');if(m&&!e.target.closest('.mob-overflow'))m.classList.remove('open');});
+
+// ── Mobile: Legende toggle ──
+function toggleLegend(){document.getElementById('mapLegend').classList.toggle('leg-open');}
+
+// ── Mobile: Detail-Panel Bottom-Sheet Swipe ──
+(function(){
+  let startY=0,startH=0,panel=null,isDragging=false;
+  document.addEventListener('touchstart',function(e){
+    panel=document.getElementById('detailPanel');
+    if(!panel||!panel.classList.contains('open'))return;
+    if(window.innerWidth>768)return;
+    const handle=panel.querySelector('.d-handle');
+    const header=panel.querySelector('.d-header');
+    if(!e.target.closest('.d-handle')&&!e.target.closest('.d-header'))return;
+    isDragging=true;startY=e.touches[0].clientY;startH=panel.getBoundingClientRect().height;
+  },{passive:true});
+  document.addEventListener('touchmove',function(e){
+    if(!isDragging||!panel)return;
+    const dy=startY-e.touches[0].clientY;
+    const newH=Math.max(120,Math.min(window.innerHeight*.92,startH+dy));
+    panel.style.transition='none';panel.style.height=newH+'px';
+  },{passive:true});
+  document.addEventListener('touchend',function(){
+    if(!isDragging||!panel)return;
+    isDragging=false;panel.style.transition='';
+    const h=panel.getBoundingClientRect().height;
+    const vh=window.innerHeight;
+    if(h<vh*.25){
+      // Zu weit nach unten → schließen
+      panel.style.height='';panel.classList.remove('open','full');closeDetail();
+    } else if(h>vh*.7){
+      // Weit nach oben → full
+      panel.style.height='';panel.classList.add('full');
+    } else {
+      // Normal → 55vh
+      panel.style.height='';panel.classList.remove('full');
+    }
+  },{passive:true});
+})();
+
 // ============================================================
 // DRAW TOOL (desktop/tablet only, admin/verwalter)
 // ============================================================
