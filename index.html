@@ -339,6 +339,7 @@ textarea{min-height:68px}
     <button id="hierarchyBtn" onclick="openHierarchyModal()" title="Gebietsstruktur verwalten" style="display:none;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='var(--text3)'">🏗</button>
     <button id="inviteUserBtn" onclick="openInviteModal()" title="Nutzer einladen" style="display:none;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='var(--text3)'">➕👤</button>
     <button id="manageUsersBtn" onclick="openManageUsersModal()" title="Nutzerverwaltung" style="display:none;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='var(--text3)'">👥</button>
+    <button id="logbuchBtn" onclick="openLogbuchModal()" title="Logbuch" style="display:none;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='var(--text3)'">📋</button>
     <!-- User pill with role badge -->
     <div class="user-pill" onclick="openProfilModal()" title="Mein Profil">
       <div class="user-avatar" id="userAvatar">?</div>
@@ -459,7 +460,53 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400;pointer-events:none">v73</div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v74 · <a href="#" onclick="document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a></div>
+
+<!-- IMPRESSUM MODAL -->
+<div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal" style="max-width:380px">
+    <div class="m-handle"></div>
+    <div class="m-title">Impressum</div>
+    <div style="font-size:.82rem;line-height:1.6;color:var(--text2)">
+      <strong>FlyerOrg</strong> – Verwaltungstool für Flyerverteilungen<br><br>
+      <strong>Herausgeber</strong><br>
+      AfD Kreisverband Landkreis Greiz<br><br>
+      <strong>Kontakt &amp; Verbesserungsvorschläge</strong><br>
+      <a href="mailto:vorstand@afd-greiz.de" style="color:var(--blue)">vorstand@afd-greiz.de</a><br><br>
+      <span style="font-size:.72rem;color:var(--text4)">Wir freuen uns über Feedback und Ideen zur Weiterentwicklung der App.</span>
+    </div>
+    <div class="m-actions" style="margin-top:12px">
+      <button class="btn btn-g" onclick="document.getElementById('impressumModalOv').classList.remove('open')">Schließen</button>
+    </div>
+  </div>
+</div>
+
+<!-- LOGBUCH MODAL -->
+<div class="modal-ov" id="logbuchModalOv" onclick="if(event.target===this)closeLogbuchModal()">
+  <div class="modal" style="max-width:560px">
+    <div class="m-handle"></div>
+    <div class="m-title">📋 Logbuch</div>
+    <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+      <select id="logbuchFilter" onchange="loadLogbuch()" style="font-size:.75rem;padding:4px 8px;border:1px solid var(--sep);border-radius:var(--r8);background:var(--surface)">
+        <option value="">Alle Aktionen</option>
+        <option value="status">Statusänderungen</option>
+        <option value="zuweisung">Zuweisungen</option>
+        <option value="polygon">Polygon-Änderungen</option>
+        <option value="gebiet">Gebiet erstellt/gelöscht</option>
+        <option value="anfrage">Anfragen</option>
+      </select>
+      <select id="logbuchDays" onchange="loadLogbuch()" style="font-size:.75rem;padding:4px 8px;border:1px solid var(--sep);border-radius:var(--r8);background:var(--surface)">
+        <option value="7">Letzte 7 Tage</option>
+        <option value="30">Letzte 30 Tage</option>
+        <option value="90">Letzte 90 Tage</option>
+      </select>
+    </div>
+    <div id="logbuchList" style="max-height:50vh;overflow-y:auto;display:flex;flex-direction:column;gap:4px"></div>
+    <div class="m-actions" style="margin-top:10px">
+      <button class="btn btn-g" onclick="closeLogbuchModal()">Schließen</button>
+    </div>
+  </div>
+</div>
 
 <!-- NUTZER EINLADEN MODAL (nur Admin) -->
 <div class="modal-ov" id="inviteModalOv" onclick="if(event.target===this)closeInviteModal()">
@@ -1911,9 +1958,10 @@ async function showApp() {
     document.getElementById('manageUsersBtn').style.display = 'block';
     document.getElementById('hierarchyBtn').style.display = 'block';
   }
-  // PDF-Export für Manager (Admin, Kreisverwalter, Gebietsverwalter)
+  // PDF-Export + Logbuch für Manager (Admin, Kreisverwalter, Gebietsverwalter)
   if (rolle === 'admin' || rolle === 'kreisverwalter' || rolle === 'verwalter') {
     document.getElementById('bulkPdfBtn').style.display = 'block';
+    document.getElementById('logbuchBtn').style.display = 'block';
   }
   // Anfragen-Glocke für alle Rollen (Admin/Verwalter: offene Anfragen, Verteiler: Rückmeldungen)
   document.getElementById('anfragenBtn').style.display = 'inline-block';
@@ -2230,6 +2278,8 @@ async function handleAnfrage(anfrageId, entscheidung, neueStueckzahl, gebietId) 
   updateAnfragenBadge();
   renderAnfragenList();
   if (selId) openDetail(selId);
+  const _ag=getG(gebietId);
+  logAction('anfrage',`Stückzahl-Anfrage ${entscheidung}${neueStueckzahl?' (neue Stückzahl: '+neueStueckzahl+')':''}`,gebietId,_ag?.name||gebietId);
   toast(entscheidung === 'genehmigt' ? '✅ Anfrage genehmigt' : '❌ Anfrage abgelehnt');
 }
 
@@ -2267,6 +2317,9 @@ async function handleUebernahmeAnfrage(anfrageId, entscheidung, gebietId, vertei
   updateAnfragenBadge();
   renderAnfragenList();
   if (selId) openDetail(selId);
+  const _ug=getG(gebietId);
+  const _uv=allUsers.find(u=>u.id===verteilerId);
+  logAction('zuweisung',`Übernahme-Anfrage ${entscheidung}${_uv?' (Verteiler: '+_uv.name+')':''}`,gebietId,_ug?.name||gebietId);
   toast(entscheidung === 'genehmigt' ? '✅ Übernahme genehmigt – Verteiler zugewiesen' : '❌ Übernahme abgelehnt');
 }
 
@@ -2318,6 +2371,8 @@ async function sendeUebernahmeAnfrage(gebietId) {
     grund: 'Möchte dieses Problemgebiet übernehmen'
   });
   if (error) { toast('⚠️ Fehler: ' + (error.message || error.code)); return; }
+  logAction('anfrage',`Übernahme-Anfrage gesendet`,gebietId,g.name);
+  notifyManagers(gebietId,`Übernahme-Anfrage: ${g.name}`,`${currentProfile?.name||'Ein Verteiler'} möchte das Gebiet "${g.name}" übernehmen.`);
   toast('✅ Übernahme-Anfrage gesendet!');
   await loadAnfragen();
   if (selId) openDetail(selId);
@@ -2336,6 +2391,8 @@ async function sendeAbgabeAnfrage(gebietId) {
     grund: 'Möchte dieses Gebiet abgeben'
   });
   if (error) { toast('⚠️ Fehler: ' + (error.message || error.code)); return; }
+  logAction('anfrage',`Abgabe-Anfrage gesendet`,gebietId,g.name);
+  notifyManagers(gebietId,`Abgabe-Anfrage: ${g.name}`,`${currentProfile?.name||'Ein Verteiler'} möchte das Gebiet "${g.name}" abgeben.`);
   toast('✅ Abgabe-Anfrage gesendet!');
   await loadAnfragen();
   if (selId) openDetail(selId);
@@ -2392,6 +2449,7 @@ async function sendeZuweisungAnfrage(gebietId) {
     grund: `Verwalter möchte dir Gebiet "${g.name}" zuweisen`
   });
   if (error) { toast('⚠️ Fehler: ' + (error.message || error.code)); return; }
+  logAction('anfrage',`Zuweisungs-Anfrage an ${zielUser?.name||'Verteiler'} gesendet`,gebietId,g.name);
   toast(`✅ Anfrage an ${zielUser?.name || 'Verteiler'} gesendet!`);
   await loadAnfragen();
   if (selId) openDetail(selId);
@@ -2834,6 +2892,96 @@ async function bulkPrintGebiete(){
   }finally{
     if(btn){btn.disabled=false;btn.textContent=origText;}
   }
+}
+
+// ============================================================
+// E-MAIL BENACHRICHTIGUNGEN
+// ============================================================
+async function notifyManagers(gebietId, betreff, inhalt){
+  try{
+    // Finde zuständige Verwalter/Kreisverwalter für dieses Gebiet
+    let regionId=null;
+    for(const [rk,r] of Object.entries(regionen)){
+      if(r.gebiete.find(g=>g.id===gebietId)){regionId=rk;break;}
+    }
+    if(!regionId)return;
+    const reg=regionen[regionId];
+    const gvId=reg?.gebietsverband_id;
+    const gv=gebietsverbaende[gvId];
+    const lkId=gv?.landkreis_id;
+
+    // Sammle Manager-E-Mails
+    const empfaenger=allUsers.filter(u=>{
+      if(u.id===currentUser?.id)return false; // Nicht sich selbst benachrichtigen
+      if(u.rolle==='admin')return true;
+      if(u.rolle==='kreisverwalter'&&u.verwalteter_landkreis===lkId)return true;
+      if(u.rolle==='verwalter'){
+        const vr=u.verwaltete_regionen||[];
+        return vr.includes(regionId);
+      }
+      return false;
+    });
+    if(!empfaenger.length)return;
+
+    // E-Mails in Queue schreiben
+    const rows=empfaenger.map(u=>({
+      empfaenger_email:u.email,
+      empfaenger_name:u.name,
+      betreff:`[FlyerOrg] ${betreff}`,
+      inhalt
+    }));
+    await sb.from('email_queue').insert(rows);
+  }catch(e){console.warn('Notify failed:',e);}
+}
+
+// ============================================================
+// LOGBUCH / AUDIT TRAIL
+// ============================================================
+async function logAction(aktion, details='', gebietId=null, gebietName=null){
+  try{
+    await sb.from('logbuch').insert({
+      user_id: currentUser?.id||null,
+      user_name: currentProfile?.name||currentUser?.email||'Unbekannt',
+      aktion, details, gebiet_id:gebietId, gebiet_name:gebietName,
+      created_at: new Date().toISOString()
+    });
+  }catch(e){console.warn('Logbuch write failed:',e);}
+}
+
+function openLogbuchModal(){
+  loadLogbuch();
+  document.getElementById('logbuchModalOv').classList.add('open');
+}
+function closeLogbuchModal(){document.getElementById('logbuchModalOv').classList.remove('open');}
+
+async function loadLogbuch(){
+  const list=document.getElementById('logbuchList');
+  list.innerHTML='<div style="text-align:center;padding:20px;color:var(--text4)">Lade...</div>';
+  const filter=document.getElementById('logbuchFilter').value;
+  const days=parseInt(document.getElementById('logbuchDays').value)||7;
+  const since=new Date(Date.now()-days*86400000).toISOString();
+  let q=sb.from('logbuch').select('*').gte('created_at',since).order('created_at',{ascending:false}).limit(200);
+  if(filter)q=q.eq('aktion',filter);
+  const {data,error}=await q;
+  if(error){list.innerHTML=`<div style="padding:12px;font-size:.8rem;color:var(--red)">⚠️ Fehler: ${error.message}</div>`;return;}
+  if(!data||!data.length){list.innerHTML='<div style="padding:16px;text-align:center;font-size:.8rem;color:var(--text4)">Keine Einträge im gewählten Zeitraum.</div>';return;}
+  const icons={status:'🔄',zuweisung:'👤',polygon:'📐',gebiet:'📍',anfrage:'📦'};
+  list.innerHTML=data.map(e=>{
+    const d=new Date(e.created_at);
+    const zeit=d.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'})+' '+d.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
+    const icon=icons[e.aktion]||'📝';
+    return `<div style="display:flex;gap:8px;padding:6px 8px;background:var(--surface);border-radius:var(--r8);font-size:.78rem;align-items:flex-start">
+      <span style="flex-shrink:0">${icon}</span>
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;justify-content:space-between;gap:8px">
+          <strong style="font-weight:600">${e.user_name||'–'}</strong>
+          <span style="color:var(--text4);font-size:.68rem;flex-shrink:0">${zeit}</span>
+        </div>
+        <div style="color:var(--text2);margin-top:1px">${e.details||''}</div>
+        ${e.gebiet_name?`<div style="color:var(--text4);font-size:.7rem;margin-top:1px">📍 ${e.gebiet_name}</div>`:''}
+      </div>
+    </div>`;
+  }).join('');
 }
 
 // ============================================================
@@ -3416,10 +3564,12 @@ async function setSt(id,s){
   const statusLabels = {offen:'Nicht zugestellt',zugeteilt:'Zugestellt',fertig:'Verteilt ✓'};
   if (g.status === s) return; // Gleicher Status, nichts zu tun
   if (!confirm(`Status von „${g.name}" wirklich auf „${statusLabels[s]||s}" ändern?`)) return;
+  const altStatus=g.status;
   g.status=s;
   const col=getGebietFarbe(g);
   if(layers[id])layers[id].setStyle({fillColor:col.f,color:col.s,fillOpacity:.6});
   renderList();renderStats();openDetail(id);
+  logAction('status',`Status: ${statusLabels[altStatus]||altStatus} → ${statusLabels[s]||s}`,id,g.name);
   let kampId = curKampagne?.id || null;
   if (!kampId || curKampagne?._local) {
     kampId = await ensureKampagneInDB();
@@ -3459,10 +3609,12 @@ async function saveZ(id){
   const sel=document.getElementById('inpV');
   const userId=sel.value;
   const userName=sel.options[sel.selectedIndex]?.dataset?.name||'';
+  const altVerteiler=g.verteiler||'(keiner)';
   g.verteiler=userName; g.verteilerId=userId;
   const col=getGebietFarbe(g);
   if(layers[id])layers[id].setStyle({fillColor:col.f,color:col.s});
   renderList();renderStats();openDetail(id);
+  logAction('zuweisung',userName?`Verteiler zugewiesen: ${userName} (vorher: ${altVerteiler})`:`Verteiler entfernt (war: ${altVerteiler})`,id,g.name);
   let kampId = curKampagne?.id || null;
   if (!kampId || curKampagne?._local) {
     kampId = await ensureKampagneInDB();
@@ -3555,7 +3707,8 @@ async function deleteHinweis(hinweisId, gebietId) {
 async function deleteGebiet(id){
   if (curRole !== 'admin' && !(curRole === 'kreisverwalter' && verwalterHatGebietZugriff(id))) { toast('⚠️ Keine Berechtigung'); return; }
   const _g = getG(id);
-  if(!confirm(`Gebiet "${_g ? _g.name : id}" wirklich löschen?`)) return;
+  const _gName=_g?.name||id;
+  if(!confirm(`Gebiet "${_gName}" wirklich löschen?`)) return;
 
   // Zuerst abhängige Tabellen löschen (anfragen, gebiet_status)
   await sb.from('anfragen').delete().eq('gebiet_id', id);
@@ -3577,7 +3730,8 @@ async function deleteGebiet(id){
 
   closeDetail();
   renderBreadcrumb(); renderList(); renderStats();
-  toast(`🗑 Gebiet ${id} gelöscht`);
+  logAction('gebiet',`Gebiet gelöscht: ${_gName}`,null,_gName);
+  toast(`🗑 Gebiet ${_gName} gelöscht`);
 }
 
 // ============================================================
@@ -3589,10 +3743,14 @@ function closeModal(){document.getElementById('modalOv').classList.remove('open'
 async function submitAnfrage(){
   const m=document.getElementById('modalMenge').value;
   if(!m){toast('Stückzahl eingeben');return}
-  const {error}=await sb.from('anfragen').insert({gebiet_id:mId,user_id:currentUser.id,neue_stueckzahl:parseInt(m),grund:document.getElementById('modalGrund').value});
+  const grund=document.getElementById('modalGrund').value;
+  const {error}=await sb.from('anfragen').insert({gebiet_id:mId,user_id:currentUser.id,neue_stueckzahl:parseInt(m),grund});
   closeModal();
   if (error) { toast('⚠️ DB-Fehler'); return; }
-  toast(`✅ Anfrage für ${mId} gesendet`);
+  const _sg=getG(mId);
+  logAction('anfrage',`Stückzahl-Anfrage: ${m} Stück${grund?' ('+grund+')':''}`,mId,_sg?.name||mId);
+  notifyManagers(mId,`Stückzahl-Anfrage: ${_sg?.name||mId}`,`${currentProfile?.name||'Ein Nutzer'} hat eine Stückzahl-Änderung auf ${m} Stück beantragt für Gebiet "${_sg?.name||mId}".${grund?'\nGrund: '+grund:''}`);
+  toast(`✅ Anfrage für ${_sg?.name||mId} gesendet`);
   await loadAnfragen(); // Glocke aktualisieren
 }
 
@@ -4148,6 +4306,8 @@ async function editPolySave(){
   // Cleanup edit mode
   cleanupEditMode();
   drawPolygons();
+  const _pg=getG(id);
+  logAction('polygon','Polygon bearbeitet',id,_pg?.name||id);
   toast('✅ Polygon gespeichert');
 }
 
@@ -4227,6 +4387,7 @@ async function drawSave(){
     drawCancel();
     if(regionKey!==curReg) switchReg(regionKey);
     else { renderBreadcrumb(); renderList(); renderStats(); drawPolygons(); }
+    logAction('gebiet',`Gebiet erstellt: ${name}`,null,name);
     toast(`✅ Gebiet „${name}" erstellt`);
   }
   drawEditId=null;
