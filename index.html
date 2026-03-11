@@ -340,6 +340,7 @@ textarea{min-height:68px}
     <button id="inviteUserBtn" onclick="openInviteModal()" title="Nutzer einladen" style="display:none;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='var(--text3)'">➕👤</button>
     <button id="manageUsersBtn" onclick="openManageUsersModal()" title="Nutzerverwaltung" style="display:none;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='var(--text3)'">👥</button>
     <button id="logbuchBtn" onclick="openLogbuchModal()" title="Logbuch" style="display:none;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='var(--text3)'">📋</button>
+    <button id="missingVerteilerBtn" onclick="jumpToMissingVerteiler()" title="Gebiete ohne Verteiler" style="display:none;position:relative;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--orange)'" onmouseout="this.style.color='var(--text3)'">🆘<span id="missingVerteilerBadge" style="display:none;position:absolute;top:-2px;right:-2px;background:var(--orange);color:#fff;font-size:.55rem;font-weight:700;min-width:14px;height:14px;border-radius:7px;align-items:center;justify-content:center;padding:0 3px">0</span></button>
     <!-- User pill with role badge -->
     <div class="user-pill" onclick="openProfilModal()" title="Mein Profil">
       <div class="user-avatar" id="userAvatar">?</div>
@@ -460,7 +461,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v74 · <a href="#" onclick="document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v75 · <a href="#" onclick="document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this)this.classList.remove('open')">
@@ -525,6 +526,10 @@ textarea{min-height:68px}
         <option value="kreisverwalter">Kreisverwalter</option>
         <option value="admin">Admin</option>
       </select>
+      <div id="inviteGVWrap" style="display:none">
+        <div style="font-size:.6rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:4px">Gebietsverband</div>
+        <select id="inviteGV" style="width:100%;padding:6px 10px;border:1px solid var(--sep);border-radius:var(--r8);font-size:.8rem"></select>
+      </div>
       <div id="inviteRegionenWrap" style="display:none">
         <div style="font-size:.6rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:4px">Zugewiesene Gebietsverbände</div>
         <div id="inviteRegionenList" style="display:flex;flex-direction:column;gap:4px"></div>
@@ -960,6 +965,9 @@ async function pruefePendingInviteBeiLogin(user) {
     if (invite.verwalteter_landkreis) {
       upd.verwalteter_landkreis = invite.verwalteter_landkreis;
     }
+    if (invite.gebietsverband_id) {
+      upd.gebietsverband_id = invite.gebietsverband_id;
+    }
     await sb.from('user_profiles').update(upd).eq('id', user.id);
     // Invite verbraucht → löschen
     await sb.from('pending_invites').delete().eq('email', user.email.toLowerCase());
@@ -973,7 +981,7 @@ let allUsers = [];
 async function loadAllUsers() {
   try {
     // Versuche alle Spalten inkl. neuer Hierarchie-Felder
-    let { data, error } = await sb.from('user_profiles').select('id, name, rolle, telefon, email, verwaltete_regionen, verwaltete_gebietsverbaende, verwalteter_landkreis').order('name');
+    let { data, error } = await sb.from('user_profiles').select('id, name, rolle, telefon, email, verwaltete_regionen, verwaltete_gebietsverbaende, verwalteter_landkreis, gebietsverband_id').order('name');
     if (error) {
       // Fallback: Nur Basis-Spalten wenn neue Spalten noch nicht existieren
       console.warn('loadAllUsers mit allen Spalten fehlgeschlagen, versuche Fallback:', error.message);
@@ -1470,43 +1478,134 @@ function renderUserList() {
   }
   const isAdmin = curRole === 'admin';
   const isKV = curRole === 'kreisverwalter';
-  // KV sieht nur Nutzer aus seinem Landkreis
   const sichtbareNutzer = isAdmin ? allUsers : allUsers.filter(u => nutzerImLandkreis(u));
-  list.innerHTML = sichtbareNutzer.map(u => {
-    const isSelf = u.id === currentUser?.id;
-    const istAdmin = u.rolle === 'admin';
-    // KV darf Admins nicht bearbeiten — nur anzeigen
-    const readOnly = isSelf || (isKV && istAdmin);
-    let rolleSelect;
-    if (readOnly) {
-      const rl = {verteiler:'Verteiler',verwalter:'Gebietsverwalter',kreisverwalter:'Kreisverwalter',admin:'Admin'}[u.rolle]||u.rolle;
-      rolleSelect = `<span style="font-size:.65rem;font-weight:600;padding:2px 7px;border-radius:4px;background:${istAdmin?'var(--red)':'var(--blue)'}22;color:${istAdmin?'var(--red)':'var(--blue)'}">${rl}</span>`;
-    } else {
-      // KV: nur verteiler/verwalter/kreisverwalter — kein admin
-      const opts = isKV
-        ? `<option value="verteiler" ${u.rolle==='verteiler'?'selected':''}>Verteiler</option>
-           <option value="verwalter" ${u.rolle==='verwalter'?'selected':''}>Gebietsverwalter</option>
-           <option value="kreisverwalter" ${u.rolle==='kreisverwalter'?'selected':''}>Kreisverwalter</option>`
-        : `<option value="verteiler" ${u.rolle==='verteiler'?'selected':''}>Verteiler</option>
-           <option value="verwalter" ${u.rolle==='verwalter'?'selected':''}>Gebietsverwalter</option>
-           <option value="kreisverwalter" ${u.rolle==='kreisverwalter'?'selected':''}>Kreisverwalter</option>
-           <option value="admin" ${u.rolle==='admin'?'selected':''}>Admin</option>`;
-      rolleSelect = `<select onchange="changeRole('${u.id}',this.value)" style="font-size:.72rem;padding:2px 4px;border-radius:4px;border:1px solid var(--border);background:var(--surface1);cursor:pointer">${opts}</select>`;
-    }
-    const regEdit = (!readOnly && (u.rolle === 'verwalter' || u.rolle === 'kreisverwalter'))
-      ? `<button onclick="openEditZuweisungModal('${u.id}','${(u.name||'').replace(/'/g,"\\'")}','${u.rolle}',${JSON.stringify(u.verwaltete_regionen||[]).replace(/"/g,'&quot;')},'${(u.verwalteter_landkreis||'').replace(/'/g,"\\'")}')" style="background:none;border:none;color:var(--blue);cursor:pointer;font-size:.8rem;padding:2px 4px;border-radius:4px" title="${u.rolle==='kreisverwalter'?'Landkreis bearbeiten':'Regionen bearbeiten'}">🗺</button>`
-      : '';
-    const deleteBtn = readOnly ? '' : `<button onclick="deleteUser('${u.id}','${(u.name||'').replace(/'/g,"\\'")}')" style="background:none;border:none;color:var(--text4);cursor:pointer;font-size:.8rem;padding:2px 4px;border-radius:4px" title="Nutzer entfernen">🗑</button>`;
-    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--surface2);border-radius:var(--r8)">
-      <div style="flex:1">
-        <div style="font-size:.82rem;font-weight:500">${u.name || '–'}</div>
-        <div style="font-size:.68rem;color:var(--text3)">${u.email || ''}</div>
+
+  // Gruppierung: LK → GV → Nutzer
+  const tree={};// {lkId:{lk,gvs:{gvId:{gv,users:[]}}}}
+  const ohneGV=[];
+  sichtbareNutzer.forEach(u=>{
+    const gvId=u.gebietsverband_id;
+    if(!gvId||!gebietsverbaende[gvId]){ohneGV.push(u);return;}
+    const gv=gebietsverbaende[gvId];
+    const lkId=gv.landkreis_id;
+    const lk=landkreise[lkId];
+    if(!tree[lkId])tree[lkId]={lk,gvs:{}};
+    if(!tree[lkId].gvs[gvId])tree[lkId].gvs[gvId]={gv,users:[]};
+    tree[lkId].gvs[gvId].users.push(u);
+  });
+
+  let h='';
+  // LK-Ebenen sortiert
+  const lkEntries=Object.entries(tree).sort((a,b)=>(a[1].lk?.name||'').localeCompare(b[1].lk?.name||''));
+  lkEntries.forEach(([lkId,{lk,gvs}])=>{
+    const lkUserCount=Object.values(gvs).reduce((s,g)=>s+g.users.length,0);
+    h+=`<div style="margin-bottom:4px">
+      <div style="display:flex;align-items:center;gap:0;padding:8px 6px 4px;border-bottom:1px solid var(--sep)">
+        <span class="ump-arrow" onclick="umpToggle(this)" style="cursor:pointer;font-size:.7rem;width:18px;text-align:center;user-select:none;transition:transform .15s;transform:rotate(0deg)">▶</span>
+        <span style="font-size:.82rem;font-weight:700;flex:1">🏛 ${lk?.name||lkId}</span>
+        <span style="font-size:.68rem;color:var(--text4)">${lkUserCount} Nutzer</span>
       </div>
-      ${rolleSelect}
-      ${regEdit}
-      ${deleteBtn}
-    </div>`;
-  }).join('');
+      <div class="ump-children" style="overflow:hidden;max-height:0px;transition:max-height .2s ease">`;
+    Object.entries(gvs).sort((a,b)=>a[1].gv.name.localeCompare(b[1].gv.name)).forEach(([gvId,{gv,users}])=>{
+      h+=`<div style="margin-left:16px">
+        <div style="display:flex;align-items:center;gap:0;padding:5px 4px 3px">
+          <span class="ump-arrow" onclick="umpToggle(this)" style="cursor:pointer;font-size:.6rem;width:16px;text-align:center;user-select:none;transition:transform .15s;transform:rotate(0deg)">▶</span>
+          <span style="font-size:.78rem;font-weight:600;color:var(--text2);flex:1">📁 ${gv.name}</span>
+          <span style="font-size:.65rem;color:var(--text4)">${users.length}</span>
+        </div>
+        <div class="ump-children" style="overflow:hidden;max-height:0px;transition:max-height .2s ease">
+        <div style="margin-left:20px;display:flex;flex-direction:column;gap:3px;padding:2px 0">`;
+      users.sort((a,b)=>(a.name||'').localeCompare(b.name||'')).forEach(u=>{
+        h+=_renderUserRow(u,isAdmin,isKV);
+      });
+      h+=`</div></div></div>`;
+    });
+    h+=`</div></div>`;
+  });
+  // Nutzer ohne GV-Zuordnung
+  if(ohneGV.length){
+    h+=`<div style="margin-bottom:4px">
+      <div style="display:flex;align-items:center;gap:0;padding:8px 6px 4px;border-bottom:1px solid var(--sep)">
+        <span class="ump-arrow" onclick="umpToggle(this)" style="cursor:pointer;font-size:.7rem;width:18px;text-align:center;user-select:none;transition:transform .15s;transform:rotate(90deg)">▶</span>
+        <span style="font-size:.82rem;font-weight:700;flex:1">⚠️ Ohne GV-Zuordnung</span>
+        <span style="font-size:.68rem;color:var(--orange)">${ohneGV.length}</span>
+      </div>
+      <div class="ump-children" style="overflow:hidden;transition:max-height .2s ease">
+      <div style="margin-left:20px;display:flex;flex-direction:column;gap:3px;padding:2px 0">`;
+    ohneGV.sort((a,b)=>(a.name||'').localeCompare(b.name||'')).forEach(u=>{
+      h+=_renderUserRow(u,isAdmin,isKV);
+    });
+    h+=`</div></div></div>`;
+  }
+  list.innerHTML=h;
+  // "Ohne GV" standardmäßig offen — maxHeight setzen
+  requestAnimationFrame(()=>{
+    list.querySelectorAll('.ump-children').forEach(el=>{
+      if(!el.style.maxHeight||el.style.maxHeight==='0px')return;
+      el.style.maxHeight=el.scrollHeight+'px';
+    });
+  });
+}
+
+function _renderUserRow(u,isAdmin,isKV){
+  const isSelf=u.id===currentUser?.id;
+  const istAdmin=u.rolle==='admin';
+  const readOnly=isSelf||(isKV&&istAdmin);
+  let rolleSelect;
+  if(readOnly){
+    const rl={verteiler:'Verteiler',verwalter:'Gebietsverwalter',kreisverwalter:'Kreisverwalter',admin:'Admin'}[u.rolle]||u.rolle;
+    rolleSelect=`<span style="font-size:.65rem;font-weight:600;padding:2px 7px;border-radius:4px;background:${istAdmin?'var(--red)':'var(--blue)'}22;color:${istAdmin?'var(--red)':'var(--blue)'}">${rl}</span>`;
+  }else{
+    const opts=isKV
+      ?`<option value="verteiler" ${u.rolle==='verteiler'?'selected':''}>Verteiler</option><option value="verwalter" ${u.rolle==='verwalter'?'selected':''}>GV</option><option value="kreisverwalter" ${u.rolle==='kreisverwalter'?'selected':''}>KV</option>`
+      :`<option value="verteiler" ${u.rolle==='verteiler'?'selected':''}>Verteiler</option><option value="verwalter" ${u.rolle==='verwalter'?'selected':''}>GV</option><option value="kreisverwalter" ${u.rolle==='kreisverwalter'?'selected':''}>KV</option><option value="admin" ${u.rolle==='admin'?'selected':''}>Admin</option>`;
+    rolleSelect=`<select onchange="changeRole('${u.id}',this.value)" style="font-size:.7rem;padding:2px 4px;border-radius:4px;border:1px solid var(--sep);cursor:pointer">${opts}</select>`;
+  }
+  // GV-Änderung (nur Admin/KV)
+  let gvSelect='';
+  if(!readOnly&&(isAdmin||isKV)&&u.rolle!=='admin'){
+    const gvOpts=`<option value="">—</option>`+Object.entries(gebietsverbaende)
+      .filter(([,gv])=>isAdmin||gv.landkreis_id===currentProfile?.verwalteter_landkreis)
+      .sort((a,b)=>a[1].name.localeCompare(b[1].name))
+      .map(([id,gv])=>`<option value="${id}" ${u.gebietsverband_id===id?'selected':''}>${gv.name}</option>`).join('');
+    gvSelect=`<select onchange="reassignUserGV('${u.id}',this.value)" style="font-size:.65rem;padding:1px 3px;border-radius:4px;border:1px solid var(--sep);max-width:100px;cursor:pointer" title="GV ändern">${gvOpts}</select>`;
+  }
+  const regEdit=(!readOnly&&(u.rolle==='verwalter'||u.rolle==='kreisverwalter'))
+    ?`<button onclick="openEditZuweisungModal('${u.id}','${(u.name||'').replace(/'/g,"\\'")}','${u.rolle}',${JSON.stringify(u.verwaltete_regionen||[]).replace(/"/g,'&quot;')},'${(u.verwalteter_landkreis||'').replace(/'/g,"\\'")}')" style="background:none;border:none;color:var(--blue);cursor:pointer;font-size:.75rem;padding:1px 3px" title="${u.rolle==='kreisverwalter'?'LK':'Regionen'} bearbeiten">🗺</button>`:'';
+  const deleteBtn=readOnly?'':`<button onclick="deleteUser('${u.id}','${(u.name||'').replace(/'/g,"\\'")}')" style="background:none;border:none;color:var(--text4);cursor:pointer;font-size:.75rem;padding:1px 3px" title="Entfernen">🗑</button>`;
+  const noGVWarning=!u.gebietsverband_id&&u.rolle!=='admin'?'<span style="color:var(--orange);font-size:.65rem" title="Kein GV zugewiesen">⚠️</span>':'';
+  return `<div style="display:flex;align-items:center;gap:6px;padding:4px 6px;background:var(--surface);border-radius:var(--r8);font-size:.78rem">
+    <div style="flex:1;min-width:0">
+      <div style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${u.name||'–'} ${noGVWarning}</div>
+      <div style="font-size:.65rem;color:var(--text4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${u.email||''}</div>
+    </div>
+    ${rolleSelect} ${gvSelect} ${regEdit} ${deleteBtn}
+  </div>`;
+}
+
+function umpToggle(arrow){
+  const parent=arrow.closest('div');
+  const children=parent.parentElement.querySelector(':scope > .ump-children');
+  if(!children)return;
+  const open=children.style.maxHeight!=='0px';
+  if(open){children.style.maxHeight='0px';arrow.style.transform='rotate(0deg)';}
+  else{children.style.maxHeight=children.scrollHeight+'px';arrow.style.transform='rotate(90deg)';}
+  setTimeout(()=>{
+    let el=children.parentElement?.closest('.ump-children');
+    while(el){if(el.style.maxHeight!=='0px')el.style.maxHeight=el.scrollHeight+'px';el=el.parentElement?.closest('.ump-children');}
+  },220);
+}
+
+async function reassignUserGV(userId,newGvId){
+  const u=allUsers.find(u=>u.id===userId);
+  if(!u)return;
+  const {error}=await sb.from('user_profiles').update({gebietsverband_id:newGvId||null}).eq('id',userId);
+  if(error){toast('⚠️ Fehler: '+(error.message||error.code));return;}
+  u.gebietsverband_id=newGvId||null;
+  const gvName=newGvId&&gebietsverbaende[newGvId]?gebietsverbaende[newGvId].name:'(keiner)';
+  logAction('zuweisung',`GV-Zuordnung geändert: ${u.name} → ${gvName}`);
+  toast(`✅ ${u.name} → ${gvName}`);
+  renderUserList();
 }
 
 // ============================================================
@@ -1649,6 +1748,18 @@ document.addEventListener('DOMContentLoaded', () => {
       const v = e.target.value;
       document.getElementById('inviteRegionenWrap').style.display = v === 'verwalter' ? 'block' : 'none';
       document.getElementById('inviteLandkreisWrap').style.display = v === 'kreisverwalter' ? 'block' : 'none';
+      // GV-Dropdown für Verteiler anzeigen
+      const showGV = v === 'verteiler';
+      document.getElementById('inviteGVWrap').style.display = showGV ? 'block' : 'none';
+      if (showGV) {
+        const isKV = curRole === 'kreisverwalter';
+        const kvLK = currentProfile?.verwalteter_landkreis;
+        const gvOpts = Object.entries(gebietsverbaende)
+          .filter(([,gv]) => !isKV || gv.landkreis_id === kvLK)
+          .sort((a,b) => a[1].name.localeCompare(b[1].name))
+          .map(([id,gv]) => `<option value="${id}">${gv.name}</option>`).join('');
+        document.getElementById('inviteGV').innerHTML = `<option value="">— Gebietsverband wählen —</option>` + gvOpts;
+      }
       if (v === 'kreisverwalter') {
         const sel = document.getElementById('inviteLandkreis');
         sel.innerHTML = Object.entries(landkreise).map(([id,lk]) => `<option value="${id}">${lk.name}</option>`).join('');
@@ -1679,6 +1790,14 @@ async function sendInvite(channel) {
   const verwalteter_landkreis = rolle === 'kreisverwalter'
     ? document.getElementById('inviteLandkreis')?.value || null
     : null;
+  const gebietsverband_id = rolle !== 'admin'
+    ? (rolle === 'verteiler' ? document.getElementById('inviteGV')?.value || null
+      : rolle === 'verwalter' && verwaltete_regionen.length > 0
+        ? regionen[verwaltete_regionen[0]]?.gebietsverband_id || null
+        : rolle === 'kreisverwalter' && verwalteter_landkreis
+          ? Object.entries(gebietsverbaende).find(([,gv])=>gv.landkreis_id===verwalteter_landkreis)?.[0] || null
+          : null)
+    : null;
 
   // Alle Buttons kurz deaktivieren
   ['invBtnEmail','invBtnWA','invBtnTG','invBtnCopy'].forEach(id => { const b=document.getElementById(id); if(b) b.disabled=true; });
@@ -1700,6 +1819,7 @@ async function sendInvite(channel) {
       telefon: telefon || null,
       verwaltete_regionen: verwaltete_regionen.length > 0 ? verwaltete_regionen : null,
       verwalteter_landkreis: verwalteter_landkreis || null,
+      gebietsverband_id: gebietsverband_id || null,
       eingeladen_von: currentUser.id
     }, { onConflict: 'email' });
     if (piErr) console.warn('pending_invites speichern fehlgeschlagen:', piErr.message);
@@ -1715,6 +1835,9 @@ async function sendInvite(channel) {
       }
       if (rolle === 'kreisverwalter' && verwalteter_landkreis) {
         upd.verwalteter_landkreis = verwalteter_landkreis;
+      }
+      if (gebietsverband_id) {
+        upd.gebietsverband_id = gebietsverband_id;
       }
       await sb.from('user_profiles').update(upd).eq('id', existing.id);
     }
@@ -1895,40 +2018,48 @@ function setRollenbasierterFilter() {
       }
     }
   } else if (rolle === 'verteiler') {
-    // Verteiler → auf den Bereich seiner zugewiesenen Gebiete filtern
-    // Finde alle Gebiete die diesem Verteiler zugewiesen sind
-    const meineGebiete = [];
-    for (const [rKey, r] of Object.entries(regionen)) {
-      for (const g of r.gebiete) {
-        if (g.verteilerId === currentUser?.id) {
-          meineGebiete.push({ gebiet: g, regionKey: rKey });
+    // Verteiler → bevorzugt über gebietsverband_id filtern
+    const myGvId = currentProfile?.gebietsverband_id;
+    if (myGvId && gebietsverbaende[myGvId]) {
+      curGV = myGvId;
+      const gv = gebietsverbaende[myGvId];
+      if (gv?.landkreis_id && landkreise[gv.landkreis_id]) {
+        curLK = gv.landkreis_id;
+      }
+      // Auto-selektiere Region wenn nur eine im GV
+      const regs = Object.entries(regionen).filter(([,r]) => r.gebietsverband_id === myGvId);
+      if (regs.length === 1) curReg = regs[0][0];
+    } else {
+      // Fallback: aus zugewiesenen Gebieten ableiten
+      const meineGebiete = [];
+      for (const [rKey, r] of Object.entries(regionen)) {
+        for (const g of r.gebiete) {
+          if (g.verteilerId === currentUser?.id) {
+            meineGebiete.push({ gebiet: g, regionKey: rKey });
+          }
         }
       }
-    }
-    if (meineGebiete.length > 0) {
-      // Bestimme die Region(en) des Verteilers
-      const regionKeys = [...new Set(meineGebiete.map(m => m.regionKey))];
-      if (regionKeys.length === 1) {
-        // Alle Gebiete in einer Region → direkt auf Region filtern
-        const rKey = regionKeys[0];
-        curReg = rKey;
-        const reg = regionen[rKey];
-        if (reg) {
-          curGV = reg.gebietsverband_id;
-          const gv = gebietsverbaende[reg.gebietsverband_id];
-          if (gv) curLK = gv.landkreis_id;
-        }
-      } else {
-        // Mehrere Regionen → auf GV-Ebene filtern
-        const gvKeys = [...new Set(regionKeys.map(rk => regionen[rk]?.gebietsverband_id).filter(Boolean))];
-        if (gvKeys.length === 1) {
-          curGV = gvKeys[0];
-          const gv = gebietsverbaende[gvKeys[0]];
-          if (gv) curLK = gv.landkreis_id;
-        } else if (gvKeys.length > 1) {
-          // Mehrere GVs → auf Landkreis-Ebene filtern
-          const lkKeys = [...new Set(gvKeys.map(gk => gebietsverbaende[gk]?.landkreis_id).filter(Boolean))];
-          if (lkKeys.length === 1) curLK = lkKeys[0];
+      if (meineGebiete.length > 0) {
+        const regionKeys = [...new Set(meineGebiete.map(m => m.regionKey))];
+        if (regionKeys.length === 1) {
+          const rKey = regionKeys[0];
+          curReg = rKey;
+          const reg = regionen[rKey];
+          if (reg) {
+            curGV = reg.gebietsverband_id;
+            const gv = gebietsverbaende[reg.gebietsverband_id];
+            if (gv) curLK = gv.landkreis_id;
+          }
+        } else {
+          const gvKeys = [...new Set(regionKeys.map(rk => regionen[rk]?.gebietsverband_id).filter(Boolean))];
+          if (gvKeys.length === 1) {
+            curGV = gvKeys[0];
+            const gv = gebietsverbaende[gvKeys[0]];
+            if (gv) curLK = gv.landkreis_id;
+          } else if (gvKeys.length > 1) {
+            const lkKeys = [...new Set(gvKeys.map(gk => gebietsverbaende[gk]?.landkreis_id).filter(Boolean))];
+            if (lkKeys.length === 1) curLK = lkKeys[0];
+          }
         }
       }
     }
@@ -1958,10 +2089,11 @@ async function showApp() {
     document.getElementById('manageUsersBtn').style.display = 'block';
     document.getElementById('hierarchyBtn').style.display = 'block';
   }
-  // PDF-Export + Logbuch für Manager (Admin, Kreisverwalter, Gebietsverwalter)
+  // PDF-Export + Logbuch + Verteiler-fehlen für Manager (Admin, Kreisverwalter, Gebietsverwalter)
   if (rolle === 'admin' || rolle === 'kreisverwalter' || rolle === 'verwalter') {
     document.getElementById('bulkPdfBtn').style.display = 'block';
     document.getElementById('logbuchBtn').style.display = 'block';
+    document.getElementById('missingVerteilerBtn').style.display = 'inline-block';
   }
   // Anfragen-Glocke für alle Rollen (Admin/Verwalter: offene Anfragen, Verteiler: Rückmeldungen)
   document.getElementById('anfragenBtn').style.display = 'inline-block';
@@ -1981,6 +2113,10 @@ async function showApp() {
     setRollenbasierterFilter();
     renderBreadcrumb(); renderList(); renderStats(); drawPolygons(); showDrawToolbar();
   }
+  // Auto-Migration: GVs für bestehende Nutzer ableiten (nur Admin)
+  await migrateUserGVs();
+  // Badge für fehlende Verteiler aktualisieren
+  updateMissingVerteilerBadge();
 }
 
 // Check if already logged in on page load
@@ -2935,6 +3071,120 @@ async function notifyManagers(gebietId, betreff, inhalt){
 }
 
 // ============================================================
+// VERTEILER FEHLEN – Badge + Navigation
+// ============================================================
+function countMissingVerteiler(){
+  const rolle=currentProfile?.rolle||'verteiler';
+  let count=0;
+  for(const [,r] of Object.entries(regionen)){
+    // Sichtbarkeitsprüfung je nach Rolle
+    if(rolle==='verwalter'){
+      const verwReg=currentProfile?.verwaltete_regionen||[];
+      if(!verwReg.includes(r.id))continue;
+    } else if(rolle==='kreisverwalter'){
+      const kvLK=currentProfile?.verwalteter_landkreis;
+      const gv=gebietsverbaende[r.gebietsverband_id];
+      if(!gv||gv.landkreis_id!==kvLK)continue;
+    }
+    // admin sieht alles
+    for(const g of r.gebiete){
+      if(!g.verteilerId && kmlP[g.id] && kmlP[g.id].length>=3) count++;
+    }
+  }
+  return count;
+}
+function updateMissingVerteilerBadge(){
+  const btn=document.getElementById('missingVerteilerBtn');
+  const badge=document.getElementById('missingVerteilerBadge');
+  if(!btn||!badge)return;
+  const n=countMissingVerteiler();
+  if(n>0){
+    badge.textContent=n;
+    badge.style.display='flex';
+  } else {
+    badge.style.display='none';
+  }
+}
+function jumpToMissingVerteiler(){
+  // Auf LK-Ebene navigieren (oder GV je nach Rolle) und Gebiete ohne Verteiler hervorheben
+  const rolle=currentProfile?.rolle||'verteiler';
+  if(rolle==='verwalter'){
+    const verwReg=currentProfile?.verwaltete_regionen||[];
+    if(verwReg.length>0){
+      const reg=regionen[verwReg[0]];
+      if(reg){
+        curGV=reg.gebietsverband_id;
+        const gv=gebietsverbaende[reg.gebietsverband_id];
+        if(gv)curLK=gv.landkreis_id;
+      }
+    }
+    curReg='alle';
+  } else if(rolle==='kreisverwalter'){
+    curLK=currentProfile?.verwalteter_landkreis||'alle';
+    curGV='alle'; curReg='alle';
+  } else {
+    // Admin → auf 'alle' bleiben
+    curLK='alle'; curGV='alle'; curReg='alle';
+  }
+  selId=null; closeDetail();
+  renderBreadcrumb(); renderList(); renderStats(); drawPolygons(); showDrawToolbar();
+  // Gebiete ohne Verteiler orange hervorheben auf der Karte
+  if(typeof polyLayer!=='undefined' && polyLayer){
+    polyLayer.eachLayer(layer=>{
+      const gId=layer.options?.gebietId;
+      if(!gId)return;
+      // Prüfe ob Gebiet keinen Verteiler hat
+      let hatVerteiler=false;
+      for(const r of Object.values(regionen)){
+        const g=r.gebiete.find(ge=>ge.id===gId);
+        if(g){hatVerteiler=!!g.verteilerId;break;}
+      }
+      if(!hatVerteiler){
+        layer.setStyle({fillColor:'#ff6600',fillOpacity:0.5,weight:3,color:'#ff6600'});
+      }
+    });
+  }
+  showToast('Gebiete ohne Verteiler sind orange hervorgehoben','info');
+}
+
+// ============================================================
+// AUTO-MIGRATION: GV für bestehende Nutzer ableiten
+// ============================================================
+async function migrateUserGVs(){
+  if(currentProfile?.rolle!=='admin') return;
+  // Nur Verteiler ohne GV migrieren
+  const ohneGV=allUsers.filter(u=>u.rolle==='verteiler'&&!u.gebietsverband_id);
+  if(ohneGV.length===0) return;
+  let migriert=0;
+  for(const u of ohneGV){
+    // GV aus zugewiesenem Gebiet ableiten (über gebiet_status → region → GV)
+    let foundGV=null;
+    for(const r of Object.values(regionen)){
+      for(const g of r.gebiete){
+        if(g.verteilerId===u.id){
+          foundGV=r.gebietsverband_id;
+          break;
+        }
+      }
+      if(foundGV)break;
+    }
+    if(foundGV){
+      const {error}=await sb.from('user_profiles').update({gebietsverband_id:foundGV}).eq('id',u.id);
+      if(!error){
+        u.gebietsverband_id=foundGV;
+        migriert++;
+      }
+    }
+  }
+  const rest=ohneGV.length-migriert;
+  if(migriert>0||rest>0){
+    let msg=`GV-Migration: ${migriert} Verteiler zugeordnet`;
+    if(rest>0) msg+=`, ${rest} ohne Zuordnung (⚠️ in Nutzerverwaltung)`;
+    showToast(msg,'info');
+  }
+}
+
+// ============================================================
 // LOGBUCH / AUDIT TRAIL
 // ============================================================
 async function logAction(aktion, details='', gebietId=null, gebietName=null){
@@ -3425,10 +3675,15 @@ function openDetail(id){
   }
 
   if(isM){
+    const gebietVerteiler=getVerteilerFuerGebiet(g.id);
     const userOptions = `<option value="">— Verteiler fehlt</option>` +
-      allUsers.map(u=>
-        `<option value="${u.id}" data-name="${u.name}" ${g.verteilerId===u.id?'selected':''}>${u.name}${u.rolle==='verwalter'?' (Gebietsverwalter)':u.rolle==='kreisverwalter'?' (Kreisverwalter)':u.rolle==='admin'?' (Admin)':''}</option>`
-      ).join('');
+      gebietVerteiler.map(u=>{
+        const sel=g.verteilerId===u.id?'selected':'';
+        const rolleHint=u.rolle==='verwalter'?' (GV)':u.rolle==='kreisverwalter'?' (KV)':'';
+        const borrowedHint=u.borrowed?' 🔗':'';
+        const gvHint=(!u.sameGV&&u.gvName)?' ['+u.gvName+']':'';
+        return `<option value="${u.id}" data-name="${u.name}" ${sel} ${u.borrowed?'style="color:var(--orange)"':''}>${u.name}${rolleHint}${gvHint}${borrowedHint}</option>`;
+      }).join('');
     h+=`<div class="d-sec"><div class="sec-hd">Verteiler zuweisen</div><div class="f-stack">
       <select id="inpV">${userOptions}</select>
       <button class="btn btn-p" onclick="saveZ('${g.id}')">Speichern</button>
@@ -3652,6 +3907,60 @@ async function saveZ(id){
     console.warn('saveZ gebiete-Fallback Exception:', e);
     toast(`✅ Verteiler ${userName?'zugewiesen':'entfernt'} (lokal)`);
   }
+  updateMissingVerteilerBadge();
+}
+
+function getVerteilerFuerGebiet(gebietId){
+  // Finde den GV dieses Gebiets
+  let gebietGV=null;
+  for(const [rk,r] of Object.entries(regionen)){
+    if(r.gebiete.find(g=>g.id===gebietId)){gebietGV=r.gebietsverband_id;break;}
+  }
+  // Erlaubte GVs basierend auf Rolle
+  let erlaubteGVs=new Set();
+  if(curRole==='admin'){
+    // Admin sieht alle, aber GV-Name als Info
+    erlaubteGVs=null; // null = alle
+  } else if(curRole==='kreisverwalter'){
+    const myLK=currentProfile?.verwalteter_landkreis;
+    Object.entries(gebietsverbaende).forEach(([gvId,gv])=>{
+      if(gv.landkreis_id===myLK)erlaubteGVs.add(gvId);
+    });
+  } else if(curRole==='verwalter'){
+    const verwReg=currentProfile?.verwaltete_regionen||[];
+    verwReg.forEach(rId=>{const reg=regionen[rId];if(reg)erlaubteGVs.add(reg.gebietsverband_id);});
+  }
+  // Übernahme-Anfragen für dieses Gebiet (ausgeliehene Verteiler)
+  const borrowedIds=new Set();
+  (alleAnfragen||[]).forEach(a=>{
+    if(a.gebiet_id===gebietId&&a.typ==='uebernahme'&&a.status!=='abgelehnt'){
+      borrowedIds.add(a.user_id);
+    }
+  });
+  // Nutzer filtern
+  const result=[];
+  allUsers.forEach(u=>{
+    if(u.rolle==='admin')return; // Admins nicht als Verteiler anbieten
+    const userGV=u.gebietsverband_id||null;
+    const inErlaubteGV=erlaubteGVs===null||erlaubteGVs.has(userGV);
+    const isBorrowed=borrowedIds.has(u.id);
+    if(inErlaubteGV||isBorrowed){
+      const gvName=userGV&&gebietsverbaende[userGV]?gebietsverbaende[userGV].name:'';
+      result.push({
+        id:u.id, name:u.name, rolle:u.rolle,
+        gvId:userGV, gvName,
+        borrowed:isBorrowed&&!inErlaubteGV,
+        sameGV:userGV===gebietGV
+      });
+    }
+  });
+  // Sortierung: gleicher GV zuerst, dann Name
+  result.sort((a,b)=>{
+    if(a.sameGV!==b.sameGV)return a.sameGV?-1:1;
+    if(a.borrowed!==b.borrowed)return a.borrowed?1:-1;
+    return a.name.localeCompare(b.name);
+  });
+  return result;
 }
 
 async function saveSt2(id){
@@ -3994,8 +4303,12 @@ function nutzerImLandkreis(user) {
       return gv && gv.landkreis_id === kvLK;
     });
   }
-  // Verteiler → immer anzeigen (können jedem Gebiet zugewiesen werden)
-  if (user.rolle === 'verteiler') return true;
+  // Verteiler → nach GV filtern (wenn GV zugewiesen)
+  if (user.rolle === 'verteiler') {
+    if (!user.gebietsverband_id) return true; // Noch kein GV → anzeigen
+    const gv = gebietsverbaende[user.gebietsverband_id];
+    return gv && gv.landkreis_id === kvLK;
+  }
   return false;
 }
 
