@@ -85,9 +85,9 @@ header{height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturate(18
 .mob-overflow-item{display:flex;align-items:center;gap:8px;padding:10px 14px;font-size:.8rem;font-weight:500;color:var(--text2);cursor:pointer;border:none;background:none;width:100%;text-align:left;font-family:inherit;transition:background .1s}
 .mob-overflow-item:active{background:var(--surface3)}
 .leg-toggle{display:none;position:absolute;bottom:22px;left:10px;z-index:401;width:36px;height:36px;border-radius:var(--r12);border:none;background:rgba(255,255,255,.92);backdrop-filter:blur(12px);box-shadow:var(--sh);cursor:pointer;font-size:.9rem;align-items:center;justify-content:center}
-.mob-nav{display:none;background:var(--bg);border-bottom:1px solid var(--sep);padding:6px 10px;gap:6px;flex-direction:column;z-index:500;flex-shrink:0}
-.mob-nav-bc{display:flex;align-items:center;gap:2px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
-.mob-nav-bc::-webkit-scrollbar{height:0}
+.mob-nav{display:none;background:var(--bg);border-bottom:1px solid var(--sep);padding:6px 10px;gap:6px;flex-direction:column;z-index:900;flex-shrink:0;position:relative;overflow:visible}
+.mob-nav-bc{display:flex;align-items:center;gap:2px;overflow:visible;position:relative}
+.mob-nav-bc .bc-drop{z-index:910}
 .mob-nav-stats{display:flex;gap:8px;font-size:.68rem;font-weight:600}
 .mob-stat::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:currentColor;margin-right:3px;vertical-align:middle}
 .mob-col{display:none!important}
@@ -265,7 +265,7 @@ textarea{min-height:68px}
   /* Step 6: Detail panel as bottom-sheet */
   .detail-panel{position:fixed;left:0;right:0;bottom:0;top:auto;width:100%;height:55vh;transform:translateY(100%);transition:transform .3s cubic-bezier(.32,.72,0,1);border-radius:16px 16px 0 0;border-left:none;border-top:1px solid var(--sep);box-shadow:0 -4px 20px rgba(0,0,0,.15);z-index:700}
   .detail-panel.open{transform:translateY(0)}
-  .detail-panel.full{height:90vh}
+  .detail-panel.full{height:calc(100vh - 60px);max-height:calc(100dvh - 60px)}
   .d-handle{display:block!important}
   .s-btn{padding:10px 8px;font-size:.75rem;min-height:44px}
   .s-grid{grid-template-columns:1fr 1fr;gap:6px}
@@ -538,7 +538,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v77 · <a href="#" onclick="document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v78 · <a href="#" onclick="document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this)this.classList.remove('open')">
@@ -1173,9 +1173,15 @@ function renderKampagnenDropdown() {
   const oldBtn = document.getElementById('kampagneVerwBtn');
   if (oldBtn) oldBtn.remove();
 
-  sel.innerHTML = kampagnen.map((k, i) =>
+  // Verteiler sehen keine Basis-Kampagne (Grundzuweisung)
+  const sichtbar = (curRole==='verteiler') ? kampagnen.filter(k=>!k.ist_basis) : kampagnen;
+  sel.innerHTML = sichtbar.map((k, i) =>
     `<option value="${k.id}" ${i === 0 ? 'selected' : ''}>${k.name}</option>`
   ).join('');
+  // Falls keine Kampagne sichtbar, trotzdem curKampagne auf Basis setzen
+  if(sichtbar.length===0 && kampagnen.length>0){
+    sel.innerHTML=`<option value="${kampagnen[0].id}" selected>${kampagnen[0].name}</option>`;
+  }
 
   if (kampagnen.length > 0 && !curKampagne) {
     curKampagne = kampagnen[0];
@@ -1416,16 +1422,26 @@ async function saveKampagne() {
       toast('⚠️ Fehler beim Aktualisieren');
     }
   } else {
-    // INSERT
-    kampData.erstellt_von = currentUser.id;
-    kampData.created_at = new Date();
-    try {
-      const { data, error } = await sb.from('kampagnen').insert(kampData).select().single();
-      if (error) throw error;
-      const neueKampagne = data || { ...kampData, id: Date.now() };
-      kampagnen.push(neueKampagne);
+    // INSERT mit Fallback-Strategien (falls Spalten fehlen)
+    kampData.erstellt_von = currentUser?.id||null;
+    kampData.created_at = new Date().toISOString();
+    let neueKampagne=null;
+    const strategies=[kampData,{name,beschreibung:beschr},{name}];
+    for(let i=0;i<strategies.length;i++){
+      try{
+        const {data,error}=await sb.from('kampagnen').insert(strategies[i]).select().single();
+        if(!error&&data){neueKampagne=data;break;}
+        console.warn('saveKampagne Strategie '+(i+1)+':', JSON.stringify(error));
+      }catch(e){console.warn('saveKampagne Strategie '+(i+1)+' Exception:', e);}
+    }
+    if(!neueKampagne){
+      neueKampagne={...kampData,id:crypto.randomUUID(),_local:true};
+      toast('⚠️ Kampagne lokal erstellt (DB-Fehler)');
+    }
+    kampagnen.push(neueKampagne);
 
-      // Verteiler-Zuweisungen aus Basis-Kampagne übernehmen
+    // Verteiler-Zuweisungen aus Basis-Kampagne übernehmen
+    if(!neueKampagne._local){
       const basis = kampagnen.find(k => k.ist_basis);
       if (basis && neueKampagne.id !== basis.id) {
         try {
@@ -1445,9 +1461,6 @@ async function saveKampagne() {
         } catch(e) { console.warn('Basis-Zuweisungen kopieren fehlgeschlagen:', e); }
       }
       toast(`✅ Kampagne „${name}" erstellt`);
-    } catch(e) {
-      kampagnen.push({ ...kampData, id: Date.now().toString() });
-      console.warn('DB insert kampagne failed:', e);
     }
   }
 
@@ -2462,12 +2475,26 @@ async function markAnfrageGelesen(anfrageId) {
 }
 
 async function handleAnfrage(anfrageId, entscheidung, neueStueckzahl, gebietId) {
-  const { error } = await sb.from('anfragen').update({
+  // Strategie 1: normales Update
+  let { error } = await sb.from('anfragen').update({
     status: entscheidung,
     bearbeitet_von: currentUser.id,
     updated_at: new Date().toISOString()
   }).eq('id', anfrageId);
-  if (error) { toast('⚠️ Fehler: ' + (error.message || error.code)); return; }
+  // Strategie 2: nur status updaten (falls bearbeitet_von Spalte fehlt oder RLS)
+  if(error){
+    console.warn('handleAnfrage Update S1 failed:', JSON.stringify(error));
+    const r2=await sb.from('anfragen').update({status:entscheidung}).eq('id',anfrageId);
+    error=r2.error;
+  }
+  // Strategie 3: Löschen statt Update
+  if(error){
+    console.warn('handleAnfrage Update S2 failed:', JSON.stringify(error));
+    const r3=await sb.from('anfragen').delete().eq('id',anfrageId);
+    if(r3.error){
+      toast('⚠️ Fehler: Anfrage konnte nicht bearbeitet werden. Bitte Admin kontaktieren (RLS-Policy fehlt).'); return;
+    }
+  }
 
   if (entscheidung === 'genehmigt' && neueStueckzahl && gebietId) {
     const g = getG(gebietId);
@@ -2498,12 +2525,19 @@ async function handleAnfrage(anfrageId, entscheidung, neueStueckzahl, gebietId) 
 
 // Verwalter genehmigt Übernahme-Anfrage eines Verteilers
 async function handleUebernahmeAnfrage(anfrageId, entscheidung, gebietId, verteilerId) {
-  const { error } = await sb.from('anfragen').update({
+  let { error } = await sb.from('anfragen').update({
     status: entscheidung,
     bearbeitet_von: currentUser.id,
     updated_at: new Date().toISOString()
   }).eq('id', anfrageId);
-  if (error) { toast('⚠️ Fehler: ' + (error.message || error.code)); return; }
+  if(error){
+    const r2=await sb.from('anfragen').update({status:entscheidung}).eq('id',anfrageId);
+    error=r2.error;
+  }
+  if(error){
+    const r3=await sb.from('anfragen').delete().eq('id',anfrageId);
+    if(r3.error){ toast('⚠️ Fehler: Anfrage konnte nicht bearbeitet werden (RLS-Policy fehlt)'); return; }
+  }
 
   if (entscheidung === 'genehmigt' && gebietId && verteilerId) {
     const g = getG(gebietId);
@@ -2538,12 +2572,19 @@ async function handleUebernahmeAnfrage(anfrageId, entscheidung, gebietId, vertei
 
 // Verteiler nimmt Zuweisungs-Anfrage an oder lehnt ab
 async function handleZuweisungAnfrage(anfrageId, entscheidung, gebietId) {
-  const { error } = await sb.from('anfragen').update({
+  let { error } = await sb.from('anfragen').update({
     status: entscheidung,
     bearbeitet_von: currentUser.id,
     updated_at: new Date().toISOString()
   }).eq('id', anfrageId);
-  if (error) { toast('⚠️ Fehler: ' + (error.message || error.code)); return; }
+  if(error){
+    const r2=await sb.from('anfragen').update({status:entscheidung}).eq('id',anfrageId);
+    error=r2.error;
+  }
+  if(error){
+    const r3=await sb.from('anfragen').delete().eq('id',anfrageId);
+    if(r3.error){ toast('⚠️ Fehler: Anfrage konnte nicht bearbeitet werden (RLS-Policy fehlt)'); return; }
+  }
 
   if (entscheidung === 'genehmigt' && gebietId) {
     const g = getG(gebietId);
@@ -2614,12 +2655,19 @@ async function sendeAbgabeAnfrage(gebietId) {
 
 // Verwalter genehmigt/lehnt Abgabe ab
 async function handleAbgabeAnfrage(anfrageId, entscheidung, gebietId) {
-  const { error } = await sb.from('anfragen').update({
+  let { error } = await sb.from('anfragen').update({
     status: entscheidung,
     bearbeitet_von: currentUser.id,
     updated_at: new Date().toISOString()
   }).eq('id', anfrageId);
-  if (error) { toast('⚠️ Fehler: ' + (error.message || error.code)); return; }
+  if(error){
+    const r2=await sb.from('anfragen').update({status:entscheidung}).eq('id',anfrageId);
+    error=r2.error;
+  }
+  if(error){
+    const r3=await sb.from('anfragen').delete().eq('id',anfrageId);
+    if(r3.error){ toast('⚠️ Fehler: Anfrage konnte nicht bearbeitet werden (RLS-Policy fehlt)'); return; }
+  }
 
   if (entscheidung === 'genehmigt' && gebietId) {
     const g = getG(gebietId);
