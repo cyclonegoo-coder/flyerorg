@@ -540,7 +540,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v84 · <a href="#" onclick="document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v86 · <a href="#" onclick="document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this)this.classList.remove('open')">
@@ -2179,6 +2179,8 @@ async function showApp() {
   if (rolle === 'admin' || rolle === 'kreisverwalter') {
     document.getElementById('inviteUserBtn').style.display = 'block';
     document.getElementById('manageUsersBtn').style.display = 'block';
+  }
+  if (rolle === 'admin' || rolle === 'kreisverwalter' || rolle === 'verwalter') {
     document.getElementById('hierarchyBtn').style.display = 'block';
   }
   // PDF-Export + Logbuch + Verteiler-fehlen für Manager (Admin, Kreisverwalter, Gebietsverwalter)
@@ -3859,7 +3861,7 @@ function openDetail(id){
         </div>
         <div style="background:var(--surface2);border-radius:var(--r8);padding:8px 10px">
           <div style="font-size:.7rem;font-weight:600;color:var(--text2);margin-bottom:5px">📦 Stückzahl ändern</div>
-          <div style="display:flex;gap:6px"><input type="number" id="inpS" value="${g.stueckzahl}" style="flex:1;font-size:.95rem;font-weight:600;padding:7px 8px;color:var(--text1)"><button class="btn btn-g" onclick="saveSt2('${g.id}')" style="padding:7px 14px;font-size:.75rem;white-space:nowrap">Ändern</button></div>
+          <div style="display:flex;gap:6px"><input type="number" id="inpS" value="${g.stueckzahl}" style="flex:1;font-size:.95rem;font-weight:600;padding:7px 8px;color:#1c1c1e"><button class="btn btn-g" onclick="saveSt2('${g.id}')" style="padding:7px 14px;font-size:.75rem;white-space:nowrap">Ändern</button></div>
         </div>`;
       // Verteiler anfragen (wenn kein Verteiler)
       if(!g.verteilerId){
@@ -4056,10 +4058,22 @@ function openDetail(id){
     </div></div>`;
   }
   document.getElementById('detailBody').innerHTML=h;
-  document.getElementById('detailPanel').classList.add('open');
-  // Mobile: Nav-Bar ausblenden
+  const _panel=document.getElementById('detailPanel');
+  _panel.classList.add('open');
+  // Mobile: Auto-size to content, Nav-Bar ausblenden
   const mobNav=document.getElementById('mobNav');
-  if(mobNav&&window.innerWidth<=768) mobNav.classList.add('mob-hidden');
+  if(mobNav&&window.innerWidth<=768){
+    mobNav.classList.add('mob-hidden');
+    setTimeout(()=>{
+      const body=document.getElementById('detailBody');
+      const header=_panel.querySelector('.d-header');
+      const needed=(header?header.offsetHeight:50)+(body?body.scrollHeight:0)+20;
+      const maxH=window.innerHeight-60;
+      const newH=Math.min(needed,maxH);
+      _panel.style.height=newH+'px';
+      if(newH>=maxH) _panel.classList.add('full');
+    },50);
+  }
 }
 
 function mobToggle(hd){
@@ -4068,6 +4082,21 @@ function mobToggle(hd){
   const isOpen=content.classList.contains('mob-open');
   content.classList.toggle('mob-open');
   hd.textContent=hd.textContent.replace(/^[▸▾]\s/,isOpen?'▸ ':'▾ ');
+  // Auto-resize bottom sheet to fit content
+  if(window.innerWidth<=768){
+    const panel=document.getElementById('detailPanel');
+    if(!panel)return;
+    setTimeout(()=>{
+      const body=document.getElementById('detailBody');
+      const header=panel.querySelector('.d-header');
+      const needed=(header?header.offsetHeight:50)+(body?body.scrollHeight:0)+20;
+      const maxH=window.innerHeight-60;
+      const newH=Math.min(needed,maxH);
+      panel.style.height=newH+'px';
+      if(newH>=maxH) panel.classList.add('full');
+      else panel.classList.remove('full');
+    },300);
+  }
 }
 function closeDetail(){
   document.getElementById('detailPanel').classList.remove('open','full');
@@ -4356,7 +4385,7 @@ function toggleOverflowMenu(e){
   const isManager=r==='admin'||r==='kreisverwalter'||r==='verwalter';
   let items='';
   if(isManager) items+=`<button class="mob-overflow-item" onclick="openBulkPdfModal();closeMobMenu()">📄 PDF exportieren</button>`;
-  if(r==='admin'||r==='kreisverwalter') items+=`<button class="mob-overflow-item" onclick="openHierarchyModal();closeMobMenu()">🏗 Gebietsstruktur</button>`;
+  if(r==='admin'||r==='kreisverwalter'||r==='verwalter') items+=`<button class="mob-overflow-item" onclick="openHierarchyModal();closeMobMenu()">🏗 Gebietsstruktur</button>`;
   if(r==='admin'||r==='kreisverwalter') items+=`<button class="mob-overflow-item" onclick="openInviteModal();closeMobMenu()">➕ Nutzer einladen</button>`;
   if(r==='admin'||r==='kreisverwalter') items+=`<button class="mob-overflow-item" onclick="openManageUsersModal();closeMobMenu()">👥 Nutzerverwaltung</button>`;
   if(isManager) items+=`<button class="mob-overflow-item" onclick="openLogbuchModal();closeMobMenu()">📋 Logbuch</button>`;
@@ -4564,8 +4593,16 @@ async function addGebietsverband(){
   if(!name){toast('⚠️ Name eingeben');return;}
   if(!lkId){toast('⚠️ Landkreis wählen');return;}
   if(curRole==='kreisverwalter'&&!kreisverwalterHatLandkreisZugriff(lkId)){toast('⚠️ Keine Berechtigung für diesen Landkreis');return;}
-  const {data,error}=await sb.from('gebietsverbaende').insert({name,landkreis_id:lkId,center_lat:50.94,center_lng:12.10,zoom:11}).select().single();
-  if(error){toast('⚠️ '+error.message);return;}
+  let data,error;
+  ({data,error}=await sb.from('gebietsverbaende').insert({name,landkreis_id:lkId,center_lat:50.94,center_lng:12.10,zoom:11}).select().single());
+  if(error){
+    // Fallback: insert ohne .select().single()
+    const r2=await sb.from('gebietsverbaende').insert({name,landkreis_id:lkId,center_lat:50.94,center_lng:12.10,zoom:11});
+    if(r2.error){toast('⚠️ '+r2.error.message);return;}
+    // Lade Daten neu
+    const r3=await sb.from('gebietsverbaende').select('*').eq('name',name).eq('landkreis_id',lkId).order('created_at',{ascending:false}).limit(1).single();
+    data=r3.data||{id:crypto.randomUUID(),name,landkreis_id:lkId,center_lat:50.94,center_lng:12.10,zoom:11};
+  }
   gebietsverbaende[data.id]=data;
   document.getElementById('hNewGVName').value='';
   renderHierarchyLists();renderBreadcrumb();
@@ -4591,8 +4628,15 @@ async function addRegion(){
   if(!gvId){toast('⚠️ Gebietsverband wählen');return;}
   if(curRole==='kreisverwalter'&&!verwalterHatGebietsverbandZugriff(gvId)){toast('⚠️ Keine Berechtigung für diesen Gebietsverband');return;}
   const gv=gebietsverbaende[gvId];
-  const {data,error}=await sb.from('regionen').insert({name,short:short||name,gebietsverband_id:gvId,center_lat:gv?.center_lat||50.94,center_lng:gv?.center_lng||12.10,zoom:13}).select().single();
-  if(error){toast('⚠️ '+error.message);return;}
+  const insertObj={name,short:short||name,gebietsverband_id:gvId,center_lat:gv?.center_lat||50.94,center_lng:gv?.center_lng||12.10,zoom:13};
+  let data,error;
+  ({data,error}=await sb.from('regionen').insert(insertObj).select().single());
+  if(error){
+    const r2=await sb.from('regionen').insert(insertObj);
+    if(r2.error){toast('⚠️ '+r2.error.message);return;}
+    const r3=await sb.from('regionen').select('*').eq('name',name).eq('gebietsverband_id',gvId).order('created_at',{ascending:false}).limit(1).single();
+    data=r3.data||{id:crypto.randomUUID(),...insertObj};
+  }
   regionen[data.id]={...data,center:[data.center_lat,data.center_lng],gebiete:[]};
   document.getElementById('hNewRegName').value='';
   document.getElementById('hNewRegShort').value='';
