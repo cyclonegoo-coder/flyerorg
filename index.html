@@ -230,10 +230,11 @@ textarea{min-height:68px}
 @media(max-width:768px){
   .sidebar{display:none!important}
   .mob-btn{display:none!important}
-  .mob-nav{display:flex!important}
+  .mob-nav:not(.mob-hidden){display:flex!important}
+  .mob-nav.mob-hidden{display:none!important}
   .role-sw{display:none}
   .draw-toolbar{display:none!important}
-  .draw-info{display:none!important}
+  .draw-info{left:10px;right:10px;transform:none;white-space:normal;font-size:.72rem;padding:6px 10px;top:auto;bottom:10px;z-index:701}
   /* Step 1: Header overflow menu */
   .mob-overflow{display:block}
   #bulkPdfBtn,#hierarchyBtn,#inviteUserBtn,#manageUsersBtn,#logbuchBtn,#missingVerteilerBtn{display:none!important}
@@ -538,7 +539,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v79 · <a href="#" onclick="document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v80 · <a href="#" onclick="document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this)this.classList.remove('open')">
@@ -3685,12 +3686,17 @@ function renderBreadcrumb(){
   }
   html+='</div>';
   document.getElementById('regionPills').innerHTML=html;
-  // Mobile nav breadcrumbs (duplicate for mobile bar)
+  // Mobile nav breadcrumbs — separate IDs to avoid duplicate ID issue
   const mobBc=document.getElementById('mobNavBc');
-  if(mobBc) mobBc.innerHTML=html;
+  if(mobBc){
+    const mobHtml=html.replace(/bcDropLK/g,'mobBcDropLK').replace(/bcDropGV/g,'mobBcDropGV').replace(/bcDropReg/g,'mobBcDropReg')
+      .replace(/toggleBcDrop\('lk'\)/g,"toggleBcDrop('lk',true)").replace(/toggleBcDrop\('gv'\)/g,"toggleBcDrop('gv',true)").replace(/toggleBcDrop\('reg'\)/g,"toggleBcDrop('reg',true)");
+    mobBc.innerHTML=mobHtml;
+  }
 }
-function toggleBcDrop(type){
-  const ids={lk:'bcDropLK',gv:'bcDropGV',reg:'bcDropReg'};
+function toggleBcDrop(type,isMob){
+  const prefix=isMob?'mobBcDrop':'bcDrop';
+  const ids={lk:prefix+'LK',gv:prefix+'GV',reg:prefix+'Reg'};
   Object.entries(ids).forEach(([k,id])=>{
     const el=document.getElementById(id);
     if(!el)return;
@@ -3699,6 +3705,7 @@ function toggleBcDrop(type){
   });
 }
 document.addEventListener('click',e=>{if(!e.target.closest('.bc-item'))document.querySelectorAll('.bc-drop').forEach(d=>d.classList.remove('open'));});
+document.addEventListener('touchend',e=>{if(!e.target.closest('.bc-item'))document.querySelectorAll('.bc-drop').forEach(d=>d.classList.remove('open'));});
 function switchLK(id){curLK=id;const gvs=getFilteredGV();curGV=id!=='alle'&&gvs.length===1?gvs[0][0]:'alle';curReg='alle';selId=null;closeDetail();renderBreadcrumb();renderList();renderStats();drawPolygons();showDrawToolbar();}
 function switchGV(id){curGV=id;if(id!=='alle'){const gv=gebietsverbaende[id];if(gv&&curLK==='alle')curLK=gv.landkreis_id;}const regs=getFilteredReg();curReg=id!=='alle'&&regs.length===1?regs[0][0]:'alle';selId=null;closeDetail();renderBreadcrumb();renderList();renderStats();drawPolygons();showDrawToolbar();}
 function switchReg(id){curReg=id;if(id!=='alle'){const r=regionen[id];if(r){if(curGV==='alle')curGV=r.gebietsverband_id;const gv=gebietsverbaende[r.gebietsverband_id];if(gv&&curLK==='alle')curLK=gv.landkreis_id;}}selId=null;closeDetail();renderBreadcrumb();renderList();renderStats();drawPolygons();showDrawToolbar();}
@@ -3948,7 +3955,7 @@ function openDetail(id){
   document.getElementById('detailPanel').classList.add('open');
   // Mobile: Nav-Bar ausblenden
   const mobNav=document.getElementById('mobNav');
-  if(mobNav&&window.innerWidth<=768) mobNav.style.display='none';
+  if(mobNav&&window.innerWidth<=768) mobNav.classList.add('mob-hidden');
 }
 
 function closeDetail(){
@@ -3957,7 +3964,7 @@ function closeDetail(){
   selId=null;Object.values(layers).forEach(l=>l.setStyle({fillOpacity:.35,weight:2}));renderList();
   // Mobile: Nav-Bar wieder einblenden
   const mobNav=document.getElementById('mobNav');
-  if(mobNav&&window.innerWidth<=768) mobNav.style.display='flex';
+  if(mobNav&&window.innerWidth<=768) mobNav.classList.remove('mob-hidden');
 }
 
 // ============================================================
