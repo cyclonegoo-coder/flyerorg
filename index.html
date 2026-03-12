@@ -538,7 +538,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v78 · <a href="#" onclick="document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v79 · <a href="#" onclick="document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this)this.classList.remove('open')">
@@ -1472,7 +1472,7 @@ async function saveKampagne() {
 async function deleteKampagne(id) {
   const k = kampagnen.find(k => String(k.id) === String(id));
   if (k?.ist_basis) { toast('⚠️ Die Basis-Kampagne kann nicht gelöscht werden'); return; }
-  if (!confirm('Kampagne wirklich löschen? Alle zugehörigen Status-Daten gehen verloren.')) return;
+  if(!await appConfirm('Kampagne löschen','Kampagne wirklich löschen? Alle zugehörigen Status-Daten gehen verloren.','Löschen','Abbrechen'))return;
   try {
     // gebiet_status löscht sich via ON DELETE CASCADE automatisch mit
     await sb.from('kampagnen').delete().eq('id', id);
@@ -1494,7 +1494,7 @@ function showLoginError(msg) {
 }
 
 async function doLogout() {
-  if (!confirm('Wirklich abmelden?')) return;
+  if(!await appConfirm('Abmelden','Wirklich abmelden?','Abmelden','Abbrechen'))return;
   await sb.auth.signOut();
   location.reload();
 }
@@ -2004,7 +2004,7 @@ async function sendInvite(channel) {
 }
 
 async function deleteUser(userId, userName) {
-  if (!confirm(`Nutzer „${userName}" wirklich vollständig löschen?\n\nDies entfernt Login-Zugang und Profil dauerhaft.`)) return;
+  if(!await appConfirm('Nutzer löschen',`Nutzer „${userName}" wirklich vollständig löschen?\n\nDies entfernt Login-Zugang und Profil dauerhaft.`,'Löschen','Abbrechen'))return;
   try {
     const { data, error } = await sb.functions.invoke('delete-user', {
       body: { userId }
@@ -2617,7 +2617,8 @@ async function handleZuweisungAnfrage(anfrageId, entscheidung, gebietId) {
 async function sendeUebernahmeAnfrage(gebietId) {
   const g = getG(gebietId);
   if (!g) return;
-  if (!confirm(`Möchtest du das Gebiet „${g.name}" wirklich übernehmen?\n\nDadurch wird eine Anfrage an den zuständigen Gebietsverwalter gesendet, der die Übernahme genehmigen muss.`)) return;
+  const ok=await appConfirm('🙋 Gebiet übernehmen',`Möchtest du „${g.name}" wirklich übernehmen? Dadurch wird eine Anfrage an den zuständigen Gebietsverwalter gesendet.`,'Ja, übernehmen','Abbrechen');
+  if(!ok)return;
   const { error } = await sb.from('anfragen').insert({
     gebiet_id: gebietId,
     user_id: currentUser.id,
@@ -2637,7 +2638,8 @@ async function sendeUebernahmeAnfrage(gebietId) {
 async function sendeAbgabeAnfrage(gebietId) {
   const g = getG(gebietId);
   if (!g) return;
-  if (!confirm(`Möchtest du das Gebiet „${g.name}" wirklich abgeben?`)) return;
+  const ok=await appConfirm('🔄 Gebiet abgeben',`Möchtest du „${g.name}" wirklich abgeben? Dein Gebietsverwalter wird benachrichtigt.`,'Ja, abgeben','Abbrechen');
+  if(!ok)return;
   const { error } = await sb.from('anfragen').insert({
     gebiet_id: gebietId,
     user_id: currentUser.id,
@@ -3079,6 +3081,8 @@ async function exportGebietPDF(gebietId){
   if(!g){toast('⚠️ Gebiet nicht gefunden');return}
   const coords=kmlP[gebietId];
   if(!coords||coords.length<3){toast('⚠️ Kein Polygon vorhanden');return}
+  const ok=await appConfirm('📄 PDF erstellen',`Gebietskarte für „${g.name}" als PDF exportieren?`,'PDF erstellen','Abbrechen');
+  if(!ok)return;
   toast('📄 PDF wird erstellt...');
   const canvas=await renderGebietCanvas(coords);
   const {jsPDF}=window.jspdf;
@@ -3942,11 +3946,18 @@ function openDetail(id){
   }
   document.getElementById('detailBody').innerHTML=h;
   document.getElementById('detailPanel').classList.add('open');
+  // Mobile: Nav-Bar ausblenden
+  const mobNav=document.getElementById('mobNav');
+  if(mobNav&&window.innerWidth<=768) mobNav.style.display='none';
 }
 
 function closeDetail(){
-  document.getElementById('detailPanel').classList.remove('open');
+  document.getElementById('detailPanel').classList.remove('open','full');
+  document.getElementById('detailPanel').style.height='';
   selId=null;Object.values(layers).forEach(l=>l.setStyle({fillOpacity:.35,weight:2}));renderList();
+  // Mobile: Nav-Bar wieder einblenden
+  const mobNav=document.getElementById('mobNav');
+  if(mobNav&&window.innerWidth<=768) mobNav.style.display='flex';
 }
 
 // ============================================================
@@ -3967,7 +3978,7 @@ async function setSt(id,s){
   // Bestätigungsabfrage bevor Status geändert wird
   const statusLabels = {offen:'Nicht zugestellt',zugeteilt:'Zugestellt',fertig:'Verteilt ✓'};
   if (g.status === s) return; // Gleicher Status, nichts zu tun
-  if (!confirm(`Status von „${g.name}" wirklich auf „${statusLabels[s]||s}" ändern?`)) return;
+  if(!await appConfirm('Status ändern',`Status von „${g.name}" wirklich auf „${statusLabels[s]||s}" ändern?`,'Ändern','Abbrechen'))return;
   const altStatus=g.status;
   g.status=s;
   const col=getGebietFarbe(g);
@@ -4154,7 +4165,7 @@ async function saveH(id){
 }
 
 async function deleteHinweis(hinweisId, gebietId) {
-  if (!confirm('Hinweis wirklich löschen?')) return;
+  if(!await appConfirm('Hinweis löschen','Hinweis wirklich löschen?','Löschen','Abbrechen'))return;
   const { error } = await sb.from('hinweise').delete().eq('id', hinweisId);
   if (error) { toast('⚠️ Fehler: ' + (error.message || error.code)); return; }
   await loadHinweise();
@@ -4167,7 +4178,7 @@ async function deleteGebiet(id){
   if (curRole === 'verteiler') { toast('⚠️ Keine Berechtigung'); return; }
   const _g = getG(id);
   const _gName=_g?.name||id;
-  if(!confirm(`Gebiet "${_gName}" wirklich löschen?`)) return;
+  if(!await appConfirm('Gebiet löschen',`Gebiet "${_gName}" wirklich löschen?`,'Löschen','Abbrechen'))return;
 
   // Zuerst abhängige Tabellen löschen (anfragen, gebiet_status)
   await sb.from('anfragen').delete().eq('gebiet_id', id);
@@ -4413,7 +4424,7 @@ async function addLandkreis(){
 }
 async function deleteLandkreis(id){
   if(curRole!=='admin'){toast('⚠️ Nur Admins dürfen Landkreise löschen');return;}
-  if(!confirm('Landkreis löschen? Alle zugehörigen Gebietsverbände und Regionen werden auch gelöscht!'))return;
+  if(!await appConfirm('Landkreis löschen','Alle zugehörigen Gebietsverbände und Regionen werden auch gelöscht!','Löschen','Abbrechen'))return;
   const {error}=await sb.from('landkreise').delete().eq('id',id);
   if(error){toast('⚠️ '+error.message);return;}
   // Lokal entfernen inkl. Kinder
@@ -4444,7 +4455,7 @@ async function addGebietsverband(){
 }
 async function deleteGebietsverband(id){
   if(curRole==='kreisverwalter'){const gv=gebietsverbaende[id];if(!gv||!kreisverwalterHatLandkreisZugriff(gv.landkreis_id)){toast('⚠️ Keine Berechtigung');return;}}
-  if(!confirm('Gebietsverband löschen? Alle zugehörigen Regionen werden auch gelöscht!'))return;
+  if(!await appConfirm('Gebietsverband löschen','Alle zugehörigen Regionen werden auch gelöscht!','Löschen','Abbrechen'))return;
   const {error}=await sb.from('gebietsverbaende').delete().eq('id',id);
   if(error){toast('⚠️ '+error.message);return;}
   Object.entries(regionen).forEach(([rId,r])=>{if(r.gebietsverband_id===id)delete regionen[rId];});
@@ -4472,7 +4483,7 @@ async function addRegion(){
 }
 async function deleteRegion(id){
   if(curRole==='kreisverwalter'&&!verwalterHatRegionZugriff(id)){toast('⚠️ Keine Berechtigung');return;}
-  if(!confirm('Region löschen? Alle Gebiete in dieser Region verlieren ihre Zuordnung!'))return;
+  if(!await appConfirm('Region löschen','Alle Gebiete in dieser Region verlieren ihre Zuordnung!','Löschen','Abbrechen'))return;
   const {error}=await sb.from('regionen').delete().eq('id',id);
   if(error){toast('⚠️ '+error.message);return;}
   delete regionen[id];
@@ -4776,6 +4787,51 @@ function rebuildEditMarkers(){
       map.off('mouseup',onVertexDragEnd);
     }
 
+    // Touch events for mobile vertex dragging
+    (function(marker,idx){
+      let touchDragging=false,longPressTimer=null,touchMoved=false;
+      function attachTouch(){
+      const el=marker.getElement?marker.getElement():marker._path;
+      if(!el){setTimeout(attachTouch,50);return;}
+      el.addEventListener('touchstart',function(e){
+        if(e.touches.length!==1)return;
+        e.preventDefault();e.stopPropagation();
+        touchMoved=false;touchDragging=false;
+        longPressTimer=setTimeout(function(){
+          if(!touchMoved&&coords.length>3){
+            coords.splice(idx,1);
+            layers[editingGebietId].setLatLngs(coords);
+            rebuildEditMarkers();
+            toast('🗑 Eckpunkt entfernt');
+          }else if(!touchMoved){
+            toast('⚠️ Mindestens 3 Eckpunkte nötig');
+          }
+        },600);
+        touchDragging=true;
+        map.dragging.disable();
+      },{passive:false});
+      el.addEventListener('touchmove',function(e){
+        if(!touchDragging||e.touches.length!==1)return;
+        e.preventDefault();e.stopPropagation();
+        touchMoved=true;
+        if(longPressTimer){clearTimeout(longPressTimer);longPressTimer=null;}
+        const touch=e.touches[0];
+        const rect=map.getContainer().getBoundingClientRect();
+        const pt=L.point(touch.clientX-rect.left,touch.clientY-rect.top);
+        const ll=map.containerPointToLatLng(pt);
+        coords[idx]=[ll.lat,ll.lng];
+        marker.setLatLng(ll);
+        layers[editingGebietId].setLatLngs(coords);
+        updateMidMarkers();
+      },{passive:false});
+      el.addEventListener('touchend',function(e){
+        if(longPressTimer){clearTimeout(longPressTimer);longPressTimer=null;}
+        touchDragging=false;
+        map.dragging.enable();
+      },{passive:false});
+      }attachTouch();
+    })(m,i);
+
     // Right-click to delete vertex (min 3)
     m.on('contextmenu',function(e){
       L.DomEvent.stopPropagation(e);
@@ -4924,6 +4980,36 @@ function setDrawInfo(msg){
 }
 
 function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2800)}
+
+// ── Custom Confirm Dialog (ohne Browser-Domain-Anzeige) ──
+function appConfirm(title, msg, okText='OK', cancelText='Abbrechen'){
+  return new Promise(resolve=>{
+    let ov=document.getElementById('appConfirmOv');
+    if(!ov){
+      ov=document.createElement('div');
+      ov.id='appConfirmOv';
+      ov.className='modal-ov';
+      ov.innerHTML=`<div class="modal" style="max-width:340px;text-align:center">
+        <div class="m-handle"></div>
+        <div id="appConfirmTitle" style="font-size:.95rem;font-weight:600;margin-bottom:8px"></div>
+        <div id="appConfirmMsg" style="font-size:.82rem;color:var(--text3);margin-bottom:16px;line-height:1.4"></div>
+        <div style="display:flex;gap:8px">
+          <button id="appConfirmCancel" class="btn btn-g" style="flex:1"></button>
+          <button id="appConfirmOk" class="btn btn-p" style="flex:1"></button>
+        </div>
+      </div>`;
+      document.body.appendChild(ov);
+    }
+    document.getElementById('appConfirmTitle').textContent=title;
+    document.getElementById('appConfirmMsg').textContent=msg;
+    document.getElementById('appConfirmOk').textContent=okText;
+    document.getElementById('appConfirmCancel').textContent=cancelText;
+    ov.classList.add('open');
+    document.getElementById('appConfirmOk').onclick=()=>{ov.classList.remove('open');resolve(true);};
+    document.getElementById('appConfirmCancel').onclick=()=>{ov.classList.remove('open');resolve(false);};
+    ov.onclick=(e)=>{if(e.target===ov){ov.classList.remove('open');resolve(false);}};
+  });
+}
 </script>
 </body>
 </html>
