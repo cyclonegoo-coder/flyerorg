@@ -265,7 +265,7 @@ textarea{min-height:68px}
   .map-legend{display:none;bottom:64px}
   .map-legend.leg-open{display:block}
   /* Step 6: Detail panel as bottom-sheet */
-  .detail-panel{position:fixed;left:0;right:0;bottom:0;top:auto;width:100%;height:55vh;transform:translateY(100%);transition:transform .3s cubic-bezier(.32,.72,0,1);border-radius:16px 16px 0 0;border-left:none;border-top:1px solid var(--sep);box-shadow:0 -4px 20px rgba(0,0,0,.15);z-index:700}
+  .detail-panel{position:fixed;left:0;right:0;bottom:0;top:auto;width:100%;height:calc(100vh - 60px);max-height:calc(100dvh - 60px);transform:translateY(100%);transition:transform .3s cubic-bezier(.32,.72,0,1);border-radius:16px 16px 0 0;border-left:none;border-top:1px solid var(--sep);box-shadow:0 -4px 20px rgba(0,0,0,.15);z-index:700}
   .detail-panel.open{transform:translateY(0)}
   .detail-panel.full{height:calc(100vh - 60px);max-height:calc(100dvh - 60px)}
   .d-handle{display:block!important}
@@ -540,7 +540,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v86 · <a href="#" onclick="document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v87 · <a href="#" onclick="document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this)this.classList.remove('open')">
@@ -3861,7 +3861,7 @@ function openDetail(id){
         </div>
         <div style="background:var(--surface2);border-radius:var(--r8);padding:8px 10px">
           <div style="font-size:.7rem;font-weight:600;color:var(--text2);margin-bottom:5px">📦 Stückzahl ändern</div>
-          <div style="display:flex;gap:6px"><input type="number" id="inpS" value="${g.stueckzahl}" style="flex:1;font-size:.95rem;font-weight:600;padding:7px 8px;color:#1c1c1e"><button class="btn btn-g" onclick="saveSt2('${g.id}')" style="padding:7px 14px;font-size:.75rem;white-space:nowrap">Ändern</button></div>
+          <div style="display:flex;gap:6px;align-items:center"><input type="number" id="inpS" value="${g.stueckzahl}" style="width:80px;min-width:80px;font-size:16px;font-weight:700;padding:10px 12px;color:#1c1c1e;text-align:center;border:1.5px solid var(--sep);border-radius:var(--r8);background:var(--surface2)"><button class="btn btn-g" onclick="saveSt2('${g.id}')" style="flex:1;padding:10px 14px;font-size:.78rem;white-space:nowrap">Ändern</button></div>
         </div>`;
       // Verteiler anfragen (wenn kein Verteiler)
       if(!g.verteilerId){
@@ -4058,22 +4058,10 @@ function openDetail(id){
     </div></div>`;
   }
   document.getElementById('detailBody').innerHTML=h;
-  const _panel=document.getElementById('detailPanel');
-  _panel.classList.add('open');
-  // Mobile: Auto-size to content, Nav-Bar ausblenden
+  document.getElementById('detailPanel').classList.add('open');
+  // Mobile: Nav-Bar ausblenden
   const mobNav=document.getElementById('mobNav');
-  if(mobNav&&window.innerWidth<=768){
-    mobNav.classList.add('mob-hidden');
-    setTimeout(()=>{
-      const body=document.getElementById('detailBody');
-      const header=_panel.querySelector('.d-header');
-      const needed=(header?header.offsetHeight:50)+(body?body.scrollHeight:0)+20;
-      const maxH=window.innerHeight-60;
-      const newH=Math.min(needed,maxH);
-      _panel.style.height=newH+'px';
-      if(newH>=maxH) _panel.classList.add('full');
-    },50);
-  }
+  if(mobNav&&window.innerWidth<=768) mobNav.classList.add('mob-hidden');
 }
 
 function mobToggle(hd){
@@ -4082,21 +4070,6 @@ function mobToggle(hd){
   const isOpen=content.classList.contains('mob-open');
   content.classList.toggle('mob-open');
   hd.textContent=hd.textContent.replace(/^[▸▾]\s/,isOpen?'▸ ':'▾ ');
-  // Auto-resize bottom sheet to fit content
-  if(window.innerWidth<=768){
-    const panel=document.getElementById('detailPanel');
-    if(!panel)return;
-    setTimeout(()=>{
-      const body=document.getElementById('detailBody');
-      const header=panel.querySelector('.d-header');
-      const needed=(header?header.offsetHeight:50)+(body?body.scrollHeight:0)+20;
-      const maxH=window.innerHeight-60;
-      const newH=Math.min(needed,maxH);
-      panel.style.height=newH+'px';
-      if(newH>=maxH) panel.classList.add('full');
-      else panel.classList.remove('full');
-    },300);
-  }
 }
 function closeDetail(){
   document.getElementById('detailPanel').classList.remove('open','full');
