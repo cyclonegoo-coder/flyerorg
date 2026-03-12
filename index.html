@@ -90,7 +90,8 @@ header{height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturate(18
 .mob-nav-bc .bc-drop{z-index:1100}
 .mob-nav-stats{display:flex;gap:8px;font-size:.68rem;font-weight:600}
 .mob-stat::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:currentColor;margin-right:3px;vertical-align:middle}
-.mob-col{display:none!important}
+.mob-acc{max-height:0;overflow:hidden;transition:max-height .25s ease}
+.mob-acc.mob-open{max-height:500px}
 .mob-action-btn{width:44px;height:44px;border-radius:var(--r12);border:1px solid var(--sep);background:var(--surface);font-size:1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s}
 .mob-action-btn:active{background:var(--surface3)}
 
@@ -539,7 +540,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v80 · <a href="#" onclick="document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v81 · <a href="#" onclick="document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this)this.classList.remove('open')">
@@ -3828,7 +3829,7 @@ function openDetail(id){
   }
 
   if (kontakte.length > 0) {
-    h += `<div class="d-sec"><div class="sec-hd" ${isMob?'onclick="this.nextElementSibling.classList.toggle(\'mob-col\')" style="cursor:pointer"':''}>${isMob?'▸ ':'' }Kontakt</div><div class="f-stack ${isMob?'mob-col':''}">`;
+    h += `<div class="d-sec"><div class="sec-hd" ${isMob?'onclick="mobToggle(this)" style="cursor:pointer"':''}>${isMob?'▸ ':''}Kontakt${isMob?' ('+kontakte.length+')':''}</div><div class="f-stack ${isMob?'mob-acc':''}">`;
     kontakte.forEach(k => {
       const tel = k.telefon || '';
       const hasPhone = tel.length > 0;
@@ -3858,7 +3859,7 @@ function openDetail(id){
       <select id="inpV">${userOptions}</select>
       <button class="btn btn-p" onclick="saveZ('${g.id}')">Speichern</button>
     </div></div>
-    <div class="d-sec"><div class="sec-hd" ${isMob?'onclick="this.nextElementSibling.classList.toggle(\'mob-col\')" style="cursor:pointer"':''}>${isMob?'▸ ':''}Stückzahl</div><div class="f-stack ${isMob?'mob-col':''}">
+    <div class="d-sec"><div class="sec-hd" ${isMob?'onclick="mobToggle(this)" style="cursor:pointer"':''}>${isMob?'▸ ':''}Stückzahl</div><div class="f-stack ${isMob?'mob-acc':''}">
       <input type="number" id="inpS" value="${g.stueckzahl}">
       <button class="btn btn-g" onclick="saveSt2('${g.id}')">Ändern</button>
     </div></div>`;
@@ -3920,7 +3921,7 @@ function openDetail(id){
   // Hinweis schreiben: Admin überall, Verwalter in seiner Region, Verteiler nur in seinem Gebiet
   const darfHinweis = isAdmin || isM || isV;
   if (darfHinweis) {
-    h+=`<div class="d-sec"><div class="sec-hd" ${isMob?'onclick="this.nextElementSibling.classList.toggle(\'mob-col\')" style="cursor:pointer"':''}>${isMob?'▸ ':''}Hinweis schreiben</div><div class="f-stack ${isMob?'mob-col':''}">
+    h+=`<div class="d-sec"><div class="sec-hd" ${isMob?'onclick="mobToggle(this)" style="cursor:pointer"':''}>${isMob?'▸ ':''}Hinweis schreiben</div><div class="f-stack ${isMob?'mob-acc':''}">
       <textarea id="inpH" placeholder="z.B. Briefkastensperren in Hauptstraße…"></textarea>
       <button class="btn btn-g" onclick="saveH('${g.id}')">Speichern</button>
     </div></div>`;
@@ -3977,6 +3978,13 @@ function openDetail(id){
   if(mobNav&&window.innerWidth<=768) mobNav.classList.add('mob-hidden');
 }
 
+function mobToggle(hd){
+  const content=hd.nextElementSibling;
+  if(!content)return;
+  const isOpen=content.classList.contains('mob-open');
+  content.classList.toggle('mob-open');
+  hd.textContent=hd.textContent.replace(/^[▸▾]\s/,isOpen?'▸ ':'▾ ');
+}
 function closeDetail(){
   document.getElementById('detailPanel').classList.remove('open','full');
   document.getElementById('detailPanel').style.height='';
