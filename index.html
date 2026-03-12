@@ -87,7 +87,7 @@ header{height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturate(18
 .leg-toggle{display:none;position:absolute;bottom:22px;left:10px;z-index:401;width:36px;height:36px;border-radius:var(--r12);border:none;background:rgba(255,255,255,.92);backdrop-filter:blur(12px);box-shadow:var(--sh);cursor:pointer;font-size:.9rem;align-items:center;justify-content:center}
 .mob-nav{display:none;background:var(--bg);border-bottom:1px solid var(--sep);padding:6px 10px;gap:6px;flex-direction:column;z-index:900;flex-shrink:0;position:relative;overflow:visible}
 .mob-nav-bc{display:flex;align-items:center;gap:2px;overflow:visible;position:relative}
-.mob-nav-bc .bc-drop{z-index:910}
+.mob-nav-bc .bc-drop{z-index:1100}
 .mob-nav-stats{display:flex;gap:8px;font-size:.68rem;font-weight:600}
 .mob-stat::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:currentColor;margin-right:3px;vertical-align:middle}
 .mob-col{display:none!important}
@@ -3700,12 +3700,31 @@ function toggleBcDrop(type,isMob){
   Object.entries(ids).forEach(([k,id])=>{
     const el=document.getElementById(id);
     if(!el)return;
-    if(k===type) el.classList.toggle('open');
-    else el.classList.remove('open');
+    if(k===type){
+      const wasOpen=el.classList.contains('open');
+      el.classList.toggle('open');
+      // On mobile: position dropdown fixed so it overlays the map
+      if(isMob&&!wasOpen){
+        const btn=el.parentElement.querySelector('.bc-btn');
+        if(btn){
+          const r=btn.getBoundingClientRect();
+          el.style.position='fixed';
+          el.style.top=r.bottom+4+'px';
+          el.style.left=Math.max(4,r.left)+'px';
+          el.style.width=Math.min(220,window.innerWidth-8)+'px';
+        }
+      }else if(isMob&&wasOpen){
+        el.style.position='';el.style.top='';el.style.left='';el.style.width='';
+      }
+    } else {
+      el.classList.remove('open');
+      if(isMob){el.style.position='';el.style.top='';el.style.left='';el.style.width='';}
+    }
   });
 }
-document.addEventListener('click',e=>{if(!e.target.closest('.bc-item'))document.querySelectorAll('.bc-drop').forEach(d=>d.classList.remove('open'));});
-document.addEventListener('touchend',e=>{if(!e.target.closest('.bc-item'))document.querySelectorAll('.bc-drop').forEach(d=>d.classList.remove('open'));});
+function closeBcDrops(){document.querySelectorAll('.bc-drop').forEach(d=>{d.classList.remove('open');d.style.position='';d.style.top='';d.style.left='';d.style.width='';});}
+document.addEventListener('click',e=>{if(!e.target.closest('.bc-item'))closeBcDrops();});
+document.addEventListener('touchend',e=>{if(!e.target.closest('.bc-item'))closeBcDrops();});
 function switchLK(id){curLK=id;const gvs=getFilteredGV();curGV=id!=='alle'&&gvs.length===1?gvs[0][0]:'alle';curReg='alle';selId=null;closeDetail();renderBreadcrumb();renderList();renderStats();drawPolygons();showDrawToolbar();}
 function switchGV(id){curGV=id;if(id!=='alle'){const gv=gebietsverbaende[id];if(gv&&curLK==='alle')curLK=gv.landkreis_id;}const regs=getFilteredReg();curReg=id!=='alle'&&regs.length===1?regs[0][0]:'alle';selId=null;closeDetail();renderBreadcrumb();renderList();renderStats();drawPolygons();showDrawToolbar();}
 function switchReg(id){curReg=id;if(id!=='alle'){const r=regionen[id];if(r){if(curGV==='alle')curGV=r.gebietsverband_id;const gv=gebietsverbaende[r.gebietsverband_id];if(gv&&curLK==='alle')curLK=gv.landkreis_id;}}selId=null;closeDetail();renderBreadcrumb();renderList();renderStats();drawPolygons();showDrawToolbar();}
