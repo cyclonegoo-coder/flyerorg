@@ -540,7 +540,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v81 · <a href="#" onclick="document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v82 · <a href="#" onclick="document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this)this.classList.remove('open')">
@@ -3784,176 +3784,250 @@ function openDetail(id){
   const isMob=window.innerWidth<=768;
   let h='';
 
-  // Info: Stückzahl + Status + Verteiler — auf Mobile kompakter
-  h+=`<div class="d-sec"><div class="info-g">
-    <div><div class="ii-label">Stückzahl</div><div class="ii-val" style="color:var(--blue)">${g.stueckzahl}</div></div>
-    <div><div class="ii-label">Status</div><div class="ii-val">${sl(g.status)}</div></div>
-    <div class="ii-full"><div class="ii-label">Verteiler</div><div class="ii-val">${curRole==='verteiler'?(g.verteilerId?(g.verteilerId===currentUser?.id?g.verteiler:'Zugewiesen'):'⚠️ Verteiler fehlt'):(g.verteiler||'⚠️ Verteiler fehlt')}</div></div>
-  </div></div>`;
+  if(isMob){
+    // ========== MOBILE LAYOUT ==========
+    // 1) Kompakte Info-Zeile: Stückzahl | Status | Verteiler
+    h+=`<div class="d-sec" style="padding:8px 12px">
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <div><span style="font-size:.65rem;color:var(--text4);text-transform:uppercase">Stück</span> <strong style="color:var(--blue);font-size:.95rem">${g.stueckzahl}</strong></div>
+        <div style="flex:1;text-align:center"><span style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:600;${g.status==='fertig'?'background:rgba(52,199,89,.15);color:var(--green)':g.status==='zugeteilt'?'background:rgba(255,149,0,.15);color:var(--orange)':'background:var(--surface3);color:var(--text3)'}">${sl(g.status)}</span></div>
+        <div style="text-align:right;font-size:.72rem;color:var(--text3)">${curRole==='verteiler'?(g.verteilerId?(g.verteilerId===currentUser?.id?'👤 Du':'Zugewiesen'):'⚠️ Frei'):(g.verteiler||'⚠️ Frei')}</div>
+      </div>
+    </div>`;
 
-  // Status-Buttons — auf Mobile 3 nebeneinander (grid 3 cols)
-  const statusGridStyle=isMob?'grid-template-columns:repeat(3,1fr)':'';
-  h+=`<div class="d-sec"><div class="sec-hd">Status</div><div class="s-grid" ${statusGridStyle?`style="${statusGridStyle}"`:''}>
-    ${darfVerteilerStatus?`<button class="s-btn ${g.status==='offen'?'ao':''}" onclick="setSt('${g.id}','offen')">${isMob?'Offen':'Nicht zugestellt'}</button>`:''}
-    ${isM?`<button class="s-btn ${g.status==='zugeteilt'?'az':''}" onclick="setSt('${g.id}','zugeteilt')">Zugestellt</button>`:''}
-    ${darfVerteilerStatus?`<button class="s-btn ${g.status==='fertig'?'af':''}" onclick="setSt('${g.id}','fertig')">Verteilt ✓</button>`:''}
-  </div></div>`;
+    // 2) Status-Buttons als farbige Chips in einer Zeile
+    if(darfVerteilerStatus){
+      h+=`<div class="d-sec" style="padding:4px 12px 8px"><div style="display:flex;gap:6px">
+        ${darfVerteilerStatus?`<button style="flex:1;padding:8px 4px;border-radius:var(--r8);border:1.5px solid ${g.status==='offen'?'var(--text4)':'var(--sep)'};background:${g.status==='offen'?'#f2f2f7':'var(--surface2)'};font-size:.72rem;font-weight:600;color:${g.status==='offen'?'var(--text2)':'var(--text4)'};cursor:pointer" onclick="setSt('${g.id}','offen')">Offen</button>`:''}
+        ${isM?`<button style="flex:1;padding:8px 4px;border-radius:var(--r8);border:1.5px solid ${g.status==='zugeteilt'?'var(--orange)':'var(--sep)'};background:${g.status==='zugeteilt'?'rgba(255,149,0,.1)':'var(--surface2)'};font-size:.72rem;font-weight:600;color:${g.status==='zugeteilt'?'var(--orange)':'var(--text4)'};cursor:pointer" onclick="setSt('${g.id}','zugeteilt')">Zugestellt</button>`:''}
+        ${darfVerteilerStatus?`<button style="flex:1;padding:8px 4px;border-radius:var(--r8);border:1.5px solid ${g.status==='fertig'?'var(--green)':'var(--sep)'};background:${g.status==='fertig'?'rgba(52,199,89,.1)':'var(--surface2)'};font-size:.72rem;font-weight:600;color:${g.status==='fertig'?'var(--green)':'var(--text4)'};cursor:pointer" onclick="setSt('${g.id}','fertig')">Verteilt ✓</button>`:''}
+      </div></div>`;
+    }
+  } // end if(isMob) — first part (info + status)
 
-  // Kontakt-Sektion
+  // === Kontakte ermitteln (für beide Layouts) ===
   const kontakte = [];
-  // Region dieses Gebiets ermitteln
   let gebietRegion = null;
   for (const [rk, r] of Object.entries(regionen)) {
     if (r.gebiete.find(gg => gg.id === g.id)) { gebietRegion = rk; break; }
   }
-
   if (curRole === 'verteiler') {
-    // Verteiler sieht: Gebietsverwalter seiner Region + Kreisverwalter
     allUsers.filter(u => (u.rolle === 'verwalter' || u.rolle === 'kreisverwalter') && u.verwaltete_regionen && u.verwaltete_regionen.includes(gebietRegion))
-      .forEach(u => kontakte.push({ ...u, label: 'Gebietsverwalter' }));
+      .forEach(u => kontakte.push({ ...u, label: 'GV' }));
   } else if (curRole === 'verwalter' || curRole === 'kreisverwalter') {
-    // Verwalter sieht: Verteiler dieses Gebiets + Admins
-    if (g.verteilerId) {
-      const vt = allUsers.find(u => u.id === g.verteilerId);
-      if (vt) kontakte.push({ ...vt, label: 'Verteiler' });
-    }
+    if (g.verteilerId) { const vt = allUsers.find(u => u.id === g.verteilerId); if (vt) kontakte.push({ ...vt, label: 'Verteiler' }); }
     allUsers.filter(u => u.rolle === 'admin').forEach(u => kontakte.push({ ...u, label: 'Admin' }));
   } else if (isAdmin) {
-    // Admin sieht: Verteiler + Verwalter der Region
-    if (g.verteilerId) {
-      const vt = allUsers.find(u => u.id === g.verteilerId);
-      if (vt) kontakte.push({ ...vt, label: 'Verteiler' });
-    }
+    if (g.verteilerId) { const vt = allUsers.find(u => u.id === g.verteilerId); if (vt) kontakte.push({ ...vt, label: 'Verteiler' }); }
     allUsers.filter(u => (u.rolle === 'verwalter' || u.rolle === 'kreisverwalter') && u.verwaltete_regionen && u.verwaltete_regionen.includes(gebietRegion))
-      .forEach(u => kontakte.push({ ...u, label: 'Gebietsverwalter' }));
+      .forEach(u => kontakte.push({ ...u, label: 'GV' }));
   }
+  const darfHinweis = isAdmin || isM || isV;
+  const hasGeo=(curRole==='admin'||(istVerwalterOderKreisverwalter()&&verwalterHatGebietZugriff(id)));
 
-  if (kontakte.length > 0) {
-    h += `<div class="d-sec"><div class="sec-hd" ${isMob?'onclick="mobToggle(this)" style="cursor:pointer"':''}>${isMob?'▸ ':''}Kontakt${isMob?' ('+kontakte.length+')':''}</div><div class="f-stack ${isMob?'mob-acc':''}">`;
-    kontakte.forEach(k => {
-      const tel = k.telefon || '';
-      const hasPhone = tel.length > 0;
-      h += `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--surface2);border-radius:var(--r8)">
-        <div style="flex:1">
-          <div style="font-size:.8rem;font-weight:500">${k.name} <span style="font-size:.65rem;color:var(--text4)">(${k.label})</span></div>
-          ${hasPhone ? `<div style="font-size:.72rem;color:var(--text3)">${tel}</div>` : `<div style="font-size:.72rem;color:var(--text4)">Keine Nummer hinterlegt</div>`}
-        </div>
-        ${hasPhone ? `<a href="tel:${tel}" style="background:none;border:none;font-size:1rem;text-decoration:none;padding:2px 4px" title="Anrufen">📞</a>
-        <a href="https://wa.me/${tel.replace(/[^0-9+]/g,'').replace(/^0/,'+49')}" target="_blank" style="background:none;border:none;font-size:1rem;text-decoration:none;padding:2px 4px" title="WhatsApp">💬</a>` : ''}
-      </div>`;
-    });
-    h += `</div></div>`;
-  }
-
-  if(isM){
-    const gebietVerteiler=getVerteilerFuerGebiet(g.id);
-    const userOptions = `<option value="">— Verteiler fehlt</option>` +
-      gebietVerteiler.map(u=>{
-        const sel=g.verteilerId===u.id?'selected':'';
-        const rolleHint=u.rolle==='verwalter'?' (GV)':u.rolle==='kreisverwalter'?' (KV)':'';
-        const borrowedHint=u.borrowed?' 🔗':'';
-        const gvHint=(!u.sameGV&&u.gvName)?' ['+u.gvName+']':'';
-        return `<option value="${u.id}" data-name="${u.name}" ${sel} ${u.borrowed?'style="color:var(--orange)"':''}>${u.name}${rolleHint}${gvHint}${borrowedHint}</option>`;
-      }).join('');
-    h+=`<div class="d-sec"><div class="sec-hd">Verteiler zuweisen</div><div class="f-stack">
-      <select id="inpV">${userOptions}</select>
-      <button class="btn btn-p" onclick="saveZ('${g.id}')">Speichern</button>
-    </div></div>
-    <div class="d-sec"><div class="sec-hd" ${isMob?'onclick="mobToggle(this)" style="cursor:pointer"':''}>${isMob?'▸ ':''}Stückzahl</div><div class="f-stack ${isMob?'mob-acc':''}">
-      <input type="number" id="inpS" value="${g.stueckzahl}">
-      <button class="btn btn-g" onclick="saveSt2('${g.id}')">Ändern</button>
-    </div></div>`;
-    // Offene Anfragen für dieses Gebiet anzeigen
-    const gebietAnfragen = alleAnfragen.filter(a => a.gebiet_id === g.id);
-    if (gebietAnfragen.length > 0) {
-      h += `<div class="d-sec"><div class="sec-hd">📦 Offene Anfragen (${gebietAnfragen.length})</div><div class="f-stack">`;
-      gebietAnfragen.forEach(a => {
-        const user = allUsers.find(u => u.id === a.user_id);
-        const userName = user ? user.name : 'Unbekannt';
-        h += `<div style="background:var(--surface2);border-radius:var(--r8);padding:8px;border-left:3px solid var(--orange)">
-          <div style="font-size:.78rem;margin-bottom:4px">👤 ${userName} → 📦 <strong>${a.neue_stueckzahl}</strong> Stück</div>
-          ${a.grund ? `<div style="font-size:.72rem;color:var(--text3);margin-bottom:4px;font-style:italic">${a.grund}</div>` : ''}
-          <div style="display:flex;gap:6px">
-            <button onclick="handleAnfrage('${a.id}','genehmigt',${a.neue_stueckzahl},'${a.gebiet_id}')" style="flex:1;padding:4px;border:none;border-radius:var(--r8);background:var(--green);color:#fff;font-size:.7rem;font-weight:600;cursor:pointer">✓ Genehmigen</button>
-            <button onclick="handleAnfrage('${a.id}','abgelehnt',null,null)" style="flex:1;padding:4px;border:none;border-radius:var(--r8);background:var(--red);color:#fff;font-size:.7rem;font-weight:600;cursor:pointer">✗ Ablehnen</button>
-          </div>
+  if(isMob){
+    // ===== MOBILE: Kontakt als kompakte Zeile (immer sichtbar, kein Akkordeon) =====
+    if(kontakte.length>0){
+      h+=`<div class="d-sec" style="padding:6px 12px">`;
+      kontakte.forEach(k=>{
+        const tel=k.telefon||'';const hasPhone=tel.length>0;
+        h+=`<div style="display:flex;align-items:center;gap:6px;padding:4px 0">
+          <span style="font-size:.72rem;font-weight:500">${k.name}</span><span style="font-size:.6rem;color:var(--text4)">${k.label}</span>
+          <span style="flex:1"></span>
+          ${hasPhone?`<a href="tel:${tel}" style="font-size:.9rem;text-decoration:none">📞</a>
+          <a href="https://wa.me/${tel.replace(/[^0-9+]/g,'').replace(/^0/,'+49')}" target="_blank" style="font-size:.9rem;text-decoration:none">💬</a>`:`<span style="font-size:.6rem;color:var(--text4)">Keine Nr.</span>`}
         </div>`;
       });
-      h += `</div></div>`;
+      h+=`</div>`;
     }
-  }
-  if(isV){
-    const bereitsAbgabe = alleAnfragen.some(a => a.gebiet_id===g.id && a.user_id===currentUser?.id && a.typ==='abgabe' && a.status==='offen');
-    h+=`<div class="d-sec"><div class="sec-hd">Anfrage</div><div class="f-stack">
-      <button class="btn btn-g" onclick="openModal('${g.id}')">📦 Stückzahl ändern</button>
-      ${bereitsAbgabe
-        ? `<div style="text-align:center;font-size:.8rem;color:var(--text3);padding:8px">⏳ Abgabe-Anfrage gesendet</div>`
-        : `<button class="btn btn-d" onclick="sendeAbgabeAnfrage('${g.id}')">🔄 Gebiet abgeben</button>`}
-    </div></div>`;
-  }
-  // Verteiler kann Problemgebiet übernehmen (wenn nicht eigenes)
-  if(curRole==='verteiler' && !g.verteilerId){
-    // Prüfen ob bereits eine Übernahme-Anfrage existiert
-    const bereitsAngefragt = alleAnfragen.some(a => a.gebiet_id===g.id && a.user_id===currentUser?.id && a.typ==='uebernahme');
-    if(bereitsAngefragt){
-      h+=`<div class="d-sec"><div class="sec-hd">Übernahme</div><div class="f-stack">
-        <div style="text-align:center;font-size:.8rem;color:var(--text3);padding:8px">⏳ Anfrage zur Übernahme wurde gesendet</div>
-      </div></div>`;
-    } else {
-      h+=`<div class="d-sec"><div class="sec-hd">Übernahme</div><div class="f-stack">
-        <button class="btn btn-p" onclick="sendeUebernahmeAnfrage('${g.id}')">🙋 Gebiet übernehmen</button>
+
+    // ===== MOBILE: Verwalter-Bereich (Verteiler zuweisen + Stückzahl) =====
+    if(isM){
+      const gebietVerteiler=getVerteilerFuerGebiet(g.id);
+      const userOptions = `<option value="">— Verteiler fehlt</option>` +
+        gebietVerteiler.map(u=>{
+          const sel=g.verteilerId===u.id?'selected':'';
+          const rolleHint=u.rolle==='verwalter'?' (GV)':u.rolle==='kreisverwalter'?' (KV)':'';
+          const borrowedHint=u.borrowed?' 🔗':'';
+          const gvHint=(!u.sameGV&&u.gvName)?' ['+u.gvName+']':'';
+          return `<option value="${u.id}" data-name="${u.name}" ${sel} ${u.borrowed?'style="color:var(--orange)"':''}>${u.name}${rolleHint}${gvHint}${borrowedHint}</option>`;
+        }).join('');
+      h+=`<div class="d-sec" style="padding:6px 12px"><div class="sec-hd" onclick="mobToggle(this)" style="cursor:pointer">▸ Verwaltung</div><div class="f-stack mob-acc">
+        <div style="font-size:.68rem;color:var(--text4);text-transform:uppercase;margin-bottom:2px">Verteiler zuweisen</div>
+        <div style="display:flex;gap:6px"><select id="inpV" style="flex:1;font-size:.75rem">${userOptions}</select><button class="btn btn-p" onclick="saveZ('${g.id}')" style="padding:6px 12px;font-size:.72rem">Speichern</button></div>
+        <div style="font-size:.68rem;color:var(--text4);text-transform:uppercase;margin-top:8px;margin-bottom:2px">Stückzahl</div>
+        <div style="display:flex;gap:6px"><input type="number" id="inpS" value="${g.stueckzahl}" style="flex:1;font-size:.75rem"><button class="btn btn-g" onclick="saveSt2('${g.id}')" style="padding:6px 12px;font-size:.72rem">Ändern</button></div>`;
+      // Verteiler anfragen (wenn kein Verteiler)
+      if(!g.verteilerId){
+        const verteilerListe = allUsers.filter(u => u.rolle==='verteiler' && u.id!==g.verteilerId);
+        if(verteilerListe.length>0){
+          h+=`<div style="font-size:.68rem;color:var(--text4);text-transform:uppercase;margin-top:8px;margin-bottom:2px">Verteiler anfragen</div>
+            <div style="display:flex;gap:6px"><select id="inpAnfrageVerteiler" style="flex:1;font-size:.75rem"><option value="">— wählen —</option>${verteilerListe.map(u=>`<option value="${u.id}">${u.name}</option>`).join('')}</select>
+            <button class="btn btn-p" onclick="sendeZuweisungAnfrage('${g.id}')" style="padding:6px 12px;font-size:.72rem">Anfragen</button></div>`;
+        }
+      }
+      h+=`</div></div>`;
+      // Offene Anfragen (immer sichtbar, da wichtig)
+      const gebietAnfragen = alleAnfragen.filter(a => a.gebiet_id === g.id);
+      if(gebietAnfragen.length>0){
+        h+=`<div class="d-sec" style="padding:6px 12px"><div class="sec-hd" style="color:var(--orange)">📦 Anfragen (${gebietAnfragen.length})</div><div class="f-stack">`;
+        gebietAnfragen.forEach(a=>{
+          const user=allUsers.find(u=>u.id===a.user_id);const userName=user?user.name:'?';
+          h+=`<div style="background:var(--surface2);border-radius:var(--r8);padding:6px;border-left:3px solid var(--orange)">
+            <div style="font-size:.72rem;margin-bottom:4px">👤 ${userName} → <strong>${a.neue_stueckzahl}</strong> Stk.</div>
+            ${a.grund?`<div style="font-size:.68rem;color:var(--text3);margin-bottom:4px;font-style:italic">${a.grund}</div>`:''}
+            <div style="display:flex;gap:4px">
+              <button onclick="handleAnfrage('${a.id}','genehmigt',${a.neue_stueckzahl},'${a.gebiet_id}')" style="flex:1;padding:4px;border:none;border-radius:var(--r8);background:var(--green);color:#fff;font-size:.68rem;font-weight:600;cursor:pointer">✓</button>
+              <button onclick="handleAnfrage('${a.id}','abgelehnt',null,null)" style="flex:1;padding:4px;border:none;border-radius:var(--r8);background:var(--red);color:#fff;font-size:.68rem;font-weight:600;cursor:pointer">✗</button>
+            </div>
+          </div>`;
+        });
+        h+=`</div></div>`;
+      }
+    }
+
+    // ===== MOBILE: Verteiler-Aktionen =====
+    if(isV){
+      const bereitsAbgabe=alleAnfragen.some(a=>a.gebiet_id===g.id&&a.user_id===currentUser?.id&&a.typ==='abgabe'&&a.status==='offen');
+      h+=`<div class="d-sec" style="padding:6px 12px"><div style="display:flex;gap:6px">
+        <button class="btn btn-g" onclick="openModal('${g.id}')" style="flex:1;font-size:.72rem;padding:8px">📦 Stückzahl</button>
+        ${bereitsAbgabe?`<span style="flex:1;text-align:center;font-size:.72rem;color:var(--text3);padding:8px">⏳ Abgabe gesendet</span>`
+          :`<button class="btn btn-d" onclick="sendeAbgabeAnfrage('${g.id}')" style="flex:1;font-size:.72rem;padding:8px">🔄 Abgeben</button>`}
       </div></div>`;
     }
-  }
-  // Verwalter kann Verteiler für Gebiet anfragen
-  if(isM && !g.verteilerId){
-    const verteilerListe = allUsers.filter(u => u.rolle==='verteiler' && u.id!==g.verteilerId);
-    if(verteilerListe.length>0){
-      h+=`<div class="d-sec"><div class="sec-hd">Verteiler anfragen</div><div class="f-stack">
-        <select id="inpAnfrageVerteiler">
-          <option value="">— Verteiler wählen —</option>
-          ${verteilerListe.map(u=>`<option value="${u.id}">${u.name}</option>`).join('')}
-        </select>
-        <button class="btn btn-p" onclick="sendeZuweisungAnfrage('${g.id}')">👤 Verteiler anfragen</button>
-      </div></div>`;
-    }
-  }
-  // Hinweis schreiben: Admin überall, Verwalter in seiner Region, Verteiler nur in seinem Gebiet
-  const darfHinweis = isAdmin || isM || isV;
-  if (darfHinweis) {
-    h+=`<div class="d-sec"><div class="sec-hd" ${isMob?'onclick="mobToggle(this)" style="cursor:pointer"':''}>${isMob?'▸ ':''}Hinweis schreiben</div><div class="f-stack ${isMob?'mob-acc':''}">
-      <textarea id="inpH" placeholder="z.B. Briefkastensperren in Hauptstraße…"></textarea>
-      <button class="btn btn-g" onclick="saveH('${g.id}')">Speichern</button>
-    </div></div>`;
-  }
-  // Hinweise anzeigen (für alle sichtbar)
-  if(g.hinweise && g.hinweise.length){
-    h+=`<div class="d-sec"><div class="sec-hd">Hinweise (${g.hinweise.length})</div><div class="f-stack">`;
-    g.hinweise.forEach(hw => {
-      const autor = allUsers.find(u => u.id === hw.user_id);
-      const autorName = autor ? autor.name : 'Unbekannt';
-      const datum = new Date(hw.created_at).toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
-      // Löschen: Admin immer, Verwalter in seiner Region, Verteiler nur eigene
-      const darfLoeschen = isAdmin || (isM && (curRole==='verwalter'||curRole==='kreisverwalter')) || (hw.user_id === currentUser?.id);
-      h+=`<div style="background:var(--surface2);border-radius:var(--r8);padding:8px;display:flex;align-items:flex-start;gap:8px">
-        <div style="flex:1">
-          <div style="font-size:.78rem">💬 ${hw.text}</div>
-          <div style="font-size:.65rem;color:var(--text4);margin-top:2px">👤 ${autorName} · ${datum}</div>
-        </div>
-        ${darfLoeschen ? `<button onclick="deleteHinweis('${hw.id}','${g.id}')" style="background:none;border:none;color:var(--text4);cursor:pointer;font-size:.75rem;padding:2px" title="Hinweis löschen">🗑</button>` : ''}
+    // Verteiler Übernahme
+    if(curRole==='verteiler'&&!g.verteilerId){
+      const bereitsAngefragt=alleAnfragen.some(a=>a.gebiet_id===g.id&&a.user_id===currentUser?.id&&a.typ==='uebernahme');
+      h+=`<div class="d-sec" style="padding:6px 12px">
+        ${bereitsAngefragt?`<div style="text-align:center;font-size:.72rem;color:var(--text3);padding:6px">⏳ Übernahme angefragt</div>`
+          :`<button class="btn btn-p" onclick="sendeUebernahmeAnfrage('${g.id}')" style="width:100%;font-size:.72rem;padding:8px">🙋 Gebiet übernehmen</button>`}
       </div>`;
-    });
-    h+=`</div></div>`;
-  }
-  // Geodaten + PDF als Aktionszeile (Mobile: Icons nebeneinander)
-  const hasGeo=(curRole==='admin'||(istVerwalterOderKreisverwalter()&&verwalterHatGebietZugriff(id)));
-  if(isMob){
-    h+=`<div class="d-sec"><div style="display:flex;gap:6px;padding:8px 10px;flex-wrap:wrap;justify-content:center">`;
-    h+=`<button class="mob-action-btn" onclick="exportGebietPDF('${g.id}')" title="PDF">📄</button>`;
+    }
+
+    // ===== MOBILE: Hinweise (klappbar) =====
+    if(darfHinweis || (g.hinweise&&g.hinweise.length)){
+      const hwCount=g.hinweise?g.hinweise.length:0;
+      h+=`<div class="d-sec" style="padding:6px 12px"><div class="sec-hd" onclick="mobToggle(this)" style="cursor:pointer">▸ Hinweise${hwCount?' ('+hwCount+')':''}</div><div class="f-stack mob-acc">`;
+      if(darfHinweis){
+        h+=`<div style="display:flex;gap:6px;margin-bottom:6px"><textarea id="inpH" placeholder="Hinweis…" style="flex:1;font-size:.72rem;min-height:36px;resize:vertical"></textarea><button class="btn btn-g" onclick="saveH('${g.id}')" style="padding:6px 10px;font-size:.72rem;align-self:flex-end">OK</button></div>`;
+      }
+      if(g.hinweise&&g.hinweise.length){
+        g.hinweise.forEach(hw=>{
+          const autor=allUsers.find(u=>u.id===hw.user_id);const autorName=autor?autor.name:'?';
+          const datum=new Date(hw.created_at).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+          const darfLoeschen=isAdmin||(isM&&(curRole==='verwalter'||curRole==='kreisverwalter'))||(hw.user_id===currentUser?.id);
+          h+=`<div style="background:var(--surface2);border-radius:var(--r8);padding:6px;display:flex;gap:6px;align-items:flex-start">
+            <div style="flex:1"><div style="font-size:.72rem">💬 ${hw.text}</div><div style="font-size:.6rem;color:var(--text4);margin-top:1px">${autorName} · ${datum}</div></div>
+            ${darfLoeschen?`<button onclick="deleteHinweis('${hw.id}','${g.id}')" style="background:none;border:none;color:var(--text4);cursor:pointer;font-size:.7rem;padding:1px">🗑</button>`:''}
+          </div>`;
+        });
+      }
+      h+=`</div></div>`;
+    }
+
+    // ===== MOBILE: Quick-Actions (immer sichtbar am Ende) =====
+    h+=`<div class="d-sec" style="padding:6px 12px"><div style="display:flex;gap:6px;justify-content:center">`;
+    h+=`<button class="mob-action-btn" onclick="exportGebietPDF('${g.id}')" title="PDF exportieren">📄</button>`;
     if(hasGeo&&kmlP[g.id]) h+=`<button class="mob-action-btn" onclick="editPolygon('${g.id}')" title="Polygon bearbeiten">✏️</button>`;
     if(hasGeo) h+=`<button class="mob-action-btn" onclick="deleteGebiet('${g.id}')" title="Gebiet löschen" style="color:var(--red)">🗑</button>`;
     h+=`</div></div>`;
+
   } else {
+    // ========== DESKTOP LAYOUT (unchanged) ==========
+    h+=`<div class="d-sec"><div class="info-g">
+      <div><div class="ii-label">Stückzahl</div><div class="ii-val" style="color:var(--blue)">${g.stueckzahl}</div></div>
+      <div><div class="ii-label">Status</div><div class="ii-val">${sl(g.status)}</div></div>
+      <div class="ii-full"><div class="ii-label">Verteiler</div><div class="ii-val">${g.verteiler||'⚠️ Verteiler fehlt'}</div></div>
+    </div></div>`;
+    h+=`<div class="d-sec"><div class="sec-hd">Status</div><div class="s-grid">
+      ${darfVerteilerStatus?`<button class="s-btn ${g.status==='offen'?'ao':''}" onclick="setSt('${g.id}','offen')">Nicht zugestellt</button>`:''}
+      ${isM?`<button class="s-btn ${g.status==='zugeteilt'?'az':''}" onclick="setSt('${g.id}','zugeteilt')">Zugestellt</button>`:''}
+      ${darfVerteilerStatus?`<button class="s-btn ${g.status==='fertig'?'af':''}" onclick="setSt('${g.id}','fertig')">Verteilt ✓</button>`:''}
+    </div></div>`;
+    if(kontakte.length>0){
+      h+=`<div class="d-sec"><div class="sec-hd">Kontakt</div><div class="f-stack">`;
+      kontakte.forEach(k=>{
+        const tel=k.telefon||'';const hasPhone=tel.length>0;
+        h+=`<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--surface2);border-radius:var(--r8)">
+          <div style="flex:1"><div style="font-size:.8rem;font-weight:500">${k.name} <span style="font-size:.65rem;color:var(--text4)">(${k.label})</span></div>
+          ${hasPhone?`<div style="font-size:.72rem;color:var(--text3)">${tel}</div>`:`<div style="font-size:.72rem;color:var(--text4)">Keine Nummer hinterlegt</div>`}</div>
+          ${hasPhone?`<a href="tel:${tel}" style="background:none;border:none;font-size:1rem;text-decoration:none;padding:2px 4px" title="Anrufen">📞</a>
+          <a href="https://wa.me/${tel.replace(/[^0-9+]/g,'').replace(/^0/,'+49')}" target="_blank" style="background:none;border:none;font-size:1rem;text-decoration:none;padding:2px 4px" title="WhatsApp">💬</a>`:''}
+        </div>`;
+      });
+      h+=`</div></div>`;
+    }
+    if(isM){
+      const gebietVerteiler=getVerteilerFuerGebiet(g.id);
+      const userOptions=`<option value="">— Verteiler fehlt</option>`+gebietVerteiler.map(u=>{
+        const sel=g.verteilerId===u.id?'selected':'';const rolleHint=u.rolle==='verwalter'?' (GV)':u.rolle==='kreisverwalter'?' (KV)':'';
+        const borrowedHint=u.borrowed?' 🔗':'';const gvHint=(!u.sameGV&&u.gvName)?' ['+u.gvName+']':'';
+        return `<option value="${u.id}" data-name="${u.name}" ${sel} ${u.borrowed?'style="color:var(--orange)"':''}>${u.name}${rolleHint}${gvHint}${borrowedHint}</option>`;
+      }).join('');
+      h+=`<div class="d-sec"><div class="sec-hd">Verteiler zuweisen</div><div class="f-stack">
+        <select id="inpV">${userOptions}</select><button class="btn btn-p" onclick="saveZ('${g.id}')">Speichern</button>
+      </div></div>
+      <div class="d-sec"><div class="sec-hd">Stückzahl</div><div class="f-stack">
+        <input type="number" id="inpS" value="${g.stueckzahl}"><button class="btn btn-g" onclick="saveSt2('${g.id}')">Ändern</button>
+      </div></div>`;
+      const gebietAnfragen=alleAnfragen.filter(a=>a.gebiet_id===g.id);
+      if(gebietAnfragen.length>0){
+        h+=`<div class="d-sec"><div class="sec-hd">📦 Offene Anfragen (${gebietAnfragen.length})</div><div class="f-stack">`;
+        gebietAnfragen.forEach(a=>{const user=allUsers.find(u=>u.id===a.user_id);const userName=user?user.name:'Unbekannt';
+          h+=`<div style="background:var(--surface2);border-radius:var(--r8);padding:8px;border-left:3px solid var(--orange)">
+            <div style="font-size:.78rem;margin-bottom:4px">👤 ${userName} → 📦 <strong>${a.neue_stueckzahl}</strong> Stück</div>
+            ${a.grund?`<div style="font-size:.72rem;color:var(--text3);margin-bottom:4px;font-style:italic">${a.grund}</div>`:''}
+            <div style="display:flex;gap:6px">
+              <button onclick="handleAnfrage('${a.id}','genehmigt',${a.neue_stueckzahl},'${a.gebiet_id}')" style="flex:1;padding:4px;border:none;border-radius:var(--r8);background:var(--green);color:#fff;font-size:.7rem;font-weight:600;cursor:pointer">✓ Genehmigen</button>
+              <button onclick="handleAnfrage('${a.id}','abgelehnt',null,null)" style="flex:1;padding:4px;border:none;border-radius:var(--r8);background:var(--red);color:#fff;font-size:.7rem;font-weight:600;cursor:pointer">✗ Ablehnen</button>
+            </div></div>`;
+        });
+        h+=`</div></div>`;
+      }
+    }
+    if(isV){
+      const bereitsAbgabe=alleAnfragen.some(a=>a.gebiet_id===g.id&&a.user_id===currentUser?.id&&a.typ==='abgabe'&&a.status==='offen');
+      h+=`<div class="d-sec"><div class="sec-hd">Anfrage</div><div class="f-stack">
+        <button class="btn btn-g" onclick="openModal('${g.id}')">📦 Stückzahl ändern</button>
+        ${bereitsAbgabe?`<div style="text-align:center;font-size:.8rem;color:var(--text3);padding:8px">⏳ Abgabe-Anfrage gesendet</div>`
+          :`<button class="btn btn-d" onclick="sendeAbgabeAnfrage('${g.id}')">🔄 Gebiet abgeben</button>`}
+      </div></div>`;
+    }
+    if(curRole==='verteiler'&&!g.verteilerId){
+      const bereitsAngefragt=alleAnfragen.some(a=>a.gebiet_id===g.id&&a.user_id===currentUser?.id&&a.typ==='uebernahme');
+      h+=`<div class="d-sec"><div class="sec-hd">Übernahme</div><div class="f-stack">
+        ${bereitsAngefragt?`<div style="text-align:center;font-size:.8rem;color:var(--text3);padding:8px">⏳ Anfrage zur Übernahme wurde gesendet</div>`
+          :`<button class="btn btn-p" onclick="sendeUebernahmeAnfrage('${g.id}')">🙋 Gebiet übernehmen</button>`}
+      </div></div>`;
+    }
+    if(isM&&!g.verteilerId){
+      const verteilerListe=allUsers.filter(u=>u.rolle==='verteiler'&&u.id!==g.verteilerId);
+      if(verteilerListe.length>0){
+        h+=`<div class="d-sec"><div class="sec-hd">Verteiler anfragen</div><div class="f-stack">
+          <select id="inpAnfrageVerteiler"><option value="">— Verteiler wählen —</option>${verteilerListe.map(u=>`<option value="${u.id}">${u.name}</option>`).join('')}</select>
+          <button class="btn btn-p" onclick="sendeZuweisungAnfrage('${g.id}')">👤 Verteiler anfragen</button>
+        </div></div>`;
+      }
+    }
+    if(darfHinweis){
+      h+=`<div class="d-sec"><div class="sec-hd">Hinweis schreiben</div><div class="f-stack">
+        <textarea id="inpH" placeholder="z.B. Briefkastensperren in Hauptstraße…"></textarea>
+        <button class="btn btn-g" onclick="saveH('${g.id}')">Speichern</button>
+      </div></div>`;
+    }
+    if(g.hinweise&&g.hinweise.length){
+      h+=`<div class="d-sec"><div class="sec-hd">Hinweise (${g.hinweise.length})</div><div class="f-stack">`;
+      g.hinweise.forEach(hw=>{
+        const autor=allUsers.find(u=>u.id===hw.user_id);const autorName=autor?autor.name:'Unbekannt';
+        const datum=new Date(hw.created_at).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+        const darfLoeschen=isAdmin||(isM&&(curRole==='verwalter'||curRole==='kreisverwalter'))||(hw.user_id===currentUser?.id);
+        h+=`<div style="background:var(--surface2);border-radius:var(--r8);padding:8px;display:flex;align-items:flex-start;gap:8px">
+          <div style="flex:1"><div style="font-size:.78rem">💬 ${hw.text}</div><div style="font-size:.65rem;color:var(--text4);margin-top:2px">👤 ${autorName} · ${datum}</div></div>
+          ${darfLoeschen?`<button onclick="deleteHinweis('${hw.id}','${g.id}')" style="background:none;border:none;color:var(--text4);cursor:pointer;font-size:.75rem;padding:2px" title="Hinweis löschen">🗑</button>`:''}
+        </div>`;
+      });
+      h+=`</div></div>`;
+    }
     if(curRole==='admin'||(curRole==='kreisverwalter'&&verwalterHatGebietZugriff(id))){
       h+=`<div class="d-sec"><div class="sec-hd">Admin – Geodaten</div><div class="f-stack">
         ${kmlP[g.id]?`<button class="btn btn-g" onclick="editPolygon('${g.id}')">✏️ Polygon bearbeiten</button>`:''}
