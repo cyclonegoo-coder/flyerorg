@@ -540,7 +540,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v82 · <a href="#" onclick="document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v83 · <a href="#" onclick="document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this)this.classList.remove('open')">
@@ -3852,18 +3852,24 @@ function openDetail(id){
           const gvHint=(!u.sameGV&&u.gvName)?' ['+u.gvName+']':'';
           return `<option value="${u.id}" data-name="${u.name}" ${sel} ${u.borrowed?'style="color:var(--orange)"':''}>${u.name}${rolleHint}${gvHint}${borrowedHint}</option>`;
         }).join('');
-      h+=`<div class="d-sec" style="padding:6px 12px"><div class="sec-hd" onclick="mobToggle(this)" style="cursor:pointer">▸ Verwaltung</div><div class="f-stack mob-acc">
-        <div style="font-size:.68rem;color:var(--text4);text-transform:uppercase;margin-bottom:2px">Verteiler zuweisen</div>
-        <div style="display:flex;gap:6px"><select id="inpV" style="flex:1;font-size:.75rem">${userOptions}</select><button class="btn btn-p" onclick="saveZ('${g.id}')" style="padding:6px 12px;font-size:.72rem">Speichern</button></div>
-        <div style="font-size:.68rem;color:var(--text4);text-transform:uppercase;margin-top:8px;margin-bottom:2px">Stückzahl</div>
-        <div style="display:flex;gap:6px"><input type="number" id="inpS" value="${g.stueckzahl}" style="flex:1;font-size:.75rem"><button class="btn btn-g" onclick="saveSt2('${g.id}')" style="padding:6px 12px;font-size:.72rem">Ändern</button></div>`;
+      h+=`<div class="d-sec" style="padding:6px 12px"><div class="sec-hd" onclick="mobToggle(this)" style="cursor:pointer">▸ Verwaltung</div><div class="f-stack mob-acc" style="gap:8px;padding-top:6px">
+        <div style="background:var(--surface2);border-radius:var(--r8);padding:8px 10px">
+          <div style="font-size:.7rem;font-weight:600;color:var(--text2);margin-bottom:5px">👤 Verteiler zuweisen</div>
+          <div style="display:flex;gap:6px"><select id="inpV" style="flex:1;font-size:.78rem;padding:7px 8px">${userOptions}</select><button class="btn btn-p" onclick="saveZ('${g.id}')" style="padding:7px 14px;font-size:.75rem;white-space:nowrap">Speichern</button></div>
+        </div>
+        <div style="background:var(--surface2);border-radius:var(--r8);padding:8px 10px">
+          <div style="font-size:.7rem;font-weight:600;color:var(--text2);margin-bottom:5px">📦 Stückzahl ändern</div>
+          <div style="display:flex;gap:6px"><input type="number" id="inpS" value="${g.stueckzahl}" style="flex:1;font-size:.78rem;padding:7px 8px"><button class="btn btn-g" onclick="saveSt2('${g.id}')" style="padding:7px 14px;font-size:.75rem;white-space:nowrap">Ändern</button></div>
+        </div>`;
       // Verteiler anfragen (wenn kein Verteiler)
       if(!g.verteilerId){
         const verteilerListe = allUsers.filter(u => u.rolle==='verteiler' && u.id!==g.verteilerId);
         if(verteilerListe.length>0){
-          h+=`<div style="font-size:.68rem;color:var(--text4);text-transform:uppercase;margin-top:8px;margin-bottom:2px">Verteiler anfragen</div>
-            <div style="display:flex;gap:6px"><select id="inpAnfrageVerteiler" style="flex:1;font-size:.75rem"><option value="">— wählen —</option>${verteilerListe.map(u=>`<option value="${u.id}">${u.name}</option>`).join('')}</select>
-            <button class="btn btn-p" onclick="sendeZuweisungAnfrage('${g.id}')" style="padding:6px 12px;font-size:.72rem">Anfragen</button></div>`;
+          h+=`<div style="background:var(--surface2);border-radius:var(--r8);padding:8px 10px">
+            <div style="font-size:.7rem;font-weight:600;color:var(--text2);margin-bottom:5px">🔍 Verteiler anfragen</div>
+            <div style="display:flex;gap:6px"><select id="inpAnfrageVerteiler" style="flex:1;font-size:.78rem;padding:7px 8px"><option value="">— wählen —</option>${verteilerListe.map(u=>`<option value="${u.id}">${u.name}</option>`).join('')}</select>
+            <button class="btn btn-p" onclick="sendeZuweisungAnfrage('${g.id}')" style="padding:7px 14px;font-size:.75rem;white-space:nowrap">Anfragen</button></div>
+          </div>`;
         }
       }
       h+=`</div></div>`;
@@ -3907,9 +3913,13 @@ function openDetail(id){
     // ===== MOBILE: Hinweise (klappbar) =====
     if(darfHinweis || (g.hinweise&&g.hinweise.length)){
       const hwCount=g.hinweise?g.hinweise.length:0;
-      h+=`<div class="d-sec" style="padding:6px 12px"><div class="sec-hd" onclick="mobToggle(this)" style="cursor:pointer">▸ Hinweise${hwCount?' ('+hwCount+')':''}</div><div class="f-stack mob-acc">`;
+      h+=`<div class="d-sec" style="padding:6px 12px"><div class="sec-hd" onclick="mobToggle(this)" style="cursor:pointer">▸ Hinweise${hwCount?' ('+hwCount+')':''}</div><div class="f-stack mob-acc" style="gap:8px;padding-top:6px">`;
       if(darfHinweis){
-        h+=`<div style="display:flex;gap:6px;margin-bottom:6px"><textarea id="inpH" placeholder="Hinweis…" style="flex:1;font-size:.72rem;min-height:36px;resize:vertical"></textarea><button class="btn btn-g" onclick="saveH('${g.id}')" style="padding:6px 10px;font-size:.72rem;align-self:flex-end">OK</button></div>`;
+        h+=`<div style="background:var(--surface2);border-radius:var(--r8);padding:8px 10px">
+          <div style="font-size:.7rem;font-weight:600;color:var(--text2);margin-bottom:5px">✏️ Neuer Hinweis</div>
+          <textarea id="inpH" placeholder="z.B. Briefkastensperren…" style="width:100%;font-size:.78rem;min-height:44px;resize:vertical;padding:7px 8px;border:1px solid var(--sep);border-radius:var(--r8);box-sizing:border-box;margin-bottom:6px"></textarea>
+          <button class="btn btn-g" onclick="saveH('${g.id}')" style="width:100%;padding:8px;font-size:.75rem">Hinweis speichern</button>
+        </div>`;
       }
       if(g.hinweise&&g.hinweise.length){
         g.hinweise.forEach(hw=>{
