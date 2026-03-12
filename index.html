@@ -90,8 +90,8 @@ header{height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturate(18
 .mob-nav-bc .bc-drop{z-index:1100}
 .mob-nav-stats{display:flex;gap:8px;font-size:.68rem;font-weight:600}
 .mob-stat::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:currentColor;margin-right:3px;vertical-align:middle}
-.mob-acc{max-height:0;overflow:hidden;transition:max-height .25s ease}
-.mob-acc.mob-open{max-height:500px}
+.mob-acc{max-height:0;overflow:hidden;transition:max-height .25s ease;padding-top:0!important;padding-bottom:0!important}
+.mob-acc.mob-open{max-height:600px;padding-top:6px!important;padding-bottom:2px!important}
 .mob-action-btn{width:44px;height:44px;border-radius:var(--r12);border:1px solid var(--sep);background:var(--surface);font-size:1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s}
 .mob-action-btn:active{background:var(--surface3)}
 
@@ -540,7 +540,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v83 · <a href="#" onclick="document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v84 · <a href="#" onclick="document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this)this.classList.remove('open')">
@@ -3852,14 +3852,14 @@ function openDetail(id){
           const gvHint=(!u.sameGV&&u.gvName)?' ['+u.gvName+']':'';
           return `<option value="${u.id}" data-name="${u.name}" ${sel} ${u.borrowed?'style="color:var(--orange)"':''}>${u.name}${rolleHint}${gvHint}${borrowedHint}</option>`;
         }).join('');
-      h+=`<div class="d-sec" style="padding:6px 12px"><div class="sec-hd" onclick="mobToggle(this)" style="cursor:pointer">▸ Verwaltung</div><div class="f-stack mob-acc" style="gap:8px;padding-top:6px">
+      h+=`<div class="d-sec" style="padding:6px 12px"><div class="sec-hd" onclick="mobToggle(this)" style="cursor:pointer">▸ Verwaltung</div><div class="f-stack mob-acc" style="gap:8px">
         <div style="background:var(--surface2);border-radius:var(--r8);padding:8px 10px">
           <div style="font-size:.7rem;font-weight:600;color:var(--text2);margin-bottom:5px">👤 Verteiler zuweisen</div>
           <div style="display:flex;gap:6px"><select id="inpV" style="flex:1;font-size:.78rem;padding:7px 8px">${userOptions}</select><button class="btn btn-p" onclick="saveZ('${g.id}')" style="padding:7px 14px;font-size:.75rem;white-space:nowrap">Speichern</button></div>
         </div>
         <div style="background:var(--surface2);border-radius:var(--r8);padding:8px 10px">
           <div style="font-size:.7rem;font-weight:600;color:var(--text2);margin-bottom:5px">📦 Stückzahl ändern</div>
-          <div style="display:flex;gap:6px"><input type="number" id="inpS" value="${g.stueckzahl}" style="flex:1;font-size:.78rem;padding:7px 8px"><button class="btn btn-g" onclick="saveSt2('${g.id}')" style="padding:7px 14px;font-size:.75rem;white-space:nowrap">Ändern</button></div>
+          <div style="display:flex;gap:6px"><input type="number" id="inpS" value="${g.stueckzahl}" style="flex:1;font-size:.95rem;font-weight:600;padding:7px 8px;color:var(--text1)"><button class="btn btn-g" onclick="saveSt2('${g.id}')" style="padding:7px 14px;font-size:.75rem;white-space:nowrap">Ändern</button></div>
         </div>`;
       // Verteiler anfragen (wenn kein Verteiler)
       if(!g.verteilerId){
@@ -3913,7 +3913,7 @@ function openDetail(id){
     // ===== MOBILE: Hinweise (klappbar) =====
     if(darfHinweis || (g.hinweise&&g.hinweise.length)){
       const hwCount=g.hinweise?g.hinweise.length:0;
-      h+=`<div class="d-sec" style="padding:6px 12px"><div class="sec-hd" onclick="mobToggle(this)" style="cursor:pointer">▸ Hinweise${hwCount?' ('+hwCount+')':''}</div><div class="f-stack mob-acc" style="gap:8px;padding-top:6px">`;
+      h+=`<div class="d-sec" style="padding:6px 12px"><div class="sec-hd" onclick="mobToggle(this)" style="cursor:pointer">▸ Hinweise${hwCount?' ('+hwCount+')':''}</div><div class="f-stack mob-acc" style="gap:8px">`;
       if(darfHinweis){
         h+=`<div style="background:var(--surface2);border-radius:var(--r8);padding:8px 10px">
           <div style="font-size:.7rem;font-weight:600;color:var(--text2);margin-bottom:5px">✏️ Neuer Hinweis</div>
