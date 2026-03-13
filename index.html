@@ -559,7 +559,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v92 · <a href="#" onclick="document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v94 · <a href="#" onclick="document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this)this.classList.remove('open')">
@@ -2003,10 +2003,9 @@ async function sendInvite(channel) {
 
     // Je nach Kanal versenden
     if (channel === 'email') {
-      // Zuerst versuchen: Magic Link direkt per Supabase senden
-      let emailSent = false;
+      // Magic Link per Supabase senden → Nutzer muss beim ersten Login Passwort setzen
       try {
-        const { data: otpData, error: otpErr } = await sb.auth.signInWithOtp({
+        const { error: otpErr } = await sb.auth.signInWithOtp({
           email,
           options: {
             shouldCreateUser: true,
@@ -2014,31 +2013,23 @@ async function sendInvite(channel) {
             emailRedirectTo: APP_URL
           }
         });
-        // OTP gesendet
-        if (!otpErr) {
-          emailSent = true;
-          statusEl.style.color = 'var(--green)';
-          statusEl.textContent = `✅ Einladungs-E-Mail an ${email} gesendet! (Magic Link)`;
-        } else {
-          console.warn('OTP Fehler:', otpErr.message);
-        }
-      } catch(otpE) {
-        console.warn('OTP Exception:', otpE.message);
-      }
-
-      // Fallback: E-Mail-Programm öffnen wenn Supabase-Mail nicht geklappt hat
-      if (!emailSent) {
+        if (otpErr) throw otpErr;
+        statusEl.style.color = 'var(--green)';
+        statusEl.textContent = `✅ Einladungs-E-Mail an ${email} gesendet!`;
+      } catch(mailErr) {
+        // Fallback: E-Mail-Programm öffnen
+        console.warn('OTP-Mail fehlgeschlagen:', mailErr.message);
         const subject = encodeURIComponent('Einladung zur FlyerOrg-App');
         const body = encodeURIComponent(shareText);
         window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
         statusEl.style.color = 'var(--orange, #e67e22)';
-        statusEl.textContent = `📧 E-Mail-Programm geöffnet (Supabase-Mail nicht verfügbar)`;
+        statusEl.textContent = `📧 E-Mail-Programm geöffnet (automatischer Versand fehlgeschlagen)`;
       }
     } else if (channel === 'whatsapp') {
-      // WhatsApp direkt an die Nummer senden
+      // WhatsApp: api.whatsapp.com funktioniert zuverlässiger als wa.me
       const waNumber = telefonClean.replace('+', '');
       const shareEnc = encodeURIComponent(shareText);
-      window.open(`https://wa.me/${waNumber}?text=${shareEnc}`, '_blank');
+      window.open(`https://api.whatsapp.com/send?phone=${waNumber}&text=${shareEnc}`, '_blank');
       statusEl.style.color = 'var(--green)';
       statusEl.textContent = `✅ WhatsApp geöffnet – Nachricht an ${telefon}`;
     } else if (channel === 'telegram') {
@@ -2334,12 +2325,17 @@ async function checkSession() {
           }
         } catch(e) { console.warn('Pending invite apply failed:', e); }
 
-        // Signup-Bestätigung → direkt in die App; Invite/Recovery → Passwort setzen
-        const isSignupConfirm = hash.includes('type=signup') || hash.includes('type=email');
-        if (isSignupConfirm) {
+        // Prüfe ob Nutzer ein Passwort hat (identities mit provider=email und identity_data)
+        // Bei Magic-Link-Erstanmeldung: immer Passwort setzen lassen
+        const isSignupConfirm = hash.includes('type=signup');
+        const isMagicOrInvite = hash.includes('type=magiclink') || hash.includes('type=invite') || hash.includes('type=recovery') || hash.includes('type=email');
+
+        if (isSignupConfirm && !isMagicOrInvite) {
+          // Nutzer hat sich selbst registriert mit Passwort → direkt rein
           await loadProfile();
           showApp();
         } else {
+          // Magic Link / Invite / Recovery → Passwort setzen
           document.getElementById('loginScreen').style.display = 'none';
           document.getElementById('setPasswordScreen').style.display = 'flex';
         }
