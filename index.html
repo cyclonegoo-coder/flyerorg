@@ -125,25 +125,37 @@ header{height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturate(18
 .prog-row{display:flex;justify-content:space-between;font-size:.7rem;color:var(--text3);font-weight:500;margin-bottom:5px}
 .prog-track{height:4px;background:var(--surface3);border-radius:2px;overflow:hidden}
 .prog-fill{height:100%;background:linear-gradient(90deg,var(--blue),var(--green));border-radius:2px;transition:width .5s ease}
-.g-list{flex:1;overflow-y:auto;padding:7px;display:flex;flex-direction:column;gap:5px}
+.g-list{flex:1;overflow-y:auto;padding:5px 7px;display:flex;flex-direction:column;gap:3px}
 .g-list::-webkit-scrollbar{width:0}
-.g-card{background:var(--surface);border-radius:var(--r12);padding:10px 11px;cursor:pointer;transition:all .15s;box-shadow:var(--sh-sm);border:1.5px solid transparent;position:relative;overflow:hidden}
-.g-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;border-radius:12px 0 0 12px}
+.g-search-wrap{padding:4px 7px 2px;display:flex;flex-direction:column;gap:4px}
+.g-search{width:100%;padding:6px 10px 6px 28px;border:1px solid var(--sep);border-radius:var(--r8);font-size:.78rem;background:var(--surface2);outline:none;transition:border-color .15s}
+.g-search:focus{border-color:var(--blue)}
+.g-search-icon{position:absolute;left:16px;top:50%;transform:translateY(-50%);font-size:.72rem;color:var(--text4);pointer-events:none}
+.g-filter-row{display:flex;gap:3px;flex-wrap:wrap}
+.g-filter-btn{font-size:.62rem;font-weight:600;padding:3px 8px;border-radius:10px;border:1px solid var(--sep);background:var(--surface2);color:var(--text3);cursor:pointer;transition:all .12s;white-space:nowrap}
+.g-filter-btn.active{border-color:var(--blue);background:rgba(0,158,224,.1);color:var(--blue)}
+.g-filter-btn .g-filter-cnt{font-size:.55rem;margin-left:2px;opacity:.7}
+.g-region-hd{font-size:.68rem;font-weight:700;color:var(--text3);padding:6px 4px 2px;text-transform:uppercase;letter-spacing:.04em;display:flex;align-items:center;gap:5px;cursor:pointer;user-select:none}
+.g-region-hd .g-rg-cnt{font-size:.6rem;font-weight:500;color:var(--text4)}
+.g-region-group{display:flex;flex-direction:column;gap:2px}
+.g-region-group.collapsed .g-region-items{display:none}
+.g-card{background:var(--surface);border-radius:var(--r8);padding:7px 9px;cursor:pointer;transition:all .15s;box-shadow:var(--sh-sm);border:1.5px solid transparent;position:relative;overflow:hidden}
+.g-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;border-radius:8px 0 0 8px}
 .g-card.status-offen::before{background:var(--text4)}
 .g-card.status-zugeteilt::before{background:var(--orange)}
 .g-card.status-fertig::before{background:var(--green)}
 .g-card.status-problem::before{background:var(--red)}
 .g-card:active{transform:scale(.98)}
 .g-card.sel{border-color:var(--blue);box-shadow:0 0 0 3px rgba(0,158,224,.15),var(--sh-sm)}
-.g-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
-.s-chip{font-size:.58rem;font-weight:600;padding:2px 7px;border-radius:10px;text-transform:uppercase;letter-spacing:.04em}
+.g-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:1px}
+.s-chip{font-size:.55rem;font-weight:600;padding:2px 6px;border-radius:10px;text-transform:uppercase;letter-spacing:.04em}
 .c-offen{background:#f2f2f7;color:var(--text3)}
 .c-zugeteilt{background:rgba(255,149,0,.12);color:var(--orange)}
 .c-fertig{background:rgba(66,165,245,.12);color:#1565c0}
 .c-problem{background:rgba(255,59,48,.12);color:var(--red)}
-.g-name{font-size:.82rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;margin-right:6px}
-.g-meta{display:flex;gap:9px;font-size:.7rem;color:var(--text3)}
-.wa{font-size:.6rem;font-weight:600;color:#25d366;background:rgba(37,211,102,.1);padding:1px 5px;border-radius:4px}
+.g-name{font-size:.78rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;margin-right:6px}
+.g-meta{display:flex;gap:8px;font-size:.65rem;color:var(--text3)}
+.wa{font-size:.55rem;font-weight:600;color:#25d366;background:rgba(37,211,102,.1);padding:1px 4px;border-radius:4px}
 
 /* ── MAP ── */
 #map{position:absolute;top:0;left:0;right:0;bottom:0;z-index:0}
@@ -445,6 +457,10 @@ textarea{min-height:68px}
       <div class="prog-row"><span>Fortschritt</span><span id="progText">–</span></div>
       <div class="prog-track"><div class="prog-fill" id="progFill" style="width:0%"></div></div>
     </div>
+    <div class="g-search-wrap">
+      <div style="position:relative"><span class="g-search-icon">🔍</span><input class="g-search" id="gebietSearch" type="text" placeholder="Gebiet suchen…" oninput="renderList()"></div>
+      <div class="g-filter-row" id="gebietFilter"></div>
+    </div>
     <div class="g-list" id="gebietList"></div>
   </div>
 
@@ -540,7 +556,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v88 · <a href="#" onclick="document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v90 · <a href="#" onclick="document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this)this.classList.remove('open')">
@@ -3767,17 +3783,63 @@ function switchGV(id){curGV=id;if(id!=='alle'){const gv=gebietsverbaende[id];if(
 function switchReg(id){curReg=id;if(id!=='alle'){const r=regionen[id];if(r){if(curGV==='alle')curGV=r.gebietsverband_id;const gv=gebietsverbaende[r.gebietsverband_id];if(gv&&curLK==='alle')curLK=gv.landkreis_id;}}selId=null;closeDetail();renderBreadcrumb();renderList();renderStats();drawPolygons();showDrawToolbar();}
 
 function getAllGebiete(){return Object.values(regionen).flatMap(r=>r.gebiete)}
+let gListFilter='alle';
+function setGFilter(f){gListFilter=f;renderList();}
 function renderList(){
-  const gs=getVisibleGebiete();
-  document.getElementById('gebietList').innerHTML=gs.map(g=>{
-    const istProblemgebietFremdes = curRole==='verteiler' && !g.verteilerId;
-    const statusLabel = istProblemgebietFremdes ? '🆘 Hilfe gesucht' : sl(g.status);
-    const verteilerInfo = g.verteiler?(curRole==='verteiler'?(g.verteilerId===currentUser?.id?'👤 Du':'👤 Zugewiesen'):'👤 '+g.verteiler.split(' ')[0]):'⚠️ Verteiler fehlt';
-    return `<div class="g-card status-${g.status} ${selId===g.id?'sel':''}" onclick="selGebiet('${g.id}')">
-      <div class="g-top"><span class="g-name">${g.name}</span><span class="s-chip c-${g.status}">${statusLabel}</span></div>
-      <div class="g-meta"><span>📦 ${g.stueckzahl}</span><span>${verteilerInfo}</span>${g.whatsapp?'<span class="wa">WA</span>':''}</div>
-    </div>`;
-  }).join('');
+  const allGs=getVisibleGebiete();
+  // Suchfilter
+  const q=(document.getElementById('gebietSearch')?.value||'').toLowerCase().trim();
+  const filtered=q?allGs.filter(g=>g.name.toLowerCase().includes(q)):allGs;
+  // Status-Zähler für Filter-Buttons
+  const counts={alle:filtered.length,offen:0,zugeteilt:0,fertig:0,problem:0};
+  filtered.forEach(g=>{
+    counts[g.status]=(counts[g.status]||0)+1;
+    if(curRole==='verteiler'&&!g.verteilerId) counts.problem=(counts.problem||0)+1;
+  });
+  // Filter-Buttons rendern
+  const fEl=document.getElementById('gebietFilter');
+  if(fEl) fEl.innerHTML=[
+    ['alle','Alle'],['offen','Offen'],['zugeteilt','Zugestellt'],['fertig','Verteilt']
+  ].filter(([k])=>k==='alle'||counts[k]>0).map(([k,l])=>
+    `<button class="g-filter-btn${gListFilter===k?' active':''}" onclick="setGFilter('${k}')">${l}<span class="g-filter-cnt">${counts[k]||0}</span></button>`
+  ).join('')+(counts.problem>0?`<button class="g-filter-btn${gListFilter==='problem'?' active':''}" onclick="setGFilter('problem')">🆘<span class="g-filter-cnt">${counts.problem}</span></button>`:'');
+  // Status-Filter anwenden
+  let gs=filtered;
+  if(gListFilter==='problem') gs=gs.filter(g=>curRole==='verteiler'&&!g.verteilerId);
+  else if(gListFilter!=='alle') gs=gs.filter(g=>g.status===gListFilter);
+  // Gruppierung nach Region (wenn >15 Gebiete und keine spez. Region gewählt)
+  const useGroups=gs.length>15&&curReg==='alle';
+  if(useGroups){
+    // Region-Zuordnung
+    const groups={};const noReg=[];
+    gs.forEach(g=>{
+      let rName='Sonstige',rId='_none';
+      for(const [rk,r] of Object.entries(regionen)){
+        if(r.gebiete.find(gg=>gg.id===g.id)){rName=r.name;rId=rk;break;}
+      }
+      if(!groups[rId]) groups[rId]={name:rName,gebiete:[]};
+      groups[rId].gebiete.push(g);
+    });
+    document.getElementById('gebietList').innerHTML=Object.entries(groups).sort((a,b)=>a[1].name.localeCompare(b[1].name)).map(([rId,grp])=>
+      `<div class="g-region-group" id="grp_${rId}">
+        <div class="g-region-hd" onclick="this.parentElement.classList.toggle('collapsed')">
+          <span>▾</span> ${grp.name} <span class="g-rg-cnt">(${grp.gebiete.length})</span>
+        </div>
+        <div class="g-region-items">${grp.gebiete.map(g=>renderGCard(g)).join('')}</div>
+      </div>`
+    ).join('');
+  } else {
+    document.getElementById('gebietList').innerHTML=gs.map(g=>renderGCard(g)).join('');
+  }
+}
+function renderGCard(g){
+  const istProblemgebietFremdes = curRole==='verteiler' && !g.verteilerId;
+  const statusLabel = istProblemgebietFremdes ? '🆘 Hilfe' : sl(g.status);
+  const verteilerInfo = g.verteiler?(curRole==='verteiler'?(g.verteilerId===currentUser?.id?'Du':'Zugew.'):'👤 '+g.verteiler.split(' ')[0]):'⚠️ fehlt';
+  return `<div class="g-card status-${g.status} ${selId===g.id?'sel':''}" onclick="selGebiet('${g.id}')">
+    <div class="g-top"><span class="g-name">${g.name}</span><span class="s-chip c-${g.status}">${statusLabel}</span></div>
+    <div class="g-meta"><span>📦 ${g.stueckzahl}</span><span>${verteilerInfo}</span>${g.whatsapp?'<span class="wa">WA</span>':''}</div>
+  </div>`;
 }
 function sl(s){return{offen:'Nicht zugestellt',zugeteilt:'Zugestellt',fertig:'Verteilt ✓'}[s]||s}
 function renderStats(){
@@ -4452,23 +4514,28 @@ let drawMode=false, drawPoints=[], drawMarkers=[], drawPolyline=null, drawPrevie
 // HIERARCHIE VERWALTUNG (Admin)
 // ============================================================
 function openHierarchyModal(){
-  // GV: direkt auf Regionen-Tab starten (kein Zugriff auf LK/GV)
+  // GV/KV: direkt auf passenden Tab starten
   const isGV = curRole === 'verwalter';
-  switchHTab(isGV ? 'reg' : 'lk');
+  const isKV = curRole === 'kreisverwalter';
+  switchHTab((isGV||isKV) ? 'gv' : 'lk');
+  // GV startet auf Regionen
+  if(isGV) switchHTab('reg');
   renderHierarchyLists();
   document.getElementById('hierarchyModalOv').classList.add('open');
 }
 function closeHierarchyModal(){document.getElementById('hierarchyModalOv').classList.remove('open');}
 function switchHTab(tab){
   const isGV = curRole === 'verwalter';
-  // GV: LK und GV Tabs komplett ausblenden
-  document.getElementById('hTabLK').style.display = isGV ? 'none' : '';
-  document.getElementById('hTabGV').style.display = isGV ? 'none' : '';
+  const isKVTab = curRole === 'kreisverwalter';
+  const hideLK = isGV || isKVTab; // GV+KV: kein LK-Tab
+  const hideGV = isGV;            // GV: auch kein GV-Tab
+  document.getElementById('hTabLK').style.display = hideLK ? 'none' : '';
+  document.getElementById('hTabGV').style.display = hideGV ? 'none' : '';
   document.getElementById('hTabLK').className=tab==='lk'?'pill active':'pill';
   document.getElementById('hTabGV').className=tab==='gv'?'pill active':'pill';
   document.getElementById('hTabReg').className=tab==='reg'?'pill active':'pill';
-  document.getElementById('hPanelLK').style.display=tab==='lk'&&!isGV?'block':'none';
-  document.getElementById('hPanelGV').style.display=tab==='gv'&&!isGV?'block':'none';
+  document.getElementById('hPanelLK').style.display=tab==='lk'&&!hideLK?'block':'none';
+  document.getElementById('hPanelGV').style.display=tab==='gv'&&!hideGV?'block':'none';
   document.getElementById('hPanelReg').style.display=tab==='reg'?'block':'none';
   renderHierarchyLists();
 }
