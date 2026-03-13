@@ -559,7 +559,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v91 · <a href="#" onclick="document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v92 · <a href="#" onclick="document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this)this.classList.remove('open')">
@@ -2074,15 +2074,21 @@ async function deleteUser(userId, userName) {
     const { data, error } = await sb.functions.invoke('delete-user', {
       body: { userId }
     });
-    if (error) throw error;
+    if (error) {
+      if (error.context?.status === 403) throw new Error('Keine Berechtigung für diese Aktion');
+      throw error;
+    }
     if (data?.error) throw new Error(data.error);
+
+    const delUser = allUsers.find(u=>u.id===userId);
+    if(delUser?.email) await sb.from('pending_invites').delete().eq('email', delUser.email.toLowerCase());
 
     allUsers = allUsers.filter(u => u.id !== userId);
     renderUserList();
     toast(`🗑 Nutzer „${userName}" gelöscht`);
   } catch(e) {
     console.error('delete-user failed:', e);
-    toast(`⚠️ Fehler: ${e.message}`);
+    toast(`⚠️ ${e.message || 'Fehler beim Löschen'}`);
   }
 }
 
