@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FlyerOrg – Offline</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #f2f2f7;
+    color: #1c1c1e;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 24px;
+    text-align: center;
+  }
+  .offline-card {
+    background: white;
+    border-radius: 16px;
+    padding: 40px 32px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+    max-width: 340px;
+  }
+  .offline-icon { font-size: 48px; margin-bottom: 16px; }
+  h1 { font-size: 1.2rem; font-weight: 600; margin-bottom: 8px; }
+  p { font-size: 0.88rem; color: #636366; line-height: 1.5; margin-bottom: 20px; }
+  button {
+    background: #009ee0;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    padding: 12px 24px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  button:active { background: #0077a8; }
+</style>
+</head>
+<body>
+  <div class="offline-card">
+    <div class="offline-icon">📡</div>
+    <h1>Keine Verbindung</h1>
+    <p>FlyerOrg benötigt eine Internetverbindung. Bitte prüfe dein WLAN oder mobile Daten.</p>
+    <button onclick="location.reload()">Erneut versuchen</button>
+  </div>
+</body>
+</html>
