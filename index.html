@@ -559,7 +559,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v94 · <a href="#" onclick="document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v95 · <a href="#" onclick="document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this)this.classList.remove('open')">
@@ -933,7 +933,7 @@ async function doRegister() {
 
     // Profil anlegen/aktualisieren (nur wenn Session existiert, sonst wird es bei E-Mail-Bestätigung gemacht)
     if (data?.user?.id && data?.session) {
-      const profileData = { id: data.user.id, name, email, rolle: 'verteiler' };
+      const profileData = { id: data.user.id, name, email, rolle: 'verteiler', passwort_gesetzt: true };
       // Prüfe ob Einladung mit vordefinierten Daten existiert (in DB)
       const invite = await ladePendingInvite(email);
       if (invite) {
@@ -1030,6 +1030,9 @@ async function doSetPassword() {
     err.classList.add('show');
     return;
   }
+
+  // Flag setzen: Passwort wurde vergeben
+  await sb.from('user_profiles').update({ passwort_gesetzt: true }).eq('id', currentUser.id);
 
   // Hide password screen, show app
   document.getElementById('setPasswordScreen').style.display = 'none';
@@ -2351,6 +2354,15 @@ async function checkSession() {
     // Prüfe ob ein pending_invite existiert (Admin hat Rolle/Region nachträglich geändert)
     await pruefePendingInviteBeiLogin(session.user);
     await loadProfile();
+
+    // Prüfe ob Nutzer ein Passwort gesetzt hat
+    if (currentProfile && !currentProfile.passwort_gesetzt) {
+      // Kein Passwort gesetzt → Passwort-Screen anzeigen
+      document.getElementById('loginScreen').style.display = 'none';
+      document.getElementById('setPasswordScreen').style.display = 'flex';
+      return;
+    }
+
     showApp();
   }
 }
