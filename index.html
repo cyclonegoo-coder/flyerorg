@@ -559,7 +559,7 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v95 · <a href="#" onclick="document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v96 · <a href="#" onclick="document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this)this.classList.remove('open')">
@@ -1606,7 +1606,15 @@ function openInviteModal() {
     document.getElementById('inviteGV').innerHTML = `<option value="">— Gebietsverband wählen —</option>` + gvOpts;
   } else {
     document.getElementById('inviteRolle').disabled = false;
-    document.getElementById('inviteGVWrap').style.display = 'none';
+    // Verteiler ist Default → GV-Dropdown sofort anzeigen und befüllen
+    document.getElementById('inviteGVWrap').style.display = 'block';
+    const isKVI = curRole === 'kreisverwalter';
+    const kvLK = currentProfile?.verwalteter_landkreis;
+    const gvOptsList = Object.entries(gebietsverbaende)
+      .filter(([,gv]) => !isKVI || gv.landkreis_id === kvLK)
+      .sort((a,b) => a[1].name.localeCompare(b[1].name))
+      .map(([id,gv]) => `<option value="${id}">${gv.name}</option>`).join('');
+    document.getElementById('inviteGV').innerHTML = `<option value="">— Gebietsverband wählen —</option>` + gvOptsList;
   }
   document.getElementById('inviteModalOv').classList.add('open');
 }
@@ -1879,34 +1887,39 @@ function renderInviteRegionen() {
   const list = document.getElementById('inviteRegionenList');
   const isKV = curRole === 'kreisverwalter';
   const kvLK = currentProfile?.verwalteter_landkreis;
+  // Gebietsverbände als Checkboxen rendern (für Gebietsverwalter-Einladung)
   const sichtbar = isKV
-    ? Object.entries(regionen).filter(([,r])=>{const gv=gebietsverbaende[r.gebietsverband_id];return gv&&gv.landkreis_id===kvLK;})
-    : Object.entries(regionen);
-  list.innerHTML = sichtbar.map(([k, r]) => {
-    const belegt = getRegionVerwalter(k, null);
-    const hint = belegt ? `<span style="font-size:.7rem;color:var(--text4);margin-left:4px">(auch: ${belegt.name})</span>` : '';
+    ? Object.entries(gebietsverbaende).filter(([,gv])=>gv.landkreis_id===kvLK)
+    : Object.entries(gebietsverbaende);
+  list.innerHTML = sichtbar.sort((a,b)=>a[1].name.localeCompare(b[1].name)).map(([k, gv]) => {
+    // Prüfe ob dieser GV schon einen Verwalter hat
+    const hatVerwalter = allUsers.find(u => u.rolle === 'verwalter' && (u.verwaltete_regionen||[]).some(rId => {
+      const reg = regionen[rId]; return reg && reg.gebietsverband_id === k;
+    }));
+    const hint = hatVerwalter ? `<span style="font-size:.7rem;color:var(--text4);margin-left:4px">(${hatVerwalter.name})</span>` : '';
     return `<label style="display:flex;align-items:center;gap:6px;font-size:.8rem;cursor:pointer">
-      <input type="checkbox" id="invReg_${k}" value="${k}">
-      <span>${r.name}${hint}</span>
+      <input type="checkbox" id="invGV_${k}" value="${k}">
+      <span>${gv.name}${hint}</span>
     </label>`;
   }).join('');
 }
 
-// Rollen-Dropdown → Regionen-Auswahl nur bei Verwalter
+// Rollen-Dropdown → passende Auswahl je nach Rolle
 document.addEventListener('DOMContentLoaded', () => {
   document.body.addEventListener('change', e => {
     if (e.target.id === 'inviteRolle') {
       const v = e.target.value;
+      // GV-Checkboxen für Gebietsverwalter
       document.getElementById('inviteRegionenWrap').style.display = v === 'verwalter' ? 'block' : 'none';
+      // Landkreis-Dropdown für Kreisverwalter
       document.getElementById('inviteLandkreisWrap').style.display = v === 'kreisverwalter' ? 'block' : 'none';
-      // GV-Dropdown für Verteiler anzeigen
+      // GV-Dropdown für Verteiler (Einzelauswahl)
       const showGV = v === 'verteiler';
       document.getElementById('inviteGVWrap').style.display = showGV ? 'block' : 'none';
       if (showGV) {
         const isKV = curRole === 'kreisverwalter';
         const isGVI = curRole === 'verwalter';
         const kvLK = currentProfile?.verwalteter_landkreis;
-        // GV: nur eigene Gebietsverbände anzeigen
         const meineGVIds = isGVI ? (function(){ const s=new Set(); (currentProfile?.verwaltete_regionen||[]).forEach(rId=>{const reg=regionen[rId];if(reg)s.add(reg.gebietsverband_id);}); return s; })() : null;
         const gvOpts = Object.entries(gebietsverbaende)
           .filter(([id,gv]) => {
@@ -1922,6 +1935,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const sel = document.getElementById('inviteLandkreis');
         sel.innerHTML = Object.entries(landkreise).map(([id,lk]) => `<option value="${id}">${lk.name}</option>`).join('');
       }
+      if (v === 'verwalter') {
+        renderInviteRegionen();
+      }
     }
   });
 });
@@ -1936,22 +1952,32 @@ async function sendInvite(channel) {
   if (!email) { statusEl.style.color = 'var(--red)'; statusEl.textContent = '⚠️ Bitte E-Mail eingeben'; return; }
   if (!name)  { statusEl.style.color = 'var(--red)'; statusEl.textContent = '⚠️ Bitte Name eingeben'; return; }
   if (curRole === 'kreisverwalter' && rolle === 'admin') { statusEl.style.color = 'var(--red)'; statusEl.textContent = '⚠️ Keine Berechtigung: Admin-Rolle kann nur von Admins vergeben werden'; return; }
+  if (rolle === 'verwalter' && Object.keys(gebietsverbaende).filter(k => document.getElementById(`invGV_${k}`)?.checked).length === 0) {
+    statusEl.style.color = 'var(--red)'; statusEl.textContent = '⚠️ Bitte mindestens einen Gebietsverband auswählen'; return;
+  }
   if ((channel === 'whatsapp' || channel === 'telegram') && !telefon) {
     statusEl.style.color = 'var(--red)';
     statusEl.textContent = `⚠️ Bitte Telefonnummer eingeben für ${channel === 'whatsapp' ? 'WhatsApp' : 'Telegram'}`;
     return;
   }
 
-  const verwaltete_regionen = rolle === 'verwalter'
-    ? Object.keys(regionen).filter(k => document.getElementById(`invReg_${k}`)?.checked)
-    : [];
+  // Für Gebietsverwalter: GV-Checkboxen lesen → Regionen aus diesen GVs ableiten
+  let verwaltete_regionen = [];
+  let verwaltete_gv_ids = [];
+  if (rolle === 'verwalter') {
+    verwaltete_gv_ids = Object.keys(gebietsverbaende).filter(k => document.getElementById(`invGV_${k}`)?.checked);
+    // Alle Regionen ableiten die zu den gewählten GVs gehören
+    verwaltete_regionen = Object.entries(regionen)
+      .filter(([,r]) => verwaltete_gv_ids.includes(r.gebietsverband_id))
+      .map(([k]) => k);
+  }
   const verwalteter_landkreis = rolle === 'kreisverwalter'
     ? document.getElementById('inviteLandkreis')?.value || null
     : null;
   const gebietsverband_id = rolle !== 'admin'
     ? (rolle === 'verteiler' ? document.getElementById('inviteGV')?.value || null
-      : rolle === 'verwalter' && verwaltete_regionen.length > 0
-        ? regionen[verwaltete_regionen[0]]?.gebietsverband_id || null
+      : rolle === 'verwalter' && verwaltete_gv_ids.length > 0
+        ? verwaltete_gv_ids[0]
         : rolle === 'kreisverwalter' && verwalteter_landkreis
           ? Object.entries(gebietsverbaende).find(([,gv])=>gv.landkreis_id===verwalteter_landkreis)?.[0] || null
           : null)
@@ -1989,7 +2015,7 @@ async function sendInvite(channel) {
       if (telefon) upd.telefon = telefon;
       if (rolle === 'verwalter' && verwaltete_regionen.length > 0) {
         upd.verwaltete_regionen = verwaltete_regionen;
-        upd.verwaltete_gebietsverbaende = verwaltete_regionen;
+        upd.verwaltete_gebietsverbaende = verwaltete_gv_ids;
       }
       if (rolle === 'kreisverwalter' && verwalteter_landkreis) {
         upd.verwalteter_landkreis = verwalteter_landkreis;
@@ -3027,9 +3053,9 @@ function renderGrenzen(){
   gemeinden.forEach(g=>{
     const poly=L.polyline(g.coords,{
       color:'#1565c0',
-      weight:1.5,
-      opacity:0.4,
-      dashArray:'5,5',
+      weight:2.5,
+      opacity:0.5,
+      dashArray:'6,4',
       fill:false,
       interactive:true
     });
@@ -3041,9 +3067,9 @@ function renderGrenzen(){
   vgs.forEach(g=>{
     const poly=L.polyline(g.coords,{
       color:'#2e7d32',
-      weight:2,
-      opacity:0.6,
-      dashArray:'8,4',
+      weight:3.5,
+      opacity:0.7,
+      dashArray:'10,5',
       fill:false,
       interactive:true
     });
@@ -3055,8 +3081,8 @@ function renderGrenzen(){
   landkreiseG.forEach(g=>{
     const poly=L.polyline(g.coords,{
       color:'#d32f2f',
-      weight:4,
-      opacity:0.85,
+      weight:5,
+      opacity:0.9,
       dashArray:'',
       fill:false,
       interactive:true
