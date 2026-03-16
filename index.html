@@ -3,8 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="theme-color" content="#f2f2f7">
+<meta name="theme-color" content="#009ee0">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="FlyerOrg">
+<meta name="application-name" content="FlyerOrg">
+<meta name="description" content="Verwaltungstool für Flyerverteilungen – AfD Thüringen">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 <title>FlyerOrg – AfD Thüringen</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -366,6 +373,10 @@ textarea{min-height:68px}
         <label class="login-label">Passwort</label>
         <input class="login-input" type="password" id="regPassword" placeholder="Mind. 6 Zeichen" autocomplete="new-password">
       </div>
+      <label style="display:flex;align-items:flex-start;gap:8px;font-size:.72rem;color:var(--text2);cursor:pointer;margin:4px 0 8px;line-height:1.4">
+        <input type="checkbox" id="regDatenschutz" style="margin-top:2px;flex-shrink:0">
+        <span>Ich stimme der <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:var(--blue)">Datenschutzerklärung</a> zu und bin mit der Verarbeitung meiner Daten einverstanden.</span>
+      </label>
       <button class="login-btn" id="regBtn" onclick="doRegister()" style="background:var(--green)">Registrieren</button>
       <div id="regStatus" style="font-size:.78rem;margin-top:6px;min-height:18px;text-align:center"></div>
       <div style="text-align:center;margin-top:8px">
@@ -559,20 +570,50 @@ textarea{min-height:68px}
 </div>
 
 <div class="toast" id="toast"></div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v96 · <a href="#" onclick="document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v97 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this)this.classList.remove('open')">
-  <div class="modal" style="max-width:380px">
+  <div class="modal" style="max-width:420px;max-height:85vh;overflow-y:auto">
     <div class="m-handle"></div>
-    <div class="m-title">Impressum</div>
-    <div style="font-size:.82rem;line-height:1.6;color:var(--text2)">
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button id="impTabImp" onclick="showImpTab('imp')" style="flex:1;padding:6px 0;font-size:.75rem;font-weight:600;border:none;border-radius:var(--r8);cursor:pointer;background:var(--blue);color:white">Impressum</button>
+      <button id="impTabDs" onclick="showImpTab('ds')" style="flex:1;padding:6px 0;font-size:.75rem;font-weight:600;border:none;border-radius:var(--r8);cursor:pointer;background:var(--surface2);color:var(--text3)">Datenschutz</button>
+    </div>
+    <div id="impContentImp" style="font-size:.82rem;line-height:1.6;color:var(--text2)">
       <strong>FlyerOrg</strong> – Verwaltungstool für Flyerverteilungen<br><br>
       <strong>Herausgeber</strong><br>
       AfD Kreisverband Landkreis Greiz<br><br>
       <strong>Kontakt &amp; Verbesserungsvorschläge</strong><br>
       <a href="mailto:vorstand@afd-greiz.de" style="color:var(--blue)">vorstand@afd-greiz.de</a><br><br>
       <span style="font-size:.72rem;color:var(--text4)">Wir freuen uns über Feedback und Ideen zur Weiterentwicklung der App.</span>
+    </div>
+    <div id="impContentDs" style="display:none;font-size:.78rem;line-height:1.6;color:var(--text2)">
+      <strong style="font-size:.88rem">Datenschutzerklärung</strong><br><br>
+
+      <strong>1. Verantwortlicher</strong><br>
+      AfD Kreisverband Landkreis Greiz<br>
+      E-Mail: <a href="mailto:vorstand@afd-greiz.de" style="color:var(--blue)">vorstand@afd-greiz.de</a><br><br>
+
+      <strong>2. Welche Daten wir verarbeiten</strong><br>
+      Bei Registrierung und Nutzung werden verarbeitet: Name, E-Mail-Adresse, Telefonnummer (optional), Rolle und Gebietszuordnung innerhalb der App sowie Aktivitätsprotokolle (Logbuch).<br><br>
+
+      <strong>3. Zweck der Verarbeitung</strong><br>
+      Die Daten dienen ausschließlich der Organisation und Koordination von Flyerverteilungen innerhalb des Kreisverbands. Rechtsgrundlage ist Art. 6 Abs. 1 lit. a DSGVO (Einwilligung bei Registrierung).<br><br>
+
+      <strong>4. Speicherung und Hosting</strong><br>
+      Die Daten werden bei Supabase (Cloud-Infrastruktur, Server in der EU) gespeichert. Die Webapp wird über GitHub Pages bereitgestellt. Es werden keine Daten an Dritte weitergegeben.<br><br>
+
+      <strong>5. Deine Rechte</strong><br>
+      Du hast das Recht auf Auskunft, Berichtigung, Löschung und Datenübertragbarkeit. Wende dich dazu an den Verantwortlichen (siehe oben). Du kannst deine Einwilligung jederzeit widerrufen — schreibe dazu eine E-Mail an den Verantwortlichen.<br><br>
+
+      <strong>6. Löschung</strong><br>
+      Dein Account und alle zugehörigen Daten werden auf Anfrage oder bei Austritt gelöscht. Logbuch-Einträge werden anonymisiert.<br><br>
+
+      <strong>7. Cookies &amp; Tracking</strong><br>
+      FlyerOrg verwendet keine Cookies, kein Tracking und keine Analyse-Tools. Es werden ausschließlich technisch notwendige Sitzungsdaten im Browser gespeichert.<br><br>
+
+      <span style="font-size:.68rem;color:var(--text4)">Stand: März 2026</span>
     </div>
     <div class="m-actions" style="margin-top:12px">
       <button class="btn btn-g" onclick="document.getElementById('impressumModalOv').classList.remove('open')">Schließen</button>
@@ -905,6 +946,7 @@ async function doRegister() {
   if (!name) { status.style.color='var(--red)'; status.textContent='⚠️ Bitte Name eingeben'; return; }
   if (!email) { status.style.color='var(--red)'; status.textContent='⚠️ Bitte E-Mail eingeben'; return; }
   if (!pass || pass.length<6) { status.style.color='var(--red)'; status.textContent='⚠️ Passwort muss mind. 6 Zeichen haben'; return; }
+  if (!document.getElementById('regDatenschutz')?.checked) { status.style.color='var(--red)'; status.textContent='⚠️ Bitte der Datenschutzerklärung zustimmen'; return; }
 
   btn.disabled = true;
   status.style.color='var(--text3)';
@@ -1758,8 +1800,9 @@ function umpToggle(arrow){
 async function reassignUserGV(userId,newGvId){
   const u=allUsers.find(u=>u.id===userId);
   if(!u)return;
-  const {error}=await sb.from('user_profiles').update({gebietsverband_id:newGvId||null}).eq('id',userId);
+  const {data,error,count}=await sb.from('user_profiles').update({gebietsverband_id:newGvId||null}).eq('id',userId).select();
   if(error){toast('⚠️ Fehler: '+(error.message||error.code));return;}
+  if(!data||data.length===0){toast('⚠️ Keine Berechtigung — RLS-Policy blockiert das Update. Bitte migration_v96.sql ausführen.');return;}
   u.gebietsverband_id=newGvId||null;
   const gvName=newGvId&&gebietsverbaende[newGvId]?gebietsverbaende[newGvId].name:'(keiner)';
   logAction('zuweisung',`GV-Zuordnung geändert: ${u.name} → ${gvName}`);
@@ -1777,13 +1820,14 @@ async function changeRole(userId, newRolle) {
     const ziel = allUsers.find(u => u.id === userId);
     if (ziel?.rolle === 'admin') { toast('⚠️ Keine Berechtigung: Admins können nur von Admins geändert werden'); renderUserList(); return; }
   }
-  const { error } = await sb.from('user_profiles').update({ rolle: newRolle }).eq('id', userId);
+  const { data, error } = await sb.from('user_profiles').update({ rolle: newRolle }).eq('id', userId).select();
   if (error) {
     toast('⚠️ Fehler: ' + (error.message || error.code));
     console.error('changeRole error:', error);
     renderUserList(); // Dropdown zurücksetzen
     return;
   }
+  if (!data || data.length === 0) { toast('⚠️ Keine Berechtigung — bitte migration_v96.sql ausführen'); renderUserList(); return; }
   // Lokal aktualisieren
   const u = allUsers.find(u => u.id === userId);
   if (u) u.rolle = newRolle;
@@ -5352,6 +5396,23 @@ function appConfirm(title, msg, okText='OK', cancelText='Abbrechen'){
     document.getElementById('appConfirmOk').onclick=()=>{ov.classList.remove('open');resolve(true);};
     document.getElementById('appConfirmCancel').onclick=()=>{ov.classList.remove('open');resolve(false);};
     ov.onclick=(e)=>{if(e.target===ov){ov.classList.remove('open');resolve(false);}};
+  });
+}
+
+// Impressum/Datenschutz Tab-Umschaltung
+function showImpTab(tab) {
+  document.getElementById('impContentImp').style.display = tab === 'imp' ? '' : 'none';
+  document.getElementById('impContentDs').style.display = tab === 'ds' ? '' : 'none';
+  document.getElementById('impTabImp').style.background = tab === 'imp' ? 'var(--blue)' : 'var(--surface2)';
+  document.getElementById('impTabImp').style.color = tab === 'imp' ? 'white' : 'var(--text3)';
+  document.getElementById('impTabDs').style.background = tab === 'ds' ? 'var(--blue)' : 'var(--surface2)';
+  document.getElementById('impTabDs').style.color = tab === 'ds' ? 'white' : 'var(--text3)';
+}
+
+// PWA: Service Worker registrieren
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(err => console.log('SW:', err));
   });
 }
 </script>
