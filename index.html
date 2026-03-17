@@ -74,6 +74,15 @@ header{height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturate(18
 .role-sw{display:flex;background:var(--surface3);border-radius:8px;padding:2px;gap:2px}
 .role-btn{font-size:.65rem;font-weight:500;padding:4px 8px;border-radius:6px;border:none;background:transparent;color:var(--text3);cursor:pointer;transition:all .15s;white-space:nowrap}
 .role-btn.active{background:var(--surface);color:var(--text);box-shadow:var(--sh-sm)}
+.mode-toggle{display:flex;background:var(--surface3);border-radius:8px;padding:2px;gap:2px;margin-bottom:2px}
+.mode-btn{font-size:.65rem;font-weight:600;padding:4px 10px;border-radius:6px;border:none;background:transparent;color:var(--text3);cursor:pointer;transition:all .15s;white-space:nowrap;font-family:inherit}
+.mode-btn.active{background:var(--surface);color:var(--text);box-shadow:var(--sh-sm)}
+.mode-btn.active[id="modePlakat"]{background:var(--blue);color:#fff}
+.plakat-chip{display:inline-block;padding:2px 8px;border-radius:10px;font-size:.68rem;font-weight:600}
+.plakat-chip.c-haengt{background:rgba(52,199,89,.12);color:var(--green)}
+.plakat-chip.c-abgehaengt{background:rgba(174,174,178,.15);color:#8e8e93}
+.plakat-chip.c-zerstoert{background:rgba(255,59,48,.12);color:var(--red)}
+.plakat-chip.c-ersetzt{background:rgba(0,158,224,.12);color:var(--blue)}
 
 .user-pill{display:flex;align-items:center;gap:6px;background:var(--surface3);border-radius:20px;padding:4px 10px 4px 4px;cursor:pointer;transition:background .15s}
 .user-pill:hover{background:#d1d1d6}
@@ -416,6 +425,10 @@ textarea{min-height:68px}
   </div>
   <div class="h-center">
     <div class="h-title">FlyerOrg</div>
+    <div class="mode-toggle" id="modeToggle" style="display:none">
+      <button class="mode-btn active" id="modeFlyer" onclick="switchMode('flyer')">📦 Flyer</button>
+      <button class="mode-btn" id="modePlakat" onclick="switchMode('plakate')">📌 Plakate</button>
+    </div>
     <select class="kampagne-select" id="kampagneSelect">
       <option value="">Kampagne wählen…</option>
     </select>
@@ -498,6 +511,13 @@ textarea{min-height:68px}
       <div class="leg-row"><div class="leg-dot" style="background:#aeaeb2"></div>Nicht zugestellt</div>
       <div class="leg-row"><div class="leg-dot" style="background:#ff9500"></div>Zugestellt</div>
       <div class="leg-row"><div class="leg-dot" style="background:#42a5f5"></div>Verteilt</div>
+      <div id="legendPlakat" style="display:none">
+        <div class="leg-title" style="margin-top:6px">Plakat-Status</div>
+        <div class="leg-row"><div class="leg-dot" style="background:#34c759"></div>Hängt</div>
+        <div class="leg-row"><div class="leg-dot" style="background:#42a5f5"></div>Ersetzt</div>
+        <div class="leg-row"><div class="leg-dot" style="background:#aeaeb2"></div>Abgehängt</div>
+        <div class="leg-row"><div class="leg-dot" style="background:#ff3b30"></div>Zerstört</div>
+      </div>
       <hr style="border:none;border-top:1px solid #e0e0e0;margin:6px 0">
       <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:.7rem">
         <input type="checkbox" id="toggleGrenzen" checked onchange="toggleVerwaltungsgrenzen(this.checked)">
@@ -569,6 +589,37 @@ textarea{min-height:68px}
   </div>
 </div>
 
+<!-- PLAKAT ERSTELLEN MODAL -->
+<div class="modal-ov" id="plakatModalOv" onclick="if(event.target===this)closePlakatModal()">
+  <div class="modal" style="max-width:340px">
+    <div class="m-handle"></div>
+    <div class="m-title">📌 Plakat platzieren</div>
+    <input type="hidden" id="plakatLat">
+    <input type="hidden" id="plakatLng">
+    <input type="hidden" id="plakatGebietId">
+    <div style="display:grid;gap:10px;margin-bottom:14px">
+      <div style="font-size:.75rem;color:var(--text3)">📍 Gebiet: <strong id="plakatGebietName" style="color:var(--text)">–</strong></div>
+      <div style="font-size:.7rem;color:var(--text4)" id="plakatCoordInfo">–</div>
+    </div>
+    <div class="m-foot">
+      <button class="btn btn-g" onclick="closePlakatModal()">Abbrechen</button>
+      <button class="btn btn-p" onclick="savePlakatMarker()">📌 Platzieren</button>
+    </div>
+  </div>
+</div>
+
+<!-- PLAKAT DETAIL MODAL -->
+<div class="modal-ov" id="plakatDetailOv" onclick="if(event.target===this)closePlakatDetail()">
+  <div class="modal" style="max-width:380px">
+    <div class="m-handle"></div>
+    <div class="m-title" id="plakatDetailTitle">📌 Plakat-Details</div>
+    <div id="plakatDetailBody"></div>
+    <div class="m-foot">
+      <button class="btn btn-g" onclick="closePlakatDetail()">Schließen</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <!-- PWA INSTALL BANNER -->
@@ -585,7 +636,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v97 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v99 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this)this.classList.remove('open')">
@@ -839,6 +890,14 @@ textarea{min-height:68px}
     <div style="display:flex;flex-direction:column;gap:7px">
       <input type="text" id="newKampName" placeholder="Name der Kampagne">
       <input type="text" id="newKampBeschr" placeholder="Beschreibung (optional)">
+      <div style="display:flex;flex-direction:column;gap:2px">
+        <label style="font-size:.65rem;font-weight:600;color:var(--text3)">Kampagnen-Typ</label>
+        <select id="newKampTyp" style="font-size:.75rem" onchange="toggleAbhaengeDeadline()">
+          <option value="flyer">📦 Nur Flyer</option>
+          <option value="plakate">📌 Nur Plakate</option>
+          <option value="beides">📦📌 Flyer + Plakate</option>
+        </select>
+      </div>
       <div style="display:flex;gap:6px">
         <div style="flex:1;display:flex;flex-direction:column;gap:2px">
           <label style="font-size:.65rem;font-weight:600;color:var(--text3)">Optimaler Verteilzeitraum</label>
@@ -852,6 +911,10 @@ textarea{min-height:68px}
       <div style="display:flex;flex-direction:column;gap:2px">
         <label style="font-size:.65rem;font-weight:600;color:var(--text3)">Spätester Zustellzeitpunkt</label>
         <input type="date" id="newKampDeadline" style="font-size:.75rem">
+      </div>
+      <div id="abhaengeDeadlineRow" style="display:none;flex-direction:column;gap:2px">
+        <label style="font-size:.65rem;font-weight:600;color:var(--text3)">Plakate abhängen bis</label>
+        <input type="date" id="newKampAbhaengeDeadline" style="font-size:.75rem">
       </div>
       <div style="display:flex;flex-direction:column;gap:2px">
         <label style="font-size:.65rem;font-weight:600;color:var(--text3)">Geltungsbereiche</label>
@@ -1293,6 +1356,7 @@ function renderKampagnenDropdown() {
     if (selected) {
       curKampagne = selected;
       toast(`📋 ${selected.name}`);
+      updateModeForKampagne();
       await loadGebieteForKampagne(selected.id);
     }
   };
@@ -1388,7 +1452,15 @@ function renderKampagnenList() {
       const typLabel = {landkreis:'LK',gebietsverband:'GV',region:'Reg.'}[k.bereich_typ] || k.bereich_typ;
       bereichInfo = `🗺 ${typLabel}: ${k.bereich_ids.length}`;
     }
-    const metaLine = [k.ist_basis?'⭐ Basis':'', zeitInfo, bereichInfo].filter(Boolean).join(' · ');
+    // Typ-Badge
+    const typLabels = {flyer:'📦 Flyer', plakate:'📌 Plakate', beides:'📦📌 Beides'};
+    const typBadge = k.typ && k.typ !== 'flyer' ? (typLabels[k.typ]||'') : '';
+    // Abhänge-Deadline
+    if (k.abhaenge_deadline && (k.typ==='plakate'||k.typ==='beides')) {
+      const adl = new Date(k.abhaenge_deadline).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'2-digit'});
+      zeitInfo += (zeitInfo ? ' · ' : '') + `📌 abhängen bis ${adl}`;
+    }
+    const metaLine = [k.ist_basis?'⭐ Basis':'', typBadge, zeitInfo, bereichInfo].filter(Boolean).join(' · ');
     return `<div style="display:flex;align-items:center;gap:6px;padding:8px 0;border-bottom:1px solid var(--sep)">
       <div style="flex:1">
         <div style="font-size:.85rem;font-weight:500">${k.name}</div>
@@ -1454,12 +1526,20 @@ function resetKampForm() {
   document.getElementById('editKampagneId').value = '';
   document.getElementById('newKampName').value = '';
   document.getElementById('newKampBeschr').value = '';
+  document.getElementById('newKampTyp').value = 'flyer';
   document.getElementById('newKampVerteilVon').value = '';
   document.getElementById('newKampVerteilBis').value = '';
   document.getElementById('newKampDeadline').value = '';
+  document.getElementById('newKampAbhaengeDeadline').value = '';
   document.getElementById('kampBereicheContainer').innerHTML = '';
   document.getElementById('kampFormTitle').textContent = 'Neue Kampagne';
   document.getElementById('kampSaveBtn').textContent = 'Erstellen';
+  toggleAbhaengeDeadline();
+}
+function toggleAbhaengeDeadline() {
+  const typ = document.getElementById('newKampTyp').value;
+  const row = document.getElementById('abhaengeDeadlineRow');
+  row.style.display = (typ === 'plakate' || typ === 'beides') ? 'flex' : 'none';
 }
 
 function editKampagne(id) {
@@ -1468,9 +1548,12 @@ function editKampagne(id) {
   document.getElementById('editKampagneId').value = k.id;
   document.getElementById('newKampName').value = k.name || '';
   document.getElementById('newKampBeschr').value = k.beschreibung || '';
+  document.getElementById('newKampTyp').value = k.typ || 'flyer';
   document.getElementById('newKampVerteilVon').value = k.verteil_von || '';
   document.getElementById('newKampVerteilBis').value = k.verteil_bis || '';
   document.getElementById('newKampDeadline').value = k.deadline || '';
+  document.getElementById('newKampAbhaengeDeadline').value = k.abhaenge_deadline || '';
+  toggleAbhaengeDeadline();
   document.getElementById('kampFormTitle').textContent = `✏️ „${k.name}" bearbeiten`;
   document.getElementById('kampSaveBtn').textContent = 'Speichern';
   // Bereiche laden
@@ -1486,17 +1569,21 @@ async function saveKampagne() {
   const beschr = document.getElementById('newKampBeschr').value.trim();
   if (!name) { toast('⚠️ Bitte Namen eingeben'); return; }
 
+  const typ = document.getElementById('newKampTyp').value || 'flyer';
   const verteilVon = document.getElementById('newKampVerteilVon').value || null;
   const verteilBis = document.getElementById('newKampVerteilBis').value || null;
   const deadline = document.getElementById('newKampDeadline').value || null;
+  const abhaengeDeadline = document.getElementById('newKampAbhaengeDeadline').value || null;
   const bereichItems = getKampBereiche();
 
   const kampData = {
     name,
     beschreibung: beschr,
+    typ,
     verteil_von: verteilVon,
     verteil_bis: verteilBis,
     deadline: deadline,
+    abhaenge_deadline: (typ === 'plakate' || typ === 'beides') ? abhaengeDeadline : null,
     bereich_items: bereichItems.length > 0 ? bereichItems : null
   };
 
@@ -1552,12 +1639,41 @@ async function saveKampagne() {
         } catch(e) { console.warn('Basis-Zuweisungen kopieren fehlgeschlagen:', e); }
       }
       toast(`✅ Kampagne „${name}" erstellt`);
+      // Vorlagen (Fixpunkte) aus vorheriger Plakat-Kampagne übernehmen
+      if((typ==='plakate'||typ==='beides')&&!neueKampagne._local){
+        try{
+          const {data:vorlagen}=await sb.from('plakate').select('*').eq('ist_vorlage',true).neq('kampagne_id',neueKampagne.id);
+          if(vorlagen&&vorlagen.length>0){
+            // Nur einzigartige Positionen (nach lat/lng gerundet)
+            const seen=new Set();
+            const unique=vorlagen.filter(v=>{
+              const key=`${v.lat.toFixed(5)}_${v.lng.toFixed(5)}`;
+              if(seen.has(key)) return false;
+              seen.add(key); return true;
+            });
+            if(unique.length>0){
+              const kopien=unique.map(v=>({
+                kampagne_id:neueKampagne.id,
+                lat:v.lat, lng:v.lng,
+                gebiet_id:v.gebiet_id,
+                status:'haengt',
+                ist_vorlage:true,
+                aufhaenger_id:v.aufhaenger_id,
+                aufhaenger_name:v.aufhaenger_name
+              }));
+              await sb.from('plakate').insert(kopien);
+              toast(`📌 ${unique.length} Vorlagen-Standort${unique.length>1?'e':''} übernommen`);
+            }
+          }
+        }catch(e){console.warn('Vorlagen-Übernahme fehlgeschlagen:',e);}
+      }
     }
   }
 
   resetKampForm();
   renderKampagnenList();
   renderKampagnenDropdown();
+  updateModeForKampagne();
 }
 
 async function deleteKampagne(id) {
@@ -2349,6 +2465,8 @@ async function showApp() {
   }
   // Anfragen-Glocke für alle Rollen (Admin/Verwalter: offene Anfragen, Verteiler: Rückmeldungen)
   document.getElementById('anfragenBtn').style.display = 'inline-block';
+  // Mode-Toggle anzeigen
+  showModeToggle();
   await loadAllUsers();
   await loadKampagnen();
   await loadHierarchy();
@@ -2608,16 +2726,20 @@ function renderAnfragenList() {
       const user = allUsers.find(u => u.id === a.user_id);
       const userName = user ? user.name : 'Unbekannt';
       const datum = new Date(a.created_at).toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
-      const typLabel = a.typ === 'uebernahme' ? '🙋 Übernahme' : a.typ === 'abgabe' ? '🔄 Abgabe' : a.typ === 'zuweisung_anfrage' ? '👤 Zuweisung' : '📦 Stückzahl';
+      const typLabel = a.typ === 'uebernahme' ? '🙋 Übernahme' : a.typ === 'abgabe' ? '🔄 Abgabe' : a.typ === 'zuweisung_anfrage' ? '👤 Zuweisung' : a.typ === 'plakat_abhaengen' ? '📌 Plakat abhängen' : '📦 Stückzahl';
       const beschreibung = a.typ === 'uebernahme'
         ? `🙋 ${userName} möchte dieses Problemgebiet übernehmen`
         : a.typ === 'abgabe'
         ? `🔄 ${userName} möchte dieses Gebiet abgeben`
+        : a.typ === 'plakat_abhaengen'
+        ? `📌 ${userName} braucht Hilfe beim Abhängen`
         : `👤 ${userName} → 📦 <strong>${a.neue_stueckzahl}</strong> Stück`;
       const genehmigtBtn = a.typ === 'uebernahme'
         ? `<button onclick="handleUebernahmeAnfrage('${a.id}','genehmigt','${a.gebiet_id}','${a.user_id}')" style="flex:1;padding:5px;border:none;border-radius:var(--r8);background:var(--green);color:#fff;font-size:.75rem;font-weight:600;cursor:pointer">✓ Genehmigen</button>`
         : a.typ === 'abgabe'
         ? `<button onclick="handleAbgabeAnfrage('${a.id}','genehmigt','${a.gebiet_id}')" style="flex:1;padding:5px;border:none;border-radius:var(--r8);background:var(--green);color:#fff;font-size:.75rem;font-weight:600;cursor:pointer">✓ Genehmigen</button>`
+        : a.typ === 'plakat_abhaengen'
+        ? `<button onclick="handlePlakatHilfeAnfrage('${a.id}','genehmigt','${a.plakat_id}')" style="flex:1;padding:5px;border:none;border-radius:var(--r8);background:var(--green);color:#fff;font-size:.75rem;font-weight:600;cursor:pointer">✓ Erledigt</button>`
         : `<button onclick="handleAnfrage('${a.id}','genehmigt',${a.neue_stueckzahl},'${a.gebiet_id}')" style="flex:1;padding:5px;border:none;border-radius:var(--r8);background:var(--green);color:#fff;font-size:.75rem;font-weight:600;cursor:pointer">✓ Genehmigen</button>`;
       return `<div style="background:var(--surface2);border-radius:var(--r8);padding:10px;border-left:3px solid var(--orange)">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
@@ -2913,6 +3035,13 @@ function getCoords(rk,i,tot,gid){
 // STATE
 // ============================================================
 let curLK='alle',curGV='alle',curReg='alle',selId=null,curRole='verteiler',layers={},map,mapInited=false;
+
+// ── PLAKAT-MODUL: State ──
+let curMode='flyer'; // 'flyer' oder 'plakate'
+let plakate=[];
+let plakatMarkers={};
+let plakatFilter='alle'; // alle, haengt, abgehaengt, zerstoert, ersetzt
+let selPlakatId=null;
 const scol={offen:{f:'#aeaeb2',s:'#8e8e93'},offen_zugewiesen:{f:'#cfd8dc',s:'#546e7a'},zugeteilt:{f:'#ff9500',s:'#c97800'},fertig:{f:'#42a5f5',s:'#1565c0'},problem:{f:'#ff3b30',s:'#c62828'}};
 function getGebietFarbe(g){if(!g.verteilerId)return scol.problem;return(g.status==='offen'&&g.verteilerId)?scol.offen_zugewiesen:(scol[g.status]||scol.offen);}
 
@@ -2940,6 +3069,8 @@ function initMap(){
   drawPolygons();
   // Gemeindegrenzen standardmäßig laden
   toggleVerwaltungsgrenzen(true);
+  // Plakat Map-Click Handler
+  setupPlakatMapClick();
 }
 
 // ============================================================
@@ -3169,7 +3300,14 @@ function drawPolygons(){
     const col=getGebietFarbe(g);
     const poly=L.polygon(c,{color:col.s,fillColor:col.f,fillOpacity:.35,weight:2}).addTo(map);
     poly.bindPopup(`<div class="popup-name">${g.name}</div><div class="popup-meta">📦 ${g.stueckzahl} · ${sl(g.status)}</div>`);
-    poly.on('click',()=>{selGebiet(g.id);if(window.innerWidth<=768)document.getElementById('sidebar').classList.remove('open')});
+    poly.on('click',(e)=>{
+      if(curMode==='plakate'){
+        // Im Plakat-Modus: Klick an Map weiterleiten für Marker-Platzierung
+        map.fire('click',{latlng:e.latlng,layerPoint:e.layerPoint,containerPoint:e.containerPoint});
+        return;
+      }
+      selGebiet(g.id);if(window.innerWidth<=768)document.getElementById('sidebar').classList.remove('open');
+    });
     poly.on('mouseover',()=>poly.setStyle({fillOpacity:.55}));
     poly.on('mouseout',()=>poly.setStyle({fillOpacity:selId===g.id?.55:.35}));
     layers[g.id]=poly;
@@ -3900,14 +4038,15 @@ function toggleBcDrop(type,isMob){
 function closeBcDrops(){document.querySelectorAll('.bc-drop').forEach(d=>{d.classList.remove('open');d.style.position='';d.style.top='';d.style.left='';d.style.width='';});}
 document.addEventListener('click',e=>{if(!e.target.closest('.bc-item'))closeBcDrops();});
 document.addEventListener('touchend',e=>{if(!e.target.closest('.bc-item'))closeBcDrops();});
-function switchLK(id){curLK=id;const gvs=getFilteredGV();curGV=id!=='alle'&&gvs.length===1?gvs[0][0]:'alle';curReg='alle';selId=null;closeDetail();renderBreadcrumb();renderList();renderStats();drawPolygons();showDrawToolbar();}
-function switchGV(id){curGV=id;if(id!=='alle'){const gv=gebietsverbaende[id];if(gv&&curLK==='alle')curLK=gv.landkreis_id;}const regs=getFilteredReg();curReg=id!=='alle'&&regs.length===1?regs[0][0]:'alle';selId=null;closeDetail();renderBreadcrumb();renderList();renderStats();drawPolygons();showDrawToolbar();}
-function switchReg(id){curReg=id;if(id!=='alle'){const r=regionen[id];if(r){if(curGV==='alle')curGV=r.gebietsverband_id;const gv=gebietsverbaende[r.gebietsverband_id];if(gv&&curLK==='alle')curLK=gv.landkreis_id;}}selId=null;closeDetail();renderBreadcrumb();renderList();renderStats();drawPolygons();showDrawToolbar();}
+function switchLK(id){curLK=id;const gvs=getFilteredGV();curGV=id!=='alle'&&gvs.length===1?gvs[0][0]:'alle';curReg='alle';selId=null;closeDetail();renderBreadcrumb();renderList();renderStats();drawPolygons();showDrawToolbar();if(curMode==='plakate')drawPlakatMarkers();}
+function switchGV(id){curGV=id;if(id!=='alle'){const gv=gebietsverbaende[id];if(gv&&curLK==='alle')curLK=gv.landkreis_id;}const regs=getFilteredReg();curReg=id!=='alle'&&regs.length===1?regs[0][0]:'alle';selId=null;closeDetail();renderBreadcrumb();renderList();renderStats();drawPolygons();showDrawToolbar();if(curMode==='plakate')drawPlakatMarkers();}
+function switchReg(id){curReg=id;if(id!=='alle'){const r=regionen[id];if(r){if(curGV==='alle')curGV=r.gebietsverband_id;const gv=gebietsverbaende[r.gebietsverband_id];if(gv&&curLK==='alle')curLK=gv.landkreis_id;}}selId=null;closeDetail();renderBreadcrumb();renderList();renderStats();drawPolygons();showDrawToolbar();if(curMode==='plakate')drawPlakatMarkers();}
 
 function getAllGebiete(){return Object.values(regionen).flatMap(r=>r.gebiete)}
 let gListFilter='alle';
 function setGFilter(f){gListFilter=f;renderList();}
 function renderList(){
+  if(curMode==='plakate'){renderListPlakate();return;}
   const allGs=getVisibleGebiete();
   // Suchfilter
   const q=(document.getElementById('gebietSearch')?.value||'').toLowerCase().trim();
@@ -3965,6 +4104,10 @@ function renderGCard(g){
 }
 function sl(s){return{offen:'Nicht zugestellt',zugeteilt:'Zugestellt',fertig:'Verteilt ✓'}[s]||s}
 function renderStats(){
+  if(curMode==='plakate'){renderStatsPlakate();return;}
+  // Flyer-Labels zurücksetzen
+  const labels=document.querySelectorAll('.stat-l');
+  if(labels.length>=3){labels[0].textContent='Gesamt';labels[1].textContent='Verteilt';labels[2].textContent='Offen';}
   const gs=getVisibleGebiete();
   const tot=gs.reduce((a,g)=>a+g.stueckzahl,0),
     vert=gs.filter(g=>g.status==='fertig').reduce((a,g)=>a+g.stueckzahl,0),fn=gs.filter(g=>g.status==='fertig').length;
@@ -3986,6 +4129,10 @@ function renderStats(){
 // DETAIL
 // ============================================================
 function selGebiet(id){
+  if(curMode==='plakate'){
+    // In Plakat-Modus: Polygon-Klick ignorieren (Map-Klick platziert Marker)
+    return;
+  }
   selId=id;renderList();
   Object.entries(layers).forEach(([gid,l])=>l.setStyle({fillOpacity:gid===id?.6:.22,weight:gid===id?3:2}));
   openDetail(id);
@@ -5490,6 +5637,482 @@ function showImpTab(tab) {
   document.getElementById('impTabImp').style.color = tab === 'imp' ? 'white' : 'var(--text3)';
   document.getElementById('impTabDs').style.background = tab === 'ds' ? 'var(--blue)' : 'var(--surface2)';
   document.getElementById('impTabDs').style.color = tab === 'ds' ? 'white' : 'var(--text3)';
+}
+
+/// ============================================================
+// PLAKAT-MODUL
+// ============================================================
+
+// ── Mode-Toggle ──
+function switchMode(mode){
+  if(curMode===mode) return;
+  curMode=mode;
+  document.getElementById('modeFlyer').classList.toggle('active',mode==='flyer');
+  document.getElementById('modePlakat').classList.toggle('active',mode==='plakate');
+  // Legend umschalten
+  const legFlyer=document.querySelectorAll('#mapLegend .leg-title, #mapLegend .leg-row');
+  document.getElementById('legendPlakat').style.display=mode==='plakate'?'block':'none';
+  // Sidebar label anpassen
+  const searchEl=document.getElementById('gebietSearch');
+  if(searchEl) searchEl.placeholder=mode==='plakate'?'Plakat suchen…':'Gebiet suchen…';
+  // Close detail
+  closeDetail();
+  selPlakatId=null;
+  if(mode==='plakate'){
+    loadPlakate().then(()=>{ drawPlakatMarkers(); renderList(); renderStats(); });
+  } else {
+    clearPlakatMarkers();
+    renderList(); renderStats(); drawPolygons();
+  }
+}
+
+function showModeToggle(){
+  const typ=curKampagne?.typ||'flyer';
+  const toggle=document.getElementById('modeToggle');
+  // Nur anzeigen wenn Kampagne plakate oder beides unterstützt
+  if(typ==='beides'){
+    toggle.style.display='flex';
+  } else if(typ==='plakate'){
+    toggle.style.display='none';
+    if(curMode!=='plakate') switchMode('plakate');
+  } else {
+    toggle.style.display='none';
+    if(curMode!=='flyer') switchMode('flyer');
+  }
+}
+function updateModeForKampagne(){
+  const typ=curKampagne?.typ||'flyer';
+  if(typ==='flyer'&&curMode==='plakate') switchMode('flyer');
+  if(typ==='plakate'&&curMode==='flyer') switchMode('plakate');
+  showModeToggle();
+}
+
+// ── Plakate laden ──
+async function loadPlakate(){
+  if(!curKampagne?.id){plakate=[];return;}
+  try{
+    const {data,error}=await sb.from('plakate').select('*').eq('kampagne_id',curKampagne.id).order('created_at',{ascending:false});
+    if(!error&&data) plakate=data; else plakate=[];
+  }catch(e){console.warn('loadPlakate:',e);plakate=[];}
+}
+
+// ── Point-in-Polygon (Ray Casting) ──
+function pointInPolygon(lat,lng,polygon){
+  let inside=false;
+  for(let i=0,j=polygon.length-1;i<polygon.length;j=i++){
+    const xi=polygon[i][0],yi=polygon[i][1];
+    const xj=polygon[j][0],yj=polygon[j][1];
+    if((yi>lng)!==(yj>lng)&&lat<(xj-xi)*(lng-yi)/(yj-yi)+xi) inside=!inside;
+  }
+  return inside;
+}
+
+function detectGebietForPoint(lat,lng){
+  for(const r of Object.values(regionen)){
+    for(const g of r.gebiete){
+      const coords=kmlP[g.id];
+      if(coords&&coords.length>=3&&pointInPolygon(lat,lng,coords)) return g.id;
+    }
+  }
+  return null;
+}
+
+// ── Map-Klick für Plakat-Platzierung ──
+function setupPlakatMapClick(){
+  if(!map) return;
+  map.on('click',function(e){
+    if(curMode!=='plakate') return;
+    if(drawMode) return; // Don't interfere with polygon drawing
+    const lat=e.latlng.lat, lng=e.latlng.lng;
+    const gebietId=detectGebietForPoint(lat,lng);
+    openPlakatModal(lat,lng,gebietId);
+  });
+}
+
+function openPlakatModal(lat,lng,gebietId){
+  document.getElementById('plakatLat').value=lat;
+  document.getElementById('plakatLng').value=lng;
+  document.getElementById('plakatGebietId').value=gebietId||'';
+  const gName=gebietId?getG(gebietId)?.name||gebietId:'Außerhalb (kein Gebiet)';
+  document.getElementById('plakatGebietName').textContent=gName;
+  document.getElementById('plakatCoordInfo').textContent=`${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+  document.getElementById('plakatModalOv').classList.add('open');
+}
+
+function closePlakatModal(){
+  document.getElementById('plakatModalOv').classList.remove('open');
+}
+
+async function savePlakatMarker(){
+  const lat=parseFloat(document.getElementById('plakatLat').value);
+  const lng=parseFloat(document.getElementById('plakatLng').value);
+  const gebietId=document.getElementById('plakatGebietId').value||null;
+  if(!curKampagne?.id){toast('⚠️ Keine Kampagne ausgewählt');return;}
+  const obj={
+    kampagne_id:curKampagne.id,
+    lat, lng,
+    gebiet_id:gebietId,
+    status:'haengt',
+    aufhaenger_id:currentUser.id,
+    aufhaenger_name:currentProfile?.name||currentUser.email.split('@')[0],
+    aufgehaengt_am:new Date().toISOString()
+  };
+  const {data,error}=await sb.from('plakate').insert([obj]).select().single();
+  if(!error&&data){
+    plakate.unshift(data);
+    drawPlakatMarkers();
+    renderList();renderStats();
+    toast('✅ Plakat platziert');
+    closePlakatModal();
+  } else {
+    toast('⚠️ Fehler: '+(error?.message||'unbekannt'));
+  }
+}
+
+// ── Marker rendern ──
+function getPlakatIcon(status){
+  const colors={haengt:'#34c759',abgehaengt:'#aeaeb2',zerstoert:'#ff3b30',ersetzt:'#42a5f5'};
+  const c=colors[status]||'#8e8e93';
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28"><circle cx="14" cy="14" r="11" fill="${c}" stroke="#fff" stroke-width="2.5"/></svg>`;
+  return L.icon({iconUrl:'data:image/svg+xml,'+encodeURIComponent(svg),iconSize:[28,28],iconAnchor:[14,14],popupAnchor:[0,-14]});
+}
+
+function drawPlakatMarkers(){
+  clearPlakatMarkers();
+  if(curMode!=='plakate') return;
+  const visible=getVisiblePlakate();
+  visible.forEach(p=>{
+    const marker=L.marker([p.lat,p.lng],{icon:getPlakatIcon(p.status)}).addTo(map);
+    marker.on('click',function(e){
+      L.DomEvent.stopPropagation(e);
+      openPlakatDetailModal(p.id);
+    });
+    plakatMarkers[p.id]=marker;
+  });
+}
+
+function clearPlakatMarkers(){
+  Object.values(plakatMarkers).forEach(m=>map&&map.removeLayer(m));
+  plakatMarkers={};
+}
+
+function getVisiblePlakate(){
+  // Filter like gebiete: by curLK, curGV, curReg
+  return plakate.filter(p=>{
+    if(!p.gebiet_id) return true; // Show markers outside any gebiet always
+    const g=getG(p.gebiet_id);
+    if(!g) return true;
+    // Find region for this gebiet
+    for(const [rk,r] of Object.entries(regionen)){
+      if(r.gebiete.find(gg=>gg.id===p.gebiet_id)){
+        if(curReg!=='alle'&&rk!==curReg) return false;
+        if(curGV!=='alle'&&r.gebietsverband_id!==curGV) return false;
+        const gv=gebietsverbaende[r.gebietsverband_id];
+        if(gv&&curLK!=='alle'&&gv.landkreis_id!==curLK) return false;
+        return true;
+      }
+    }
+    return true;
+  });
+}
+
+// ── Plakat Detail ──
+function openPlakatDetailModal(plakatId){
+  selPlakatId=plakatId;
+  const p=plakate.find(x=>x.id===plakatId);
+  if(!p) return;
+  const gName=p.gebiet_id?(getG(p.gebiet_id)?.name||'Unbekannt'):'Außerhalb';
+  const aufh=p.aufhaenger_name||'?';
+  const abh=p.abhaenger_name||'–';
+  const statusLabels={haengt:'🟢 Hängt',abgehaengt:'⚪ Abgehängt',zerstoert:'🔴 Zerstört/Entfernt',ersetzt:'🔵 Ersetzt'};
+  const sl=statusLabels[p.status]||p.status;
+
+  let btns='';
+  if(p.status==='haengt'||p.status==='ersetzt'){
+    btns+=`<button class="btn btn-p" style="flex:1" onclick="updatePlakat('${p.id}','abgehaengt')">✓ Abhängen</button>`;
+    btns+=`<button class="btn" style="flex:1;background:var(--red);color:#fff" onclick="updatePlakat('${p.id}','zerstoert')">✗ Zerstört</button>`;
+  }
+  if(p.status==='zerstoert'){
+    btns+=`<button class="btn btn-p" style="flex:1" onclick="updatePlakat('${p.id}','ersetzt')">🔄 Ersetzt (neu aufgehängt)</button>`;
+  }
+  if(p.status==='abgehaengt'||p.status==='zerstoert'){
+    btns+=`<button class="btn btn-g" style="flex:1" onclick="updatePlakat('${p.id}','haengt')">↩ Rückgängig (hängt)</button>`;
+  }
+
+  // Vorlage-Toggle (nur für Verwalter+)
+  const canManage=curRole==='admin'||istVerwalterOderKreisverwalter();
+  let vorlageBtn='';
+  if(canManage){
+    vorlageBtn=`<label style="display:flex;align-items:center;gap:6px;font-size:.75rem;cursor:pointer;margin-top:8px">
+      <input type="checkbox" ${p.ist_vorlage?'checked':''} onchange="toggleVorlage('${p.id}',this.checked)">
+      <span>📍 Als Fixpunkt / Vorlage markieren</span>
+    </label>`;
+  }
+
+  // Hilfe-Anfrage Button (wenn haengt/ersetzt und Deadline naht)
+  let hilfeBtn='';
+  if((p.status==='haengt'||p.status==='ersetzt')&&curKampagne?.abhaenge_deadline){
+    const bereitsAngefragt=alleAnfragen.some(a=>a.typ==='plakat_abhaengen'&&a.plakat_id===p.id&&a.status==='offen');
+    if(bereitsAngefragt){
+      hilfeBtn=`<div style="text-align:center;font-size:.72rem;color:var(--text3);margin-top:6px">🆘 Hilfe-Anfrage läuft bereits</div>`;
+    } else {
+      hilfeBtn=`<button class="btn" style="width:100%;margin-top:6px;background:var(--orange);color:#fff;font-size:.75rem;font-weight:600" onclick="sendePlakatHilfeAnfrage('${p.id}')">🆘 Hilfe beim Abhängen anfordern</button>`;
+    }
+  }
+
+  let deleteBtn='';
+  if(canManage||p.aufhaenger_id===currentUser?.id){
+    deleteBtn=`<button class="btn" style="width:100%;margin-top:8px;background:transparent;color:var(--red);border:1px solid var(--red);font-size:.75rem" onclick="deletePlakat('${p.id}')">🗑 Plakat löschen</button>`;
+  }
+
+  // Navigation-Button
+  let naviBtn=`<button class="btn" style="width:100%;margin-top:6px;background:var(--surface3);color:var(--text);font-size:.75rem" onclick="window.open('https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}&travelmode=driving','_blank')">🧭 Navigation starten</button>`;
+
+  document.getElementById('plakatDetailBody').innerHTML=`
+    <div style="display:grid;gap:8px;font-size:.8rem;margin-bottom:14px">
+      <div><strong>Status:</strong> ${sl}${p.ersetzt_count>0?' <span style="font-size:.7rem;color:var(--text3)">('+p.ersetzt_count+'× ersetzt)</span>':''}</div>
+      <div><strong>Gebiet:</strong> ${gName}</div>
+      <div><strong>Aufgehängt:</strong> ${aufh} am ${new Date(p.aufgehaengt_am||p.created_at).toLocaleDateString('de')}</div>
+      ${p.abgehaengt_am?'<div><strong>Abgehängt:</strong> '+abh+' am '+new Date(p.abgehaengt_am).toLocaleDateString('de')+'</div>':''}
+      <div style="font-size:.7rem;color:var(--text4)">📍 ${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}</div>
+    </div>
+    ${btns?'<div style="display:flex;gap:6px;margin-bottom:6px">'+btns+'</div>':''}
+    ${hilfeBtn}
+    ${naviBtn}
+    ${vorlageBtn}
+    ${deleteBtn}
+  `;
+  document.getElementById('plakatDetailOv').classList.add('open');
+}
+
+function closePlakatDetail(){
+  document.getElementById('plakatDetailOv').classList.remove('open');
+  selPlakatId=null;
+}
+
+async function updatePlakat(id,newStatus){
+  const p=plakate.find(x=>x.id===id);
+  if(!p) return;
+  const upd={status:newStatus,updated_at:new Date().toISOString()};
+  if(newStatus==='abgehaengt'){
+    upd.abhaenger_id=currentUser.id;
+    upd.abhaenger_name=currentProfile?.name||currentUser.email.split('@')[0];
+    upd.abgehaengt_am=new Date().toISOString();
+  }
+  if(newStatus==='ersetzt'){
+    upd.ersetzt_count=(p.ersetzt_count||0)+1;
+    upd.abhaenger_id=null;
+    upd.abhaenger_name=null;
+    upd.abgehaengt_am=null;
+  }
+  if(newStatus==='haengt'){
+    upd.abhaenger_id=null;
+    upd.abhaenger_name=null;
+    upd.abgehaengt_am=null;
+  }
+  const {error}=await sb.from('plakate').update(upd).eq('id',id);
+  if(!error){
+    Object.assign(p,upd);
+    drawPlakatMarkers();renderList();renderStats();
+    openPlakatDetailModal(id);
+    toast('✅ Status aktualisiert');
+  } else { toast('⚠️ Fehler: '+error.message); }
+}
+
+async function toggleVorlage(id,checked){
+  const {error}=await sb.from('plakate').update({ist_vorlage:checked}).eq('id',id);
+  if(!error){
+    const p=plakate.find(x=>x.id===id);
+    if(p) p.ist_vorlage=checked;
+    toast(checked?'📍 Als Fixpunkt markiert':'Fixpunkt entfernt');
+  } else { toast('⚠️ Fehler'); }
+}
+
+async function deletePlakat(id){
+  if(!confirm('Plakat wirklich löschen?')) return;
+  const {error}=await sb.from('plakate').delete().eq('id',id);
+  if(!error){
+    plakate=plakate.filter(x=>x.id!==id);
+    drawPlakatMarkers();renderList();renderStats();
+    closePlakatDetail();
+    toast('🗑 Plakat gelöscht');
+  } else { toast('⚠️ Fehler: '+error.message); }
+}
+
+// ── Plakat Hilfe-Anfrage ──
+async function sendePlakatHilfeAnfrage(plakatId){
+  const p=plakate.find(x=>x.id===plakatId);
+  if(!p) return;
+  const gName=p.gebiet_id?(getG(p.gebiet_id)?.name||p.gebiet_id):'Außerhalb';
+  try{
+    // Erst mit plakat_id versuchen, dann ohne (falls Spalte noch nicht existiert)
+    const base={user_id:currentUser.id,gebiet_id:p.gebiet_id||null,typ:'plakat_abhaengen',grund:`📌 Plakat in ${gName} (${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}) — ${currentProfile?.name||'?'} braucht Hilfe beim Abhängen`,status:'offen'};
+    let error;
+    const r1=await sb.from('anfragen').insert({...base,plakat_id:plakatId});
+    if(r1.error){
+      // Fallback ohne plakat_id
+      const r2=await sb.from('anfragen').insert(base);
+      error=r2.error;
+    } else { error=null; }
+    if(error) throw error;
+    toast('🆘 Hilfe-Anfrage gesendet');
+    await loadAnfragen();
+    openPlakatDetailModal(plakatId); // Refresh
+  }catch(e){
+    console.warn('sendePlakatHilfeAnfrage:',e);
+    toast('⚠️ Fehler: '+(e.message||'Unbekannt'));
+  }
+}
+
+async function handlePlakatHilfeAnfrage(anfrageId,entscheidung,plakatId){
+  try{
+    const upd={status:entscheidung,bearbeitet_von:currentUser.id,updated_at:new Date().toISOString()};
+    const {error}=await sb.from('anfragen').update(upd).eq('id',anfrageId);
+    if(error) throw error;
+    if(entscheidung==='genehmigt'&&plakatId){
+      // Plakat als abgehängt markieren
+      await updatePlakat(plakatId,'abgehaengt');
+    }
+    toast(entscheidung==='genehmigt'?'✅ Hilfe-Anfrage genehmigt':'❌ Hilfe-Anfrage abgelehnt');
+    await loadAnfragen();
+    renderAnfragenList();
+  }catch(e){
+    console.warn('handlePlakatHilfeAnfrage:',e);
+    toast('⚠️ Fehler');
+  }
+}
+
+// ── Sidebar-Rendering im Plakat-Modus ──
+function renderListPlakate(){
+  const visible=getVisiblePlakate();
+  const q=(document.getElementById('gebietSearch')?.value||'').toLowerCase().trim();
+  const filtered=q?visible.filter(p=>{
+    const gName=p.gebiet_id?(getG(p.gebiet_id)?.name||''):'außerhalb';
+    return gName.toLowerCase().includes(q)||(p.aufhaenger_name||'').toLowerCase().includes(q);
+  }):visible;
+
+  const counts={alle:filtered.length,haengt:0,abgehaengt:0,zerstoert:0,ersetzt:0};
+  filtered.forEach(p=>{counts[p.status]=(counts[p.status]||0)+1;});
+
+  const fEl=document.getElementById('gebietFilter');
+  if(fEl) fEl.innerHTML=[
+    ['alle','Alle'],['haengt','🟢 Hängt'],['ersetzt','🔵 Ersetzt'],['abgehaengt','⚪ Abgeh.'],['zerstoert','🔴 Zerst.']
+  ].filter(([k])=>k==='alle'||counts[k]>0).map(([k,l])=>
+    `<button class="g-filter-btn${plakatFilter===k?' active':''}" onclick="setPlakatFilter('${k}')">${l}<span class="g-filter-cnt">${counts[k]||0}</span></button>`
+  ).join('');
+
+  let displayed=filtered;
+  if(plakatFilter!=='alle') displayed=filtered.filter(p=>p.status===plakatFilter);
+
+  const listEl=document.getElementById('gebietList');
+  if(!listEl) return;
+
+  // Route-Buttons (nur wenn Plakate vorhanden)
+  let routeHtml='';
+  if(displayed.length>0){
+    const haengtCount=displayed.filter(p=>p.status==='haengt'||p.status==='ersetzt').length;
+    routeHtml=`<div style="display:flex;gap:4px;padding:4px 0;flex-wrap:wrap">
+      ${haengtCount>0?`<button onclick="startPlakatRoute('haengt')" style="flex:1;min-width:100px;padding:4px 8px;border:1px solid var(--green);border-radius:var(--r8);background:rgba(52,199,89,.08);color:var(--green);font-size:.68rem;font-weight:600;cursor:pointer">🧭 Route hängende (${haengtCount})</button>`:''}
+      <button onclick="exportPlakatGPX()" style="flex:0;padding:4px 8px;border:1px solid var(--text4);border-radius:var(--r8);background:transparent;color:var(--text3);font-size:.68rem;cursor:pointer">📥 GPX</button>
+    </div>`;
+  }
+
+  if(displayed.length===0){
+    listEl.innerHTML='<div style="padding:20px;text-align:center;color:var(--text4);font-size:.8rem">Keine Plakate'+(plakate.length===0?'<br><br>Klicke auf die Karte um<br>ein Plakat zu platzieren':'')+'</div>';
+    return;
+  }
+  listEl.innerHTML=routeHtml+displayed.map(p=>{
+    const gName=p.gebiet_id?(getG(p.gebiet_id)?.name||'?'):'Außerhalb';
+    const statusLabels={haengt:'Hängt',abgehaengt:'Abgehängt',zerstoert:'Zerstört',ersetzt:'Ersetzt'};
+    const vorlageIcon=p.ist_vorlage?'📍 ':'';
+    return `<div class="g-card ${selPlakatId===p.id?'sel':''}" onclick="selectPlakat('${p.id}')" style="border-left:3px solid ${({haengt:'#34c759',abgehaengt:'#aeaeb2',zerstoert:'#ff3b30',ersetzt:'#42a5f5'})[p.status]||'#ccc'}">
+      <div class="g-top"><span class="g-name">${vorlageIcon}${gName}</span><span class="plakat-chip c-${p.status}">${statusLabels[p.status]||p.status}</span></div>
+      <div class="g-meta"><span>👤 ${p.aufhaenger_name||'?'}</span><span>${new Date(p.created_at).toLocaleDateString('de')}</span>${p.ersetzt_count>0?'<span>🔄'+p.ersetzt_count+'</span>':''}</div>
+    </div>`;
+  }).join('');
+}
+
+function setPlakatFilter(f){plakatFilter=f;renderList();}
+
+function selectPlakat(id){
+  selPlakatId=id;
+  const p=plakate.find(x=>x.id===id);
+  if(p&&map) map.setView([p.lat,p.lng],16);
+  if(plakatMarkers[id]) plakatMarkers[id].openPopup();
+  openPlakatDetailModal(id);
+  renderList();
+}
+
+function renderStatsPlakate(){
+  const visible=getVisiblePlakate();
+  const tot=visible.length;
+  const haengt=visible.filter(p=>p.status==='haengt'||p.status==='ersetzt').length;
+  const abgeh=visible.filter(p=>p.status==='abgehaengt').length;
+  const zerst=visible.filter(p=>p.status==='zerstoert').length;
+  document.getElementById('statFlyer').textContent=tot;
+  document.getElementById('statVerteilt').textContent=haengt;
+  document.getElementById('statOffen').textContent=abgeh+zerst;
+  // Labels anpassen
+  const labels=document.querySelectorAll('.stat-l');
+  if(labels.length>=3){labels[0].textContent='Gesamt';labels[1].textContent='Hängen';labels[2].textContent='Erledigt';}
+  // Progress: Wie viele sind abgehängt?
+  document.getElementById('progText').textContent=`${abgeh} / ${tot} abgehängt`;
+  document.getElementById('progFill').style.width=(tot?abgeh/tot*100:0)+'%';
+  // Mobile stats
+  const mG=document.getElementById('mobStatGesamt');
+  const mV=document.getElementById('mobStatVerteilt');
+  const mO=document.getElementById('mobStatOffen');
+  if(mG)mG.textContent=tot+' Ges.';
+  if(mV)mV.textContent=haengt+' Hängen';
+  if(mO)mO.textContent=(abgeh+zerst)+' Erledigt';
+}
+
+// ── Plakat-Routen: Google Maps + GPX ──
+function startPlakatRoute(status){
+  // Sammle sichtbare Plakate mit gewünschtem Status
+  let targets=getVisiblePlakate().filter(p=>status==='alle'||(status==='haengt'?(p.status==='haengt'||p.status==='ersetzt'):p.status===status));
+  if(targets.length===0){toast('⚠️ Keine Plakate für Route');return;}
+  if(targets.length<=10){
+    // Google Maps direkt (max 10 Wegpunkte)
+    const waypoints=targets.map(p=>`${p.lat},${p.lng}`);
+    const dest=waypoints.pop();
+    const url=`https://www.google.com/maps/dir/?api=1&destination=${dest}&waypoints=${waypoints.join('|')}&travelmode=driving`;
+    window.open(url,'_blank');
+  } else {
+    // Zu viele für Google Maps — GPX anbieten
+    if(confirm(`${targets.length} Plakate — zu viele für Google Maps (max 10).\n\nGPX-Datei herunterladen stattdessen?`)){
+      exportPlakatGPX(targets);
+    } else {
+      // Nur erste 10 nehmen
+      targets=targets.slice(0,10);
+      const waypoints=targets.map(p=>`${p.lat},${p.lng}`);
+      const dest=waypoints.pop();
+      const url=`https://www.google.com/maps/dir/?api=1&destination=${dest}&waypoints=${waypoints.join('|')}&travelmode=driving`;
+      window.open(url,'_blank');
+    }
+  }
+}
+
+function exportPlakatGPX(targets){
+  if(!targets) targets=getVisiblePlakate().filter(p=>p.status==='haengt'||p.status==='ersetzt');
+  if(targets.length===0){toast('⚠️ Keine Plakate');return;}
+  const kampName=(curKampagne?.name||'Plakate').replace(/[^a-zA-Z0-9äöüÄÖÜß ]/g,'');
+  let gpx=`<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="FlyerOrg" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata><name>${kampName} — Plakat-Route</name><time>${new Date().toISOString()}</time></metadata>
+`;
+  targets.forEach((p,i)=>{
+    const gName=p.gebiet_id?(getG(p.gebiet_id)?.name||'?'):'Außerhalb';
+    gpx+=`  <wpt lat="${p.lat}" lon="${p.lng}"><name>Plakat ${i+1} — ${gName}</name><desc>${p.aufhaenger_name||'?'}, ${p.status}</desc></wpt>\n`;
+  });
+  gpx+=`</gpx>`;
+  const blob=new Blob([gpx],{type:'application/gpx+xml'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`${kampName.replace(/ /g,'_')}_Plakate.gpx`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast(`📥 GPX mit ${targets.length} Plakaten exportiert`);
 }
 
 // PWA: Service Worker registrieren
