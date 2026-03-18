@@ -694,7 +694,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v99 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v100 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this)this.classList.remove('open')">
@@ -3105,6 +3105,7 @@ let plakate=[];
 let plakatMarkers={};
 let plakatFilter='alle'; // alle, haengt, abgehaengt, zerstoert, ersetzt
 let selPlakatId=null;
+let tourActive=false, tourStops=[], tourIdx=0, tourRouteLine=null, tourStopMarkers=[];
 const scol={offen:{f:'#aeaeb2',s:'#8e8e93'},offen_zugewiesen:{f:'#cfd8dc',s:'#546e7a'},zugeteilt:{f:'#ff9500',s:'#c97800'},fertig:{f:'#42a5f5',s:'#1565c0'},problem:{f:'#ff3b30',s:'#c62828'}};
 function getGebietFarbe(g){if(!g.verteilerId)return scol.problem;return(g.status==='offen'&&g.verteilerId)?scol.offen_zugewiesen:(scol[g.status]||scol.offen);}
 
@@ -5729,6 +5730,7 @@ function switchMode(mode){
   if(mode==='plakate'){
     loadPlakate().then(()=>{ drawPlakatMarkers(); renderList(); renderStats(); updateTourFab(); });
   } else {
+    if(tourActive) endTour();
     clearPlakatMarkers();
     renderList(); renderStats(); drawPolygons();
     updateTourFab();
@@ -5939,7 +5941,7 @@ function openPlakatDetailModal(plakatId){
   }
 
   // Navigation-Button
-  let naviBtn=`<button class="btn" style="width:100%;margin-top:6px;background:var(--surface3);color:var(--text);font-size:.75rem" onclick="window.open('https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}&travelmode=driving','_blank')">🧭 Navigation starten</button>`;
+  let naviBtn=`<button class="btn" style="width:100%;margin-top:6px;background:var(--surface3);color:var(--text);font-size:.75rem" onclick="openNavToPoint(${p.lat},${p.lng})">🧭 Navigation starten</button>`;
 
   document.getElementById('plakatDetailBody').innerHTML=`
     <div style="display:grid;gap:8px;font-size:.8rem;margin-bottom:14px">
@@ -6262,29 +6264,149 @@ function updateTourPreview(){
     const abgeh=targets.filter(p=>p.status==='abgehaengt').length;
     el.innerHTML=`<strong>${targets.length}</strong> Plakate`
       +(haengt?` · <span style="color:var(--green)">${haengt} hängen</span>`:'')
-      +(abgeh?` · <span style="color:#8e8e93">${abgeh} abgehängt</span>`:'')
-      +(targets.length>10?`<br><span style="font-size:.7rem;color:var(--text3)">Google Maps max. 10 Wegpunkte — Rest per GPX</span>`:'');
+      +(abgeh?` · <span style="color:#8e8e93">${abgeh} abgehängt</span>`:'');
   }
 }
 
-function startTour(){
+// ── In-App Tour mit OSRM-Routing ──
+function isIOS(){return /iPad|iPhone|iPod/.test(navigator.userAgent)||(/Macintosh/.test(navigator.userAgent)&&'ontouchend' in document);}
+function openNavToPoint(lat,lng){
+  if(isIOS()){
+    window.open(`https://maps.apple.com/?daddr=${lat},${lng}&dirflg=d`,'_blank');
+  } else {
+    window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`,'_blank');
+  }
+}
+
+async function startTour(){
   const targets=getTourPlakate();
   if(targets.length===0){toast('⚠️ Keine Plakate für Route');return;}
   closeTourModal();
-  if(targets.length<=10){
-    const wps=targets.map(p=>`${p.lat},${p.lng}`);
-    const dest=wps.pop();
-    const url=`https://www.google.com/maps/dir/?api=1&destination=${dest}${wps.length?'&waypoints='+wps.join('|'):''}&&travelmode=driving`;
-    window.open(url,'_blank');
-  } else {
-    // Erste 10 in Google Maps, Rest als Hinweis
-    const first10=targets.slice(0,10);
-    const wps=first10.map(p=>`${p.lat},${p.lng}`);
-    const dest=wps.pop();
-    const url=`https://www.google.com/maps/dir/?api=1&destination=${dest}&waypoints=${wps.join('|')}&travelmode=driving`;
-    window.open(url,'_blank');
-    toast(`🧭 Erste 10 von ${targets.length} Plakaten — für alle: GPX exportieren`);
+  tourStops=targets;
+  tourIdx=0;
+  tourActive=true;
+  toast('🧭 Route wird berechnet…');
+  // Route über OSRM berechnen
+  const coords=targets.map(p=>`${p.lng},${p.lat}`).join(';');
+  try{
+    const resp=await fetch(`https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`);
+    const data=await resp.json();
+    if(data.code==='Ok'&&data.routes&&data.routes[0]){
+      const geom=data.routes[0].geometry;
+      // Route auf Karte zeichnen
+      if(tourRouteLine){map.removeLayer(tourRouteLine);}
+      tourRouteLine=L.geoJSON(geom,{style:{color:'#007aff',weight:4,opacity:.7,dashArray:'8 6'}}).addTo(map);
+      // Nummern-Marker für Stops
+      clearTourStopMarkers();
+      targets.forEach((p,i)=>{
+        const icon=L.divIcon({
+          className:'',
+          html:`<div style="background:${i===0?'var(--blue)':'#fff'};color:${i===0?'#fff':'var(--text)'};border:2px solid var(--blue);width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;box-shadow:0 1px 4px rgba(0,0,0,.3)">${i+1}</div>`,
+          iconSize:[24,24],iconAnchor:[12,12]
+        });
+        const m=L.marker([p.lat,p.lng],{icon,zIndexOffset:1000}).addTo(map);
+        m.bindPopup(`<strong>Stopp ${i+1}</strong><br>${p.gebiet_id?getG(p.gebiet_id)?.name||'?':'Außerhalb'}`);
+        tourStopMarkers.push(m);
+      });
+      // Karte auf Route zoomen
+      map.fitBounds(tourRouteLine.getBounds(),{padding:[40,40]});
+      const dist=data.routes[0].distance;
+      const dur=data.routes[0].duration;
+      toast(`🧭 Route: ${(dist/1000).toFixed(1)} km · ca. ${Math.round(dur/60)} Min.`);
+    } else {
+      toast('⚠️ Route konnte nicht berechnet werden');
+      tourActive=false;
+    }
+  }catch(e){
+    console.warn('OSRM routing error:',e);
+    toast('⚠️ Routing-Service nicht erreichbar');
+    tourActive=false;
   }
+  showTourPanel();
+}
+
+function clearTourStopMarkers(){
+  tourStopMarkers.forEach(m=>map.removeLayer(m));
+  tourStopMarkers=[];
+}
+
+function showTourPanel(){
+  // Tour-Steuerung als floating panel unten
+  let panel=document.getElementById('tourPanel');
+  if(!panel){
+    panel=document.createElement('div');
+    panel.id='tourPanel';
+    panel.style.cssText='position:fixed;bottom:12px;left:50%;transform:translateX(-50%);z-index:800;background:var(--surface);border-radius:16px;box-shadow:0 4px 20px rgba(0,0,0,.2);padding:10px 14px;display:flex;flex-direction:column;gap:8px;min-width:280px;max-width:92vw';
+    document.body.appendChild(panel);
+  }
+  if(!tourActive||tourStops.length===0){panel.style.display='none';return;}
+  panel.style.display='flex';
+  const p=tourStops[tourIdx];
+  const gName=p.gebiet_id?(getG(p.gebiet_id)?.name||'?'):'Außerhalb';
+  const statusLabels={haengt:'🟢 Hängt',abgehaengt:'⚪ Abgehängt',zerstoert:'🔴 Zerstört',ersetzt:'🔵 Ersetzt'};
+  panel.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div style="font-size:.72rem;font-weight:600;color:var(--text3)">TOUR — Stopp ${tourIdx+1} / ${tourStops.length}</div>
+      <button onclick="endTour()" style="background:none;border:none;font-size:.85rem;cursor:pointer;color:var(--text3);padding:0 4px">✕</button>
+    </div>
+    <div style="background:var(--surface2);border-radius:var(--r8);padding:8px;display:flex;align-items:center;gap:8px">
+      <div style="background:var(--blue);color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.8rem;font-weight:700;flex-shrink:0">${tourIdx+1}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:.82rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${gName}</div>
+        <div style="font-size:.7rem;color:var(--text3)">${statusLabels[p.status]||p.status} · ${p.aufhaenger_name||'?'}</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:6px">
+      <button onclick="tourPrev()" style="flex:0 0 44px;height:44px;border:1px solid var(--sep);border-radius:var(--r8);background:var(--surface);font-size:1rem;cursor:pointer" ${tourIdx===0?'disabled style="flex:0 0 44px;height:44px;border:1px solid var(--sep);border-radius:var(--r8);background:var(--surface2);font-size:1rem;cursor:default;opacity:.3"':''}>◀</button>
+      <button onclick="navigateToCurrentStop()" style="flex:1;height:44px;border:none;border-radius:var(--r8);background:var(--blue);color:#fff;font-size:.82rem;font-weight:600;cursor:pointer;font-family:inherit">🧭 Hierhin navigieren</button>
+      <button onclick="tourNext()" style="flex:0 0 44px;height:44px;border:1px solid var(--sep);border-radius:var(--r8);background:var(--surface);font-size:1rem;cursor:pointer" ${tourIdx>=tourStops.length-1?'disabled style="flex:0 0 44px;height:44px;border:1px solid var(--sep);border-radius:var(--r8);background:var(--surface2);font-size:1rem;cursor:default;opacity:.3"':''}>▶</button>
+    </div>
+    <div style="height:3px;background:var(--surface3);border-radius:2px;overflow:hidden">
+      <div style="height:100%;background:var(--blue);width:${((tourIdx+1)/tourStops.length*100).toFixed(0)}%;border-radius:2px;transition:width .3s"></div>
+    </div>
+  `;
+  // Aktuellen Stop-Marker hervorheben
+  tourStopMarkers.forEach((m,i)=>{
+    const p2=tourStops[i];
+    const icon=L.divIcon({
+      className:'',
+      html:`<div style="background:${i===tourIdx?'var(--blue)':'#fff'};color:${i===tourIdx?'#fff':'var(--text)'};border:2px solid var(--blue);width:${i===tourIdx?'30':'24'}px;height:${i===tourIdx?'30':'24'}px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:${i===tourIdx?'.8':'.7'}rem;font-weight:700;box-shadow:0 1px 4px rgba(0,0,0,.3);transition:all .2s">${i+1}</div>`,
+      iconSize:[i===tourIdx?30:24,i===tourIdx?30:24],iconAnchor:[i===tourIdx?15:12,i===tourIdx?15:12]
+    });
+    m.setIcon(icon);
+  });
+}
+
+function navigateToCurrentStop(){
+  if(!tourActive||!tourStops[tourIdx]) return;
+  const p=tourStops[tourIdx];
+  openNavToPoint(p.lat,p.lng);
+}
+
+function tourNext(){
+  if(tourIdx<tourStops.length-1){
+    tourIdx++;
+    map.setView([tourStops[tourIdx].lat,tourStops[tourIdx].lng],16);
+    showTourPanel();
+  }
+}
+
+function tourPrev(){
+  if(tourIdx>0){
+    tourIdx--;
+    map.setView([tourStops[tourIdx].lat,tourStops[tourIdx].lng],16);
+    showTourPanel();
+  }
+}
+
+function endTour(){
+  tourActive=false;
+  tourStops=[];tourIdx=0;
+  if(tourRouteLine){map.removeLayer(tourRouteLine);tourRouteLine=null;}
+  clearTourStopMarkers();
+  const panel=document.getElementById('tourPanel');
+  if(panel) panel.style.display='none';
+  toast('Tour beendet');
 }
 
 function exportTourGPX(){
