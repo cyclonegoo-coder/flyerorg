@@ -83,6 +83,8 @@ header{height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturate(18
 .plakat-chip.c-abgehaengt{background:rgba(174,174,178,.15);color:#8e8e93}
 .plakat-chip.c-zerstoert{background:rgba(255,59,48,.12);color:var(--red)}
 .plakat-chip.c-ersetzt{background:rgba(0,158,224,.12);color:var(--blue)}
+.tour-fab{display:none;position:absolute;bottom:22px;right:10px;z-index:401;height:40px;padding:0 14px;border-radius:20px;border:none;background:var(--blue);color:#fff;font-size:.75rem;font-weight:600;cursor:pointer;box-shadow:var(--sh);align-items:center;gap:5px;font-family:inherit;white-space:nowrap}
+.tour-fab.show{display:flex}
 
 .user-pill{display:flex;align-items:center;gap:6px;background:var(--surface3);border-radius:20px;padding:4px 10px 4px 4px;cursor:pointer;transition:background .15s}
 .user-pill:hover{background:#d1d1d6}
@@ -233,6 +235,8 @@ textarea{min-height:68px}
 .m-handle{width:34px;height:4px;background:var(--surface3);border-radius:2px;margin:0 auto 14px}
 .m-title{font-size:.95rem;font-weight:600;margin-bottom:13px}
 .m-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:13px}
+.m-foot{display:flex;gap:8px;margin-top:14px}
+.m-foot .btn{flex:1;min-height:44px}
 
 /* ── TOAST ── */
 .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(80px);background:rgba(28,28,30,.92);backdrop-filter:blur(12px);color:#fff;padding:9px 17px;border-radius:20px;font-size:.8rem;font-weight:500;z-index:9999;opacity:0;transition:all .3s cubic-bezier(.32,.72,0,1);white-space:nowrap;box-shadow:var(--sh-lg);pointer-events:none}
@@ -270,9 +274,12 @@ textarea{min-height:68px}
   .user-name,.role-badge{display:none}
   .user-pill{padding:4px;border-radius:50%}
   .h-right{gap:4px}
-  .h-center{min-width:0}
+  .h-center{min-width:0;overflow:hidden}
   .h-title{font-size:.78rem}
-  .kampagne-select{max-width:140px;font-size:.65rem}
+  .kampagne-select{max-width:130px;font-size:.65rem}
+  /* Mode toggle compact on mobile */
+  .mode-toggle{margin-bottom:0;padding:1px;gap:1px}
+  .mode-btn{font-size:.58rem;padding:3px 7px}
   /* Step 2: Sidebar stats compact, no progress */
   .prog-wrap{display:none}
   .sb-top{padding:8px 8px 4px}
@@ -300,6 +307,11 @@ textarea{min-height:68px}
   .s-btn{padding:10px 8px;font-size:.75rem;min-height:44px}
   .s-grid{grid-template-columns:1fr 1fr;gap:6px}
   .f-stack .btn{min-height:44px;font-size:.8rem}
+  /* Plakat-spezifisch mobile */
+  #plakatDetailBody .btn{min-height:44px;font-size:.8rem}
+  #plakatDetailBody label{min-height:44px;display:flex;align-items:center}
+  .plakat-chip{padding:3px 10px;font-size:.72rem}
+  .g-card .g-meta{gap:8px}
 }
 @media(min-width:769px){
   .modal-ov{align-items:center;padding:20px}
@@ -460,7 +472,13 @@ textarea{min-height:68px}
 
 <!-- Mobile navigation bar (under header, only on mobile) -->
 <div class="mob-nav" id="mobNav" style="display:none">
-  <div class="mob-nav-bc" id="mobNavBc"></div>
+  <div style="display:flex;align-items:center;gap:6px">
+    <div class="mob-nav-bc" id="mobNavBc" style="flex:1"></div>
+    <div class="mode-toggle" id="modeToggleMob" style="display:none;flex-shrink:0">
+      <button class="mode-btn active" id="modeFlyerMob" onclick="switchMode('flyer')">📦 Flyer</button>
+      <button class="mode-btn" id="modePlakatMob" onclick="switchMode('plakate')">📌 Plakate</button>
+    </div>
+  </div>
   <div class="mob-nav-stats">
     <span class="mob-stat" id="mobStatGesamt" style="color:var(--blue)">–</span>
     <span class="mob-stat" id="mobStatVerteilt" style="color:var(--green)">–</span>
@@ -503,16 +521,19 @@ textarea{min-height:68px}
     </div>
     <div class="draw-info" id="drawInfo"></div>
     <button class="leg-toggle" onclick="toggleLegend()">ℹ️</button>
+    <button class="tour-fab" id="tourFab" onclick="openTourModal()">🧭 Tour planen</button>
     <div class="map-legend" id="mapLegend">
-      <div class="leg-title">Verteiler-Status</div>
-      <div class="leg-row"><div class="leg-dot" style="background:#ff3b30"></div>Verteiler fehlt</div>
-      <div class="leg-row"><div class="leg-dot" style="background:#cfd8dc;border:2px solid #546e7a"></div>Zugewiesen</div>
-      <div class="leg-title" style="margin-top:6px">Verteil-Status</div>
-      <div class="leg-row"><div class="leg-dot" style="background:#aeaeb2"></div>Nicht zugestellt</div>
-      <div class="leg-row"><div class="leg-dot" style="background:#ff9500"></div>Zugestellt</div>
-      <div class="leg-row"><div class="leg-dot" style="background:#42a5f5"></div>Verteilt</div>
+      <div id="legendFlyer">
+        <div class="leg-title">Verteiler-Status</div>
+        <div class="leg-row"><div class="leg-dot" style="background:#ff3b30"></div>Verteiler fehlt</div>
+        <div class="leg-row"><div class="leg-dot" style="background:#cfd8dc;border:2px solid #546e7a"></div>Zugewiesen</div>
+        <div class="leg-title" style="margin-top:6px">Verteil-Status</div>
+        <div class="leg-row"><div class="leg-dot" style="background:#aeaeb2"></div>Nicht zugestellt</div>
+        <div class="leg-row"><div class="leg-dot" style="background:#ff9500"></div>Zugestellt</div>
+        <div class="leg-row"><div class="leg-dot" style="background:#42a5f5"></div>Verteilt</div>
+      </div>
       <div id="legendPlakat" style="display:none">
-        <div class="leg-title" style="margin-top:6px">Plakat-Status</div>
+        <div class="leg-title">Plakat-Status</div>
         <div class="leg-row"><div class="leg-dot" style="background:#34c759"></div>Hängt</div>
         <div class="leg-row"><div class="leg-dot" style="background:#42a5f5"></div>Ersetzt</div>
         <div class="leg-row"><div class="leg-dot" style="background:#aeaeb2"></div>Abgehängt</div>
@@ -616,6 +637,43 @@ textarea{min-height:68px}
     <div id="plakatDetailBody"></div>
     <div class="m-foot">
       <button class="btn btn-g" onclick="closePlakatDetail()">Schließen</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOUR PLANEN MODAL -->
+<div class="modal-ov" id="tourModalOv" onclick="if(event.target===this)closeTourModal()">
+  <div class="modal" style="max-width:400px">
+    <div class="m-handle"></div>
+    <div class="m-title">🧭 Tour planen</div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;flex-direction:column;gap:2px">
+        <label style="font-size:.65rem;font-weight:600;color:var(--text3);text-transform:uppercase">Bereich</label>
+        <select id="tourBereichTyp" style="font-size:.8rem" onchange="updateTourIdOptions()">
+          <option value="alle">Alle sichtbaren</option>
+          <option value="region">Region</option>
+          <option value="gebiet">Einzelnes Gebiet</option>
+        </select>
+      </div>
+      <div id="tourIdRow" style="display:none;flex-direction:column;gap:2px">
+        <label style="font-size:.65rem;font-weight:600;color:var(--text3);text-transform:uppercase" id="tourIdLabel">Auswahl</label>
+        <select id="tourIdSelect" style="font-size:.8rem"></select>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:2px">
+        <label style="font-size:.65rem;font-weight:600;color:var(--text3);text-transform:uppercase">Status-Filter</label>
+        <select id="tourStatusFilter" style="font-size:.8rem" onchange="updateTourPreview()">
+          <option value="haengt">Hängende (aufhängen / ersetzen)</option>
+          <option value="abgehaengt">Abgehängte (noch aufzuhängen)</option>
+          <option value="alle_aktiv">Alle aktiven (hängt + ersetzt + abgehängt)</option>
+          <option value="alle">Alle Plakate</option>
+        </select>
+      </div>
+      <div id="tourPreview" style="font-size:.78rem;color:var(--text2);padding:8px;background:var(--surface2);border-radius:var(--r8);text-align:center">—</div>
+    </div>
+    <div class="m-foot">
+      <button class="btn btn-g" onclick="closeTourModal()">Abbrechen</button>
+      <button class="btn" style="flex:1;background:var(--blue);color:#fff" onclick="startTour()">🧭 Route starten</button>
+      <button class="btn btn-g" onclick="exportTourGPX()" title="GPX-Datei herunterladen">📥</button>
     </div>
   </div>
 </div>
@@ -1646,23 +1704,28 @@ async function saveKampagne() {
           if(vorlagen&&vorlagen.length>0){
             // Nur einzigartige Positionen (nach lat/lng gerundet)
             const seen=new Set();
-            const unique=vorlagen.filter(v=>{
+            let unique=vorlagen.filter(v=>{
               const key=`${v.lat.toFixed(5)}_${v.lng.toFixed(5)}`;
               if(seen.has(key)) return false;
               seen.add(key); return true;
             });
+            // Nach Geltungsbereich filtern (falls gesetzt)
+            const bi=bereichItems.length>0?bereichItems:null;
+            if(bi){
+              unique=unique.filter(v=>!v.gebiet_id||gebietInKampagnenBereich(v.gebiet_id,bi));
+            }
             if(unique.length>0){
               const kopien=unique.map(v=>({
                 kampagne_id:neueKampagne.id,
                 lat:v.lat, lng:v.lng,
                 gebiet_id:v.gebiet_id,
-                status:'haengt',
+                status:'abgehaengt',
                 ist_vorlage:true,
-                aufhaenger_id:v.aufhaenger_id,
-                aufhaenger_name:v.aufhaenger_name
+                aufhaenger_id:null,
+                aufhaenger_name:null
               }));
               await sb.from('plakate').insert(kopien);
-              toast(`📌 ${unique.length} Vorlagen-Standort${unique.length>1?'e':''} übernommen`);
+              toast(`📌 ${unique.length} Vorlagen-Standort${unique.length>1?'e':''} übernommen (als abgehängt)`);
             }
           }
         }catch(e){console.warn('Vorlagen-Übernahme fehlgeschlagen:',e);}
@@ -5649,8 +5712,13 @@ function switchMode(mode){
   curMode=mode;
   document.getElementById('modeFlyer').classList.toggle('active',mode==='flyer');
   document.getElementById('modePlakat').classList.toggle('active',mode==='plakate');
-  // Legend umschalten
-  const legFlyer=document.querySelectorAll('#mapLegend .leg-title, #mapLegend .leg-row');
+  // Sync mobile toggle
+  const fMob=document.getElementById('modeFlyerMob');
+  const pMob=document.getElementById('modePlakatMob');
+  if(fMob) fMob.classList.toggle('active',mode==='flyer');
+  if(pMob) pMob.classList.toggle('active',mode==='plakate');
+  // Legend umschalten: Flyer-Legende aus, Plakat-Legende an (und umgekehrt)
+  document.getElementById('legendFlyer').style.display=mode==='plakate'?'none':'block';
   document.getElementById('legendPlakat').style.display=mode==='plakate'?'block':'none';
   // Sidebar label anpassen
   const searchEl=document.getElementById('gebietSearch');
@@ -5659,24 +5727,29 @@ function switchMode(mode){
   closeDetail();
   selPlakatId=null;
   if(mode==='plakate'){
-    loadPlakate().then(()=>{ drawPlakatMarkers(); renderList(); renderStats(); });
+    loadPlakate().then(()=>{ drawPlakatMarkers(); renderList(); renderStats(); updateTourFab(); });
   } else {
     clearPlakatMarkers();
     renderList(); renderStats(); drawPolygons();
+    updateTourFab();
   }
 }
 
 function showModeToggle(){
   const typ=curKampagne?.typ||'flyer';
   const toggle=document.getElementById('modeToggle');
+  const toggleMob=document.getElementById('modeToggleMob');
   // Nur anzeigen wenn Kampagne plakate oder beides unterstützt
   if(typ==='beides'){
     toggle.style.display='flex';
+    if(toggleMob) toggleMob.style.display='flex';
   } else if(typ==='plakate'){
     toggle.style.display='none';
+    if(toggleMob) toggleMob.style.display='none';
     if(curMode!=='plakate') switchMode('plakate');
   } else {
     toggle.style.display='none';
+    if(toggleMob) toggleMob.style.display='none';
     if(curMode!=='flyer') switchMode('flyer');
   }
 }
@@ -6113,6 +6186,118 @@ function exportPlakatGPX(targets){
   a.click();
   URL.revokeObjectURL(a.href);
   toast(`📥 GPX mit ${targets.length} Plakaten exportiert`);
+}
+
+// ── Tour-Planer ──
+function openTourModal(){
+  updateTourIdOptions();
+  updateTourPreview();
+  document.getElementById('tourModalOv').classList.add('open');
+}
+function closeTourModal(){document.getElementById('tourModalOv').classList.remove('open');}
+
+function updateTourIdOptions(){
+  const typ=document.getElementById('tourBereichTyp').value;
+  const row=document.getElementById('tourIdRow');
+  const sel=document.getElementById('tourIdSelect');
+  const label=document.getElementById('tourIdLabel');
+  if(typ==='alle'){row.style.display='none';updateTourPreview();return;}
+  row.style.display='flex';
+  sel.innerHTML='';
+  if(typ==='region'){
+    label.textContent='Region';
+    // Nur Regionen die im aktuellen LK/GV sichtbar sind
+    for(const [rKey,r] of Object.entries(regionen)){
+      if(curLK){const gvId=r.gebietsverband_id;const lkId=gebietsverbaende[gvId]?.landkreis_id;if(lkId!==curLK)continue;}
+      if(curGV&&r.gebietsverband_id!==curGV)continue;
+      if(curReg&&rKey!==curReg)continue;
+      sel.innerHTML+=`<option value="${rKey}">${r.short||r.name}</option>`;
+    }
+  } else if(typ==='gebiet'){
+    label.textContent='Gebiet';
+    // Alle Gebiete die Plakate haben
+    const gebieteMitPlakaten=new Set(plakate.filter(p=>p.gebiet_id).map(p=>p.gebiet_id));
+    for(const gId of gebieteMitPlakaten){
+      const g=getG(gId);
+      if(g) sel.innerHTML+=`<option value="${gId}">${g.name}</option>`;
+    }
+    if(sel.options.length===0) sel.innerHTML='<option value="">Keine Gebiete mit Plakaten</option>';
+  }
+  updateTourPreview();
+}
+
+function getTourPlakate(){
+  const bereichTyp=document.getElementById('tourBereichTyp').value;
+  const statusFilter=document.getElementById('tourStatusFilter').value;
+  let targets=[...plakate];
+  // Bereichs-Filter
+  if(bereichTyp==='region'){
+    const rKey=document.getElementById('tourIdSelect').value;
+    if(rKey&&regionen[rKey]){
+      const gebietIds=new Set(regionen[rKey].gebiete.map(g=>g.id));
+      targets=targets.filter(p=>p.gebiet_id&&gebietIds.has(p.gebiet_id));
+    }
+  } else if(bereichTyp==='gebiet'){
+    const gId=document.getElementById('tourIdSelect').value;
+    if(gId) targets=targets.filter(p=>p.gebiet_id===gId);
+  } else {
+    // "alle sichtbaren" = getVisiblePlakate
+    targets=getVisiblePlakate();
+  }
+  // Status-Filter
+  if(statusFilter==='haengt') targets=targets.filter(p=>p.status==='haengt'||p.status==='ersetzt');
+  else if(statusFilter==='abgehaengt') targets=targets.filter(p=>p.status==='abgehaengt');
+  else if(statusFilter==='alle_aktiv') targets=targets.filter(p=>p.status!=='zerstoert');
+  // sonst alle
+  return targets;
+}
+
+function updateTourPreview(){
+  const targets=getTourPlakate();
+  const el=document.getElementById('tourPreview');
+  if(targets.length===0){
+    el.innerHTML='<span style="color:var(--text4)">Keine Plakate gefunden</span>';
+  } else {
+    const haengt=targets.filter(p=>p.status==='haengt'||p.status==='ersetzt').length;
+    const abgeh=targets.filter(p=>p.status==='abgehaengt').length;
+    el.innerHTML=`<strong>${targets.length}</strong> Plakate`
+      +(haengt?` · <span style="color:var(--green)">${haengt} hängen</span>`:'')
+      +(abgeh?` · <span style="color:#8e8e93">${abgeh} abgehängt</span>`:'')
+      +(targets.length>10?`<br><span style="font-size:.7rem;color:var(--text3)">Google Maps max. 10 Wegpunkte — Rest per GPX</span>`:'');
+  }
+}
+
+function startTour(){
+  const targets=getTourPlakate();
+  if(targets.length===0){toast('⚠️ Keine Plakate für Route');return;}
+  closeTourModal();
+  if(targets.length<=10){
+    const wps=targets.map(p=>`${p.lat},${p.lng}`);
+    const dest=wps.pop();
+    const url=`https://www.google.com/maps/dir/?api=1&destination=${dest}${wps.length?'&waypoints='+wps.join('|'):''}&&travelmode=driving`;
+    window.open(url,'_blank');
+  } else {
+    // Erste 10 in Google Maps, Rest als Hinweis
+    const first10=targets.slice(0,10);
+    const wps=first10.map(p=>`${p.lat},${p.lng}`);
+    const dest=wps.pop();
+    const url=`https://www.google.com/maps/dir/?api=1&destination=${dest}&waypoints=${wps.join('|')}&travelmode=driving`;
+    window.open(url,'_blank');
+    toast(`🧭 Erste 10 von ${targets.length} Plakaten — für alle: GPX exportieren`);
+  }
+}
+
+function exportTourGPX(){
+  const targets=getTourPlakate();
+  if(targets.length===0){toast('⚠️ Keine Plakate');return;}
+  closeTourModal();
+  exportPlakatGPX(targets);
+}
+
+// Tour-FAB: ein-/ausblenden je nach Modus
+function updateTourFab(){
+  const fab=document.getElementById('tourFab');
+  if(fab) fab.classList.toggle('show',curMode==='plakate'&&plakate.length>0);
 }
 
 // PWA: Service Worker registrieren
