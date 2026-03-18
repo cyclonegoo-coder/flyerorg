@@ -694,7 +694,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v100 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v101 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this)this.classList.remove('open')">
@@ -6300,22 +6300,38 @@ async function startTour(){
   // OSRM Trip API: optimierte Reihenfolge (Travelling Salesman)
   const coords=targets.map(p=>`${p.lng},${p.lat}`).join(';');
   try{
-    const resp=await fetch(`https://router.project-osrm.org/trip/v1/driving/${coords}?roundtrip=false&source=first&geometries=geojson&overview=full`);
+    // roundtrip=true liefert die zuverlässigste TSP-Optimierung
+    const resp=await fetch(`https://router.project-osrm.org/trip/v1/driving/${coords}?roundtrip=true&geometries=geojson&overview=full`);
     const data=await resp.json();
+    console.log('OSRM Trip response code:',data.code,'waypoints:',data.waypoints?.length);
     if(data.code==='Ok'&&data.trips&&data.trips[0]){
       const trip=data.trips[0];
-      // Waypoints in optimierter Reihenfolge sortieren
-      const wpOrder=data.waypoints.map(wp=>wp.waypoint_index).sort((a,b)=>a-b);
-      // data.waypoints[i].waypoint_index = Position in der optimierten Route
-      // data.waypoints[i].trips_index = welcher Trip (immer 0 bei uns)
+      // data.waypoints[i] entspricht dem i-ten Eingabe-Koordinat
+      // data.waypoints[i].waypoint_index = Position in der optimierten Rundtour
       const sorted=new Array(targets.length);
       data.waypoints.forEach((wp,origIdx)=>{
         sorted[wp.waypoint_index]=targets[origIdx];
       });
-      tourStops=sorted.filter(Boolean);
-      // Route auf Karte zeichnen
+      let optimized=sorted.filter(Boolean);
+      // Rundtour rotieren: Start beim ersten Eingabepunkt (targets[0])
+      const startId=targets[0].id;
+      const startIdx=optimized.findIndex(p=>p.id===startId);
+      if(startIdx>0){
+        optimized=[...optimized.slice(startIdx),...optimized.slice(0,startIdx)];
+      }
+      tourStops=optimized;
+      console.log('Tour optimiert:',tourStops.map(s=>s.id).join(','));
+      // Route auf Karte zeichnen — neue Route entlang der optimierten Reihenfolge
+      // OSRM Route API für die tatsächliche Fahrroute in der optimierten Reihenfolge
+      const optCoords=tourStops.map(p=>`${p.lng},${p.lat}`).join(';');
+      const routeResp=await fetch(`https://router.project-osrm.org/route/v1/driving/${optCoords}?overview=full&geometries=geojson`);
+      const routeData=await routeResp.json();
       if(tourRouteLine){map.removeLayer(tourRouteLine);}
-      tourRouteLine=L.geoJSON(trip.geometry,{style:{color:'#007aff',weight:4,opacity:.7,dashArray:'8 6'}}).addTo(map);
+      if(routeData.code==='Ok'&&routeData.routes[0]){
+        tourRouteLine=L.geoJSON(routeData.routes[0].geometry,{style:{color:'#007aff',weight:4,opacity:.7,dashArray:'8 6'}}).addTo(map);
+      } else {
+        tourRouteLine=L.geoJSON(trip.geometry,{style:{color:'#007aff',weight:4,opacity:.7,dashArray:'8 6'}}).addTo(map);
+      }
       // Nummern-Marker mit Klick-Handler
       clearTourStopMarkers();
       tourStops.forEach((p,i)=>{
@@ -6324,24 +6340,42 @@ async function startTour(){
         tourStopMarkers.push(m);
       });
       map.fitBounds(tourRouteLine.getBounds(),{padding:[40,40]});
-      const dist=trip.distance;
-      const dur=trip.duration;
+      const dist=routeData.code==='Ok'?routeData.routes[0].distance:trip.distance;
+      const dur=routeData.code==='Ok'?routeData.routes[0].duration:trip.duration;
       toast(`🧭 Optimierte Route: ${(dist/1000).toFixed(1)} km · ca. ${Math.round(dur/60)} Min.`);
     } else {
-      // Fallback: route statt trip
-      tourStops=targets;
-      await drawSimpleRoute(targets);
+      console.warn('OSRM Trip fehlgeschlagen, Fallback:',data.code,data.message);
+      // Fallback: Nearest-Neighbor-Heuristik
+      tourStops=nearestNeighborSort(targets);
+      await drawSimpleRoute(tourStops);
     }
   }catch(e){
     console.warn('OSRM trip error:',e);
-    // Fallback: unsortiert, nur Linie
-    tourStops=targets;
-    try{await drawSimpleRoute(targets);}catch(e2){
+    // Fallback: Nearest-Neighbor-Heuristik
+    tourStops=nearestNeighborSort(targets);
+    try{await drawSimpleRoute(tourStops);}catch(e2){
       toast('⚠️ Routing-Service nicht erreichbar');
       tourActive=false;
     }
   }
   showTourPanel();
+}
+
+function nearestNeighborSort(pts){
+  // Greedy Nearest-Neighbor Heuristik als Fallback
+  if(pts.length<=2) return [...pts];
+  const remaining=pts.slice(1);
+  const result=[pts[0]];
+  while(remaining.length>0){
+    const cur=result[result.length-1];
+    let bestIdx=0,bestDist=Infinity;
+    remaining.forEach((p,i)=>{
+      const d=(p.lat-cur.lat)**2+(p.lng-cur.lng)**2;
+      if(d<bestDist){bestDist=d;bestIdx=i;}
+    });
+    result.push(remaining.splice(bestIdx,1)[0]);
+  }
+  return result;
 }
 
 async function drawSimpleRoute(targets){
