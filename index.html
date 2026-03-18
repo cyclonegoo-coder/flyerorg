@@ -273,10 +273,11 @@ textarea{min-height:68px}
   #bulkPdfBtn,#hierarchyBtn,#inviteUserBtn,#manageUsersBtn,#logbuchBtn,#missingVerteilerBtn{display:none!important}
   .user-name,.role-badge{display:none}
   .user-pill{padding:4px;border-radius:50%}
-  .h-right{gap:4px}
-  .h-center{min-width:0;overflow:hidden}
+  .h-left{min-width:40px;gap:4px}
+  .h-right{gap:2px;min-width:auto}
+  .h-center{min-width:0;overflow:visible;flex:1}
   .h-title{font-size:.78rem}
-  .kampagne-select{max-width:130px;font-size:.65rem}
+  .kampagne-select{max-width:calc(100vw - 160px);font-size:.65rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   /* Mode toggle compact on mobile */
   .mode-toggle{margin-bottom:0;padding:1px;gap:1px}
   .mode-btn{font-size:.58rem;padding:3px 7px}
@@ -668,6 +669,17 @@ textarea{min-height:68px}
           <option value="alle">Alle Plakate</option>
         </select>
       </div>
+      <div style="display:flex;flex-direction:column;gap:2px">
+        <label style="font-size:.65rem;font-weight:600;color:var(--text3);text-transform:uppercase">Startpunkt</label>
+        <select id="tourStartTyp" style="font-size:.8rem" onchange="toggleTourStartSelect()">
+          <option value="standort">📍 Mein Standort (nächstes Plakat)</option>
+          <option value="manuell">🎯 Plakat manuell wählen</option>
+        </select>
+      </div>
+      <div id="tourStartSelectRow" style="display:none;flex-direction:column;gap:2px">
+        <label style="font-size:.65rem;font-weight:600;color:var(--text3);text-transform:uppercase">Startplakat</label>
+        <select id="tourStartSelect" style="font-size:.8rem"></select>
+      </div>
       <div id="tourPreview" style="font-size:.78rem;color:var(--text2);padding:8px;background:var(--surface2);border-radius:var(--r8);text-align:center">—</div>
     </div>
     <div class="m-foot">
@@ -694,7 +706,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v101 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v102 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this)this.classList.remove('open')">
@@ -6200,6 +6212,9 @@ function exportPlakatGPX(targets){
 function openTourModal(){
   updateTourIdOptions();
   updateTourPreview();
+  // Startpunkt-Auswahl zurücksetzen
+  document.getElementById('tourStartTyp').value='standort';
+  document.getElementById('tourStartSelectRow').style.display='none';
   document.getElementById('tourModalOv').classList.add('open');
 }
 function closeTourModal(){document.getElementById('tourModalOv').classList.remove('open');}
@@ -6260,6 +6275,22 @@ function getTourPlakate(){
   return targets;
 }
 
+function toggleTourStartSelect(){
+  const typ=document.getElementById('tourStartTyp').value;
+  document.getElementById('tourStartSelectRow').style.display=typ==='manuell'?'flex':'none';
+  if(typ==='manuell') updateTourStartOptions();
+}
+function updateTourStartOptions(){
+  const targets=getTourPlakate();
+  const sel=document.getElementById('tourStartSelect');
+  sel.innerHTML='';
+  targets.forEach((p,i)=>{
+    const gName=p.gebiet_id?(getG(p.gebiet_id)?.name||'?'):'Außerhalb';
+    const statusEmoji={haengt:'🟢',abgehaengt:'⚪',zerstoert:'🔴',ersetzt:'🔵'}[p.status]||'';
+    sel.innerHTML+=`<option value="${p.id}">${statusEmoji} ${gName} (${p.lat.toFixed(4)}, ${p.lng.toFixed(4)})</option>`;
+  });
+  if(targets.length===0) sel.innerHTML='<option value="">Keine Plakate</option>';
+}
 function updateTourPreview(){
   const targets=getTourPlakate();
   const el=document.getElementById('tourPreview');
@@ -6284,8 +6315,55 @@ function openNavToPoint(lat,lng){
   }
 }
 
+async function getStartPosition(){
+  // Startpunkt bestimmen: GPS-Position oder manuell gewähltes Plakat
+  const startTyp=document.getElementById('tourStartTyp').value;
+  if(startTyp==='manuell'){
+    const pId=document.getElementById('tourStartSelect').value;
+    if(pId){
+      const p=plakate.find(x=>x.id===pId);
+      if(p) return {lat:p.lat,lng:p.lng,plakatId:pId};
+    }
+    return null;
+  }
+  // GPS-Standort abfragen
+  return new Promise(resolve=>{
+    if(!navigator.geolocation){resolve(null);return;}
+    navigator.geolocation.getCurrentPosition(
+      pos=>resolve({lat:pos.coords.latitude,lng:pos.coords.longitude,plakatId:null}),
+      ()=>resolve(null),
+      {enableHighAccuracy:true,timeout:8000,maximumAge:30000}
+    );
+  });
+}
+
+function reorderByStart(targets,startLat,startLng,startPlakatId){
+  // Wenn ein bestimmtes Plakat als Start gewählt → an Position 0 setzen
+  if(startPlakatId){
+    const idx=targets.findIndex(p=>p.id===startPlakatId);
+    if(idx>0){
+      const start=targets.splice(idx,1)[0];
+      targets.unshift(start);
+    }
+    return targets;
+  }
+  // Sonst: nächstes Plakat zum GPS-Standort als erstes
+  if(startLat!=null&&startLng!=null){
+    let bestIdx=0,bestDist=Infinity;
+    targets.forEach((p,i)=>{
+      const d=(p.lat-startLat)**2+(p.lng-startLng)**2;
+      if(d<bestDist){bestDist=d;bestIdx=i;}
+    });
+    if(bestIdx>0){
+      const start=targets.splice(bestIdx,1)[0];
+      targets.unshift(start);
+    }
+  }
+  return targets;
+}
+
 async function startTour(){
-  const targets=getTourPlakate();
+  let targets=getTourPlakate();
   if(targets.length===0){toast('⚠️ Keine Plakate für Route');return;}
   if(targets.length<2){
     // Nur 1 Plakat → direkt navigieren
@@ -6296,6 +6374,12 @@ async function startTour(){
   closeTourModal();
   tourActive=true;
   tourIdx=0;
+  toast('🧭 Standort wird ermittelt…');
+  // Startpunkt bestimmen und Plakate entsprechend sortieren
+  const startPos=await getStartPosition();
+  if(startPos){
+    targets=reorderByStart(targets,startPos.lat,startPos.lng,startPos.plakatId);
+  }
   toast('🧭 Route wird optimiert…');
   // OSRM Trip API: optimierte Reihenfolge (Travelling Salesman)
   const coords=targets.map(p=>`${p.lng},${p.lat}`).join(';');
