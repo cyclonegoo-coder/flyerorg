@@ -10,8 +10,9 @@
 <meta name="application-name" content="FlyerOrg">
 <meta name="description" content="Verwaltungstool für Flyerverteilungen – AfD Thüringen">
 <link rel="manifest" href="manifest.json">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
 <title>FlyerOrg – AfD Thüringen</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -663,9 +664,8 @@ textarea{min-height:68px}
       <div style="display:flex;flex-direction:column;gap:2px">
         <label style="font-size:.65rem;font-weight:600;color:var(--text3);text-transform:uppercase">Status-Filter</label>
         <select id="tourStatusFilter" style="font-size:.8rem" onchange="updateTourPreview()">
-          <option value="haengt">Hängende (aufhängen / ersetzen)</option>
-          <option value="abgehaengt">Abgehängte (noch aufzuhängen)</option>
-          <option value="alle_aktiv">Alle aktiven (hängt + ersetzt + abgehängt)</option>
+          <option value="abgehaengt">Abgehängte (aufzuhängen)</option>
+          <option value="haengt">Hängende (abzuhängen)</option>
           <option value="alle">Alle Plakate</option>
         </select>
       </div>
@@ -5948,7 +5948,9 @@ function openPlakatDetailModal(plakatId){
   }
 
   let deleteBtn='';
-  if(canManage||p.aufhaenger_id===currentUser?.id){
+  // Löschen erlaubt für: Manager, eigene Plakate, oder Verteiler bei abgehängten Plakaten in ihren Gebieten
+  const canDelete=canManage||p.aufhaenger_id===currentUser?.id||(curRole==='verteiler'&&p.status==='abgehaengt');
+  if(canDelete){
     deleteBtn=`<button class="btn" style="width:100%;margin-top:8px;background:transparent;color:var(--red);border:1px solid var(--red);font-size:.75rem" onclick="deletePlakat('${p.id}')">🗑 Plakat löschen</button>`;
   }
 
@@ -6270,8 +6272,7 @@ function getTourPlakate(){
   // Status-Filter
   if(statusFilter==='haengt') targets=targets.filter(p=>p.status==='haengt'||p.status==='ersetzt');
   else if(statusFilter==='abgehaengt') targets=targets.filter(p=>p.status==='abgehaengt');
-  else if(statusFilter==='alle_aktiv') targets=targets.filter(p=>p.status!=='zerstoert');
-  // sonst alle
+  // 'alle' = kein Filter
   return targets;
 }
 
