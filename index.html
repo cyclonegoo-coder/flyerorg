@@ -673,12 +673,12 @@ textarea{min-height:68px}
         <label style="font-size:.65rem;font-weight:600;color:var(--text3);text-transform:uppercase">Startpunkt</label>
         <select id="tourStartTyp" style="font-size:.8rem" onchange="toggleTourStartSelect()">
           <option value="standort">📍 Mein Standort (nächstes Plakat)</option>
-          <option value="manuell">🎯 Plakat manuell wählen</option>
+          <option value="karte">🗺 Auf Karte wählen</option>
         </select>
       </div>
-      <div id="tourStartSelectRow" style="display:none;flex-direction:column;gap:2px">
-        <label style="font-size:.65rem;font-weight:600;color:var(--text3);text-transform:uppercase">Startplakat</label>
-        <select id="tourStartSelect" style="font-size:.8rem"></select>
+      <div id="tourStartInfo" style="display:none;padding:8px;background:var(--surface2);border-radius:var(--r8);font-size:.78rem;color:var(--text2);display:none">
+        <span id="tourStartLabel">—</span>
+        <button onclick="clearTourStart()" style="float:right;background:none;border:none;color:var(--red);font-size:.7rem;cursor:pointer">✕ Löschen</button>
       </div>
       <div id="tourPreview" style="font-size:.78rem;color:var(--text2);padding:8px;background:var(--surface2);border-radius:var(--r8);text-align:center">—</div>
     </div>
@@ -706,7 +706,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v102 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v103 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this)this.classList.remove('open')">
@@ -5872,6 +5872,7 @@ function drawPlakatMarkers(){
     const marker=L.marker([p.lat,p.lng],{icon:getPlakatIcon(p.status)}).addTo(map);
     marker.on('click',function(e){
       L.DomEvent.stopPropagation(e);
+      if(tourPickStartMode){onPlakatPickedAsStart(p.id);return;}
       openPlakatDetailModal(p.id);
     });
     plakatMarkers[p.id]=marker;
@@ -6214,9 +6215,11 @@ function exportPlakatGPX(targets){
 function openTourModal(){
   updateTourIdOptions();
   updateTourPreview();
-  // Startpunkt-Auswahl zurücksetzen
-  document.getElementById('tourStartTyp').value='standort';
-  document.getElementById('tourStartSelectRow').style.display='none';
+  // Startpunkt nur zurücksetzen wenn kein Karten-Pick aktiv
+  if(!tourPickedStartId){
+    document.getElementById('tourStartTyp').value='standort';
+    document.getElementById('tourStartInfo').style.display='none';
+  }
   document.getElementById('tourModalOv').classList.add('open');
 }
 function closeTourModal(){document.getElementById('tourModalOv').classList.remove('open');}
@@ -6276,21 +6279,74 @@ function getTourPlakate(){
   return targets;
 }
 
+let tourPickStartMode=false;
+let tourPickedStartId=null;
+let tourPickStartMarker=null;
+
 function toggleTourStartSelect(){
   const typ=document.getElementById('tourStartTyp').value;
-  document.getElementById('tourStartSelectRow').style.display=typ==='manuell'?'flex':'none';
-  if(typ==='manuell') updateTourStartOptions();
+  if(typ==='karte'){
+    // Modal schließen, Karten-Pick-Modus aktivieren
+    closeTourModal();
+    enterTourPickStartMode();
+  }
 }
-function updateTourStartOptions(){
-  const targets=getTourPlakate();
-  const sel=document.getElementById('tourStartSelect');
-  sel.innerHTML='';
-  targets.forEach((p,i)=>{
-    const gName=p.gebiet_id?(getG(p.gebiet_id)?.name||'?'):'Außerhalb';
-    const statusEmoji={haengt:'🟢',abgehaengt:'⚪',zerstoert:'🔴',ersetzt:'🔵'}[p.status]||'';
-    sel.innerHTML+=`<option value="${p.id}">${statusEmoji} ${gName} (${p.lat.toFixed(4)}, ${p.lng.toFixed(4)})</option>`;
-  });
-  if(targets.length===0) sel.innerHTML='<option value="">Keine Plakate</option>';
+
+function enterTourPickStartMode(){
+  tourPickStartMode=true;
+  tourPickedStartId=null;
+  toast('📌 Tippe auf ein Plakat, um es als Startpunkt zu wählen',4000);
+  // Hinweis-Banner über der Karte
+  let banner=document.getElementById('tourPickBanner');
+  if(!banner){
+    banner=document.createElement('div');
+    banner.id='tourPickBanner';
+    banner.style.cssText='position:fixed;top:70px;left:50%;transform:translateX(-50%);z-index:900;background:var(--blue);color:#fff;padding:8px 16px;border-radius:12px;font-size:.78rem;font-weight:600;box-shadow:0 2px 12px rgba(0,0,0,.2);display:flex;align-items:center;gap:8px';
+    document.body.appendChild(banner);
+  }
+  banner.innerHTML='📌 Startpunkt wählen — Plakat antippen <button onclick="cancelTourPickStart()" style="background:rgba(255,255,255,.25);border:none;color:#fff;padding:4px 10px;border-radius:8px;font-size:.72rem;cursor:pointer;margin-left:4px">Abbrechen</button>';
+  banner.style.display='flex';
+}
+
+function cancelTourPickStart(){
+  tourPickStartMode=false;
+  const banner=document.getElementById('tourPickBanner');
+  if(banner) banner.style.display='none';
+  if(tourPickStartMarker){map.removeLayer(tourPickStartMarker);tourPickStartMarker=null;}
+  // Modal wieder öffnen
+  document.getElementById('tourStartTyp').value='standort';
+  openTourModal();
+}
+
+function onPlakatPickedAsStart(plakatId){
+  if(!tourPickStartMode) return;
+  tourPickStartMode=false;
+  tourPickedStartId=plakatId;
+  const banner=document.getElementById('tourPickBanner');
+  if(banner) banner.style.display='none';
+  // Start-Marker hervorheben
+  const p=plakate.find(x=>x.id===plakatId);
+  if(p){
+    if(tourPickStartMarker){map.removeLayer(tourPickStartMarker);}
+    tourPickStartMarker=L.marker([p.lat,p.lng],{
+      icon:L.divIcon({className:'',html:'<div style="background:var(--blue);color:#fff;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.85rem;font-weight:700;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.3)">▶</div>',iconSize:[32,32],iconAnchor:[16,16]}),
+      zIndexOffset:2000
+    }).addTo(map);
+  }
+  // Modal wieder öffnen mit Info
+  document.getElementById('tourStartTyp').value='karte';
+  const gName=p?.gebiet_id?(getG(p.gebiet_id)?.name||'?'):'Außerhalb';
+  const infoEl=document.getElementById('tourStartInfo');
+  document.getElementById('tourStartLabel').textContent=`🎯 ${gName} — ${p.lat.toFixed(4)}, ${p.lng.toFixed(4)}`;
+  infoEl.style.display='block';
+  openTourModal();
+}
+
+function clearTourStart(){
+  tourPickedStartId=null;
+  if(tourPickStartMarker){map.removeLayer(tourPickStartMarker);tourPickStartMarker=null;}
+  document.getElementById('tourStartInfo').style.display='none';
+  document.getElementById('tourStartTyp').value='standort';
 }
 function updateTourPreview(){
   const targets=getTourPlakate();
@@ -6317,15 +6373,10 @@ function openNavToPoint(lat,lng){
 }
 
 async function getStartPosition(){
-  // Startpunkt bestimmen: GPS-Position oder manuell gewähltes Plakat
-  const startTyp=document.getElementById('tourStartTyp').value;
-  if(startTyp==='manuell'){
-    const pId=document.getElementById('tourStartSelect').value;
-    if(pId){
-      const p=plakate.find(x=>x.id===pId);
-      if(p) return {lat:p.lat,lng:p.lng,plakatId:pId};
-    }
-    return null;
+  // Startpunkt bestimmen: Karten-Auswahl oder GPS-Position
+  if(tourPickedStartId){
+    const p=plakate.find(x=>x.id===tourPickedStartId);
+    if(p) return {lat:p.lat,lng:p.lng,plakatId:tourPickedStartId};
   }
   // GPS-Standort abfragen
   return new Promise(resolve=>{
@@ -6373,6 +6424,8 @@ async function startTour(){
     return;
   }
   closeTourModal();
+  // Pick-Marker aufräumen
+  if(tourPickStartMarker){map.removeLayer(tourPickStartMarker);tourPickStartMarker=null;}
   tourActive=true;
   tourIdx=0;
   toast('🧭 Standort wird ermittelt…');
@@ -6381,6 +6434,8 @@ async function startTour(){
   if(startPos){
     targets=reorderByStart(targets,startPos.lat,startPos.lng,startPos.plakatId);
   }
+  // Pick-State zurücksetzen
+  tourPickedStartId=null;
   toast('🧭 Route wird optimiert…');
   // OSRM Trip API: optimierte Reihenfolge (Travelling Salesman)
   const coords=targets.map(p=>`${p.lng},${p.lat}`).join(';');
@@ -6600,6 +6655,8 @@ function tourPrev(){
 function endTour(){
   tourActive=false;
   tourStops=[];tourIdx=0;
+  tourPickedStartId=null;
+  if(tourPickStartMarker){map.removeLayer(tourPickStartMarker);tourPickStartMarker=null;}
   if(tourRouteLine){map.removeLayer(tourRouteLine);tourRouteLine=null;}
   clearTourStopMarkers();
   const panel=document.getElementById('tourPanel');
