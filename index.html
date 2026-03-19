@@ -568,7 +568,7 @@ textarea{min-height:68px}
 </div>
 
 <!-- MODAL -->
-<div class="modal-ov" id="modalOv" onclick="if(event.target===this)closeModal()">
+<div class="modal-ov" id="modalOv" onclick="if(event.target===this&&this._mdOnOverlay)closeModal()">
   <div class="modal">
     <div class="m-handle"></div>
     <div class="m-title">📦 Stückzahl ändern</div>
@@ -585,7 +585,7 @@ textarea{min-height:68px}
 
 
 <!-- NEW GEBIET MODAL (after drawing) -->
-<div class="modal-ov" id="newGebietModalOv" onclick="if(event.target===this)drawCancel()">
+<div class="modal-ov" id="newGebietModalOv" onclick="if(event.target===this&&this._mdOnOverlay)drawCancel()">
   <div class="modal">
     <div class="m-handle"></div>
     <div class="m-title" id="newGebietModalTitle">📍 Neues Gebiet erstellen</div>
@@ -613,7 +613,7 @@ textarea{min-height:68px}
 </div>
 
 <!-- PLAKAT ERSTELLEN MODAL -->
-<div class="modal-ov" id="plakatModalOv" onclick="if(event.target===this)closePlakatModal()">
+<div class="modal-ov" id="plakatModalOv" onclick="if(event.target===this&&this._mdOnOverlay)closePlakatModal()">
   <div class="modal" style="max-width:340px">
     <div class="m-handle"></div>
     <div class="m-title">📌 Plakat platzieren</div>
@@ -632,7 +632,7 @@ textarea{min-height:68px}
 </div>
 
 <!-- PLAKAT DETAIL MODAL -->
-<div class="modal-ov" id="plakatDetailOv" onclick="if(event.target===this)closePlakatDetail()">
+<div class="modal-ov" id="plakatDetailOv" onclick="if(event.target===this&&this._mdOnOverlay)closePlakatDetail()">
   <div class="modal" style="max-width:380px">
     <div class="m-handle"></div>
     <div class="m-title" id="plakatDetailTitle">📌 Plakat-Details</div>
@@ -644,7 +644,7 @@ textarea{min-height:68px}
 </div>
 
 <!-- TOUR PLANEN MODAL -->
-<div class="modal-ov" id="tourModalOv" onclick="if(event.target===this)closeTourModal()">
+<div class="modal-ov" id="tourModalOv" onclick="if(event.target===this&&this._mdOnOverlay)closeTourModal()">
   <div class="modal" style="max-width:400px">
     <div class="m-handle"></div>
     <div class="m-title">🧭 Tour planen</div>
@@ -709,7 +709,7 @@ textarea{min-height:68px}
 <div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v103 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
-<div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this)this.classList.remove('open')">
+<div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
   <div class="modal" style="max-width:420px;max-height:85vh;overflow-y:auto">
     <div class="m-handle"></div>
     <div style="display:flex;gap:8px;margin-bottom:12px">
@@ -758,7 +758,7 @@ textarea{min-height:68px}
 </div>
 
 <!-- LOGBUCH MODAL -->
-<div class="modal-ov" id="logbuchModalOv" onclick="if(event.target===this)closeLogbuchModal()">
+<div class="modal-ov" id="logbuchModalOv" onclick="if(event.target===this&&this._mdOnOverlay)closeLogbuchModal()">
   <div class="modal" style="max-width:560px">
     <div class="m-handle"></div>
     <div class="m-title">📋 Logbuch</div>
@@ -785,7 +785,7 @@ textarea{min-height:68px}
 </div>
 
 <!-- NUTZER EINLADEN MODAL (nur Admin) -->
-<div class="modal-ov" id="inviteModalOv" onclick="if(event.target===this)closeInviteModal()">
+<div class="modal-ov" id="inviteModalOv" onclick="if(event.target===this&&this._mdOnOverlay)closeInviteModal()">
   <div class="modal">
     <div class="m-handle"></div>
     <div class="m-title">👤 Nutzer einladen</div>
@@ -835,7 +835,7 @@ textarea{min-height:68px}
 </div>
 
 <!-- NUTZERVERWALTUNG MODAL (nur Admin) -->
-<div class="modal-ov" id="manageUsersModalOv" onclick="if(event.target===this)closeManageUsersModal()">
+<div class="modal-ov" id="manageUsersModalOv" onclick="if(event.target===this&&this._mdOnOverlay)closeManageUsersModal()">
   <div class="modal">
     <div class="m-handle"></div>
     <div class="m-title">👥 Nutzerverwaltung</div>
@@ -847,7 +847,7 @@ textarea{min-height:68px}
 </div>
 
 <!-- MEIN PROFIL MODAL -->
-<div class="modal-ov" id="profilModalOv" onclick="if(event.target===this)closeProfilModal()">
+<div class="modal-ov" id="profilModalOv" onclick="if(event.target===this&&this._mdOnOverlay)closeProfilModal()">
   <div class="modal">
     <div class="m-handle"></div>
     <div class="m-title">👤 Mein Profil</div>
@@ -881,7 +881,7 @@ textarea{min-height:68px}
 </div>
 
 <!-- ANFRAGEN MODAL (Admin/Verwalter) -->
-<div class="modal-ov" id="anfragenModalOv" onclick="if(event.target===this)closeAnfragenModal()">
+<div class="modal-ov" id="anfragenModalOv" onclick="if(event.target===this&&this._mdOnOverlay)closeAnfragenModal()">
   <div class="modal">
     <div class="m-handle"></div>
     <div class="m-title">🔔 Offene Anfragen</div>
@@ -893,7 +893,7 @@ textarea{min-height:68px}
 </div>
 
 <!-- VERWALTER-REGIONEN BEARBEITEN MODAL (nur Admin) -->
-<div class="modal-ov" id="editRegModalOv" onclick="if(event.target===this)closeEditRegModal()">
+<div class="modal-ov" id="editRegModalOv" onclick="if(event.target===this&&this._mdOnOverlay)closeEditRegModal()">
   <div class="modal">
     <div class="m-handle"></div>
     <div class="m-title" id="editRegModalTitle">🗺 Regionen bearbeiten</div>
@@ -908,7 +908,7 @@ textarea{min-height:68px}
 </div>
 
 <!-- HIERARCHIE VERWALTEN MODAL (Admin) -->
-<div class="modal-ov" id="hierarchyModalOv" onclick="if(event.target===this)closeHierarchyModal()">
+<div class="modal-ov" id="hierarchyModalOv" onclick="if(event.target===this&&this._mdOnOverlay)closeHierarchyModal()">
   <div class="modal" style="max-width:420px">
     <div class="m-handle"></div>
     <div class="m-title">🏗 Gebietsstruktur verwalten</div>
@@ -950,7 +950,7 @@ textarea{min-height:68px}
 </div>
 
 <!-- KAMPAGNEN VERWALTEN MODAL -->
-<div class="modal-ov" id="kampagnenModalOv" onclick="if(event.target===this)closeKampagnenModal()">
+<div class="modal-ov" id="kampagnenModalOv" onclick="if(event.target===this&&this._mdOnOverlay)closeKampagnenModal()">
   <div class="modal" style="max-width:460px">
     <div class="m-handle"></div>
     <div class="m-title">📋 Kampagnen verwalten</div>
@@ -1000,7 +1000,7 @@ textarea{min-height:68px}
 </div>
 
 <!-- Bulk PDF Modal -->
-<div class="modal-ov" id="bulkPdfModalOv" onclick="if(event.target===this)closeBulkPdfModal()">
+<div class="modal-ov" id="bulkPdfModalOv" onclick="if(event.target===this&&this._mdOnOverlay)closeBulkPdfModal()">
   <div class="modal" style="max-width:480px">
     <div class="m-handle"></div>
     <div class="m-title">📄 Gebiete als PDF exportieren</div>
@@ -1018,6 +1018,15 @@ textarea{min-height:68px}
 </div>
 
 <script>
+// ============================================================
+// GLOBAL: Modal-Overlay Click-Outside-Fix
+// Verhindert versehentliches Schließen wenn Text selektiert wird
+// und Maus außerhalb des Modals losgelassen wird
+// ============================================================
+document.addEventListener('mousedown',function(e){
+  if(e.target.classList.contains('modal-ov')) e.target._mdOnOverlay=true;
+  else e.target.closest('.modal-ov')?e.target.closest('.modal-ov')._mdOnOverlay=false:0;
+});
 // ============================================================
 // SUPABASE INIT
 // ============================================================
