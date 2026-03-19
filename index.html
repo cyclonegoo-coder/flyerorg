@@ -6286,9 +6286,12 @@ let tourPickStartMarker=null;
 function toggleTourStartSelect(){
   const typ=document.getElementById('tourStartTyp').value;
   if(typ==='karte'){
-    // Modal schließen, Karten-Pick-Modus aktivieren
-    closeTourModal();
-    enterTourPickStartMode();
+    // Verzögerung nötig, da Android den nativen Select-Picker
+    // erst schließen muss bevor das Modal geschlossen werden kann
+    setTimeout(()=>{
+      closeTourModal();
+      setTimeout(()=>enterTourPickStartMode(),150);
+    },100);
   }
 }
 
