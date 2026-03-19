@@ -706,7 +706,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v103 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v104 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -1291,7 +1291,7 @@ let allUsers = [];
 async function loadAllUsers() {
   try {
     // Versuche alle Spalten inkl. neuer Hierarchie-Felder
-    let { data, error } = await sb.from('user_profiles').select('id, name, rolle, telefon, email, verwaltete_regionen, verwaltete_gebietsverbaende, verwalteter_landkreis, gebietsverband_id').order('name');
+    let { data, error } = await sb.from('user_profiles').select('id, name, rolle, telefon, email, verwaltete_regionen, verwaltete_gebietsverbaende, verwalteter_landkreis, gebietsverband_id, kann_polygon_bearbeiten').order('name');
     if (error) {
       // Fallback: Nur Basis-Spalten wenn neue Spalten noch nicht existieren
       console.warn('loadAllUsers mit allen Spalten fehlgeschlagen, versuche Fallback:', error.message);
@@ -1966,36 +1966,48 @@ function renderUserList() {
 function _renderUserRow(u,isAdmin,isKV){
   const isSelf=u.id===currentUser?.id;
   const istAdmin=u.rolle==='admin';
-  const readOnly=isSelf||(isKV&&istAdmin);
+  const isGV=curRole==='verwalter';
+  // GV darf keine Rollen ändern, nur Polygon-Recht vergeben
+  const readOnly=isSelf||(isKV&&istAdmin)||isGV;
   let rolleSelect;
   if(readOnly){
     const rl={verteiler:'Verteiler',verwalter:'Gebietsverwalter',kreisverwalter:'Kreisverwalter',admin:'Admin'}[u.rolle]||u.rolle;
     rolleSelect=`<span style="font-size:.65rem;font-weight:600;padding:2px 7px;border-radius:4px;background:${istAdmin?'var(--red)':'var(--blue)'}22;color:${istAdmin?'var(--red)':'var(--blue)'}">${rl}</span>`;
   }else{
-    const opts=isKV
-      ?`<option value="verteiler" ${u.rolle==='verteiler'?'selected':''}>Verteiler</option><option value="verwalter" ${u.rolle==='verwalter'?'selected':''}>GV</option><option value="kreisverwalter" ${u.rolle==='kreisverwalter'?'selected':''}>KV</option>`
-      :`<option value="verteiler" ${u.rolle==='verteiler'?'selected':''}>Verteiler</option><option value="verwalter" ${u.rolle==='verwalter'?'selected':''}>GV</option><option value="kreisverwalter" ${u.rolle==='kreisverwalter'?'selected':''}>KV</option><option value="admin" ${u.rolle==='admin'?'selected':''}>Admin</option>`;
+    let opts;
+    if(isKV){
+      opts=`<option value="verteiler" ${u.rolle==='verteiler'?'selected':''}>Verteiler</option><option value="verwalter" ${u.rolle==='verwalter'?'selected':''}>GV</option><option value="kreisverwalter" ${u.rolle==='kreisverwalter'?'selected':''}>KV</option>`;
+    } else if(isAdmin){
+      opts=`<option value="verteiler" ${u.rolle==='verteiler'?'selected':''}>Verteiler</option><option value="verwalter" ${u.rolle==='verwalter'?'selected':''}>GV</option><option value="kreisverwalter" ${u.rolle==='kreisverwalter'?'selected':''}>KV</option><option value="admin" ${u.rolle==='admin'?'selected':''}>Admin</option>`;
+    }
     rolleSelect=`<select onchange="changeRole('${u.id}',this.value)" style="font-size:.7rem;padding:2px 4px;border-radius:4px;border:1px solid var(--sep);cursor:pointer">${opts}</select>`;
   }
   // GV-Änderung (nur Admin/KV)
   let gvSelect='';
-  if(!readOnly&&(isAdmin||isKV)&&u.rolle!=='admin'){
+  if(!isSelf&&(isAdmin||isKV)&&u.rolle!=='admin'){
     const gvOpts=`<option value="">—</option>`+Object.entries(gebietsverbaende)
       .filter(([,gv])=>isAdmin||gv.landkreis_id===currentProfile?.verwalteter_landkreis)
       .sort((a,b)=>a[1].name.localeCompare(b[1].name))
       .map(([id,gv])=>`<option value="${id}" ${u.gebietsverband_id===id?'selected':''}>${gv.name}</option>`).join('');
     gvSelect=`<select onchange="reassignUserGV('${u.id}',this.value)" style="font-size:.65rem;padding:1px 3px;border-radius:4px;border:1px solid var(--sep);max-width:100px;cursor:pointer" title="GV ändern">${gvOpts}</select>`;
   }
-  const regEdit=(!readOnly&&(u.rolle==='verwalter'||u.rolle==='kreisverwalter'))
+  // Polygon-Bearbeitungsrecht (GV/KV/Admin kann bei Verteilern togglen)
+  let polyToggle='';
+  if(!isSelf&&u.rolle==='verteiler'&&(isGV||isKV||isAdmin)){
+    const checked=u.kann_polygon_bearbeiten?'checked':'';
+    polyToggle=`<label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:.6rem;color:var(--text3)" title="Polygon-Bearbeitung erlauben">
+      <input type="checkbox" ${checked} onchange="togglePolygonRecht('${u.id}',this.checked)" style="width:14px;height:14px;cursor:pointer">✏️</label>`;
+  }
+  const regEdit=(!isSelf&&!isGV&&(u.rolle==='verwalter'||u.rolle==='kreisverwalter'))
     ?`<button onclick="openEditZuweisungModal('${u.id}','${(u.name||'').replace(/'/g,"\\'")}','${u.rolle}',${JSON.stringify(u.verwaltete_regionen||[]).replace(/"/g,'&quot;')},'${(u.verwalteter_landkreis||'').replace(/'/g,"\\'")}')" style="background:none;border:none;color:var(--blue);cursor:pointer;font-size:.75rem;padding:1px 3px" title="${u.rolle==='kreisverwalter'?'LK':'Regionen'} bearbeiten">🗺</button>`:'';
-  const deleteBtn=readOnly?'':`<button onclick="deleteUser('${u.id}','${(u.name||'').replace(/'/g,"\\'")}')" style="background:none;border:none;color:var(--text4);cursor:pointer;font-size:.75rem;padding:1px 3px" title="Entfernen">🗑</button>`;
+  const deleteBtn=(isSelf||isGV)?'':`<button onclick="deleteUser('${u.id}','${(u.name||'').replace(/'/g,"\\'")}')" style="background:none;border:none;color:var(--text4);cursor:pointer;font-size:.75rem;padding:1px 3px" title="Entfernen">🗑</button>`;
   const noGVWarning=!u.gebietsverband_id&&u.rolle!=='admin'?'<span style="color:var(--orange);font-size:.65rem" title="Kein GV zugewiesen">⚠️</span>':'';
   return `<div style="display:flex;align-items:center;gap:6px;padding:4px 6px;background:var(--surface);border-radius:var(--r8);font-size:.78rem">
     <div style="flex:1;min-width:0">
       <div style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${u.name||'–'} ${noGVWarning}</div>
       <div style="font-size:.65rem;color:var(--text4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${u.email||''}</div>
     </div>
-    ${rolleSelect} ${gvSelect} ${regEdit} ${deleteBtn}
+    ${rolleSelect} ${polyToggle} ${gvSelect} ${regEdit} ${deleteBtn}
   </div>`;
 }
 
@@ -2026,9 +2038,23 @@ async function reassignUserGV(userId,newGvId){
 }
 
 // ============================================================
-// ROLLE ÄNDERN (Admin)
+// POLYGON-BEARBEITUNGSRECHT TOGGLEN
+// ============================================================
+async function togglePolygonRecht(userId,enabled){
+  const {data,error}=await sb.from('user_profiles').update({kann_polygon_bearbeiten:enabled}).eq('id',userId).select();
+  if(error){toast('⚠️ Fehler: '+error.message);renderUserList();return;}
+  if(!data||data.length===0){toast('⚠️ Migration v103 noch nicht ausgeführt');renderUserList();return;}
+  const u=allUsers.find(x=>x.id===userId);
+  if(u) u.kann_polygon_bearbeiten=enabled;
+  toast(enabled?'✅ Polygon-Bearbeitung aktiviert':'✅ Polygon-Bearbeitung deaktiviert');
+}
+
+// ============================================================
+// ROLLE ÄNDERN (Admin/KV)
 // ============================================================
 async function changeRole(userId, newRolle) {
+  // GV darf keine Rollen ändern
+  if (curRole === 'verwalter') { toast('⚠️ Keine Berechtigung'); renderUserList(); return; }
   // KV darf nicht auf 'admin' setzen und keine Admins ändern
   if (curRole === 'kreisverwalter') {
     if (newRolle === 'admin') { toast('⚠️ Keine Berechtigung: Admin-Rolle kann nur von Admins vergeben werden'); renderUserList(); return; }
@@ -5113,7 +5139,9 @@ async function deleteRegion(id){
 function showDrawToolbar(){
   if(curReg==='alle'){document.getElementById('drawToolbar').classList.remove('visible');return;}
   const reg=regionen[curReg];
-  const hatZugriff = curRole === 'admin' || (istVerwalterOderKreisverwalter() && reg && verwalterHatGebietsverbandZugriff(reg.gebietsverband_id));
+  const hatZugriff = curRole === 'admin'
+    || (istVerwalterOderKreisverwalter() && reg && verwalterHatGebietsverbandZugriff(reg.gebietsverband_id))
+    || (curRole === 'verteiler' && currentProfile?.kann_polygon_bearbeiten);
   if(hatZugriff && window.innerWidth >= 768){
     document.getElementById('drawToolbar').classList.add('visible');
   } else {
