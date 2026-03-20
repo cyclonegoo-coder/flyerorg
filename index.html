@@ -704,7 +704,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v107 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v108 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -2383,14 +2383,17 @@ async function deleteUser(userId, userName) {
     if (error) {
       let msg = 'Fehler beim Löschen';
       try {
-        // Bei FunctionsHttpError liegt die Response im context
         if (error.context && typeof error.context.json === 'function') {
           const body = await error.context.json();
-          msg = body?.error || msg;
+          msg = body?.error || body?.message || msg;
+        } else if (error.context && typeof error.context.text === 'function') {
+          const txt = await error.context.text();
+          try { msg = JSON.parse(txt)?.error || txt; } catch(_){ msg = txt; }
         } else if (error.message) {
           msg = error.message;
         }
       } catch(_){}
+      console.error('Edge Function error details:', error, error.context);
       throw new Error(msg);
     }
     if (data?.error) throw new Error(data.error);
@@ -2634,6 +2637,9 @@ async function checkSession() {
           }
           if (invite?.verwalteter_landkreis) {
             profileData.verwalteter_landkreis = invite.verwalteter_landkreis;
+          }
+          if (invite?.gebietsverband_id) {
+            profileData.gebietsverband_id = invite.gebietsverband_id;
           }
           await sb.from('user_profiles').upsert(profileData, { onConflict: 'id' });
           if (invite) {
@@ -3699,7 +3705,7 @@ function jumpToMissingVerteiler(){
       }
     });
   }
-  showToast('Gebiete ohne Verteiler sind orange hervorgehoben','info');
+  toast('Gebiete ohne Verteiler sind orange hervorgehoben','info');
 }
 
 // ============================================================
@@ -3735,7 +3741,7 @@ async function migrateUserGVs(){
   if(migriert>0||rest>0){
     let msg=`GV-Migration: ${migriert} Verteiler zugeordnet`;
     if(rest>0) msg+=`, ${rest} ohne Zuordnung (⚠️ in Nutzerverwaltung)`;
-    showToast(msg,'info');
+    toast(msg,'info');
   }
 }
 
