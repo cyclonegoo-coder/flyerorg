@@ -277,9 +277,10 @@ textarea{min-height:68px}
   .h-right{gap:2px;min-width:auto}
   .h-center{min-width:0;overflow:visible;flex:1}
   .kampagne-select{max-width:calc(100vw - 160px);font-size:.65rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  /* Mode toggle compact on mobile */
-  .mode-toggle{margin-bottom:0;padding:1px;gap:1px}
-  .mode-btn{font-size:.58rem;padding:3px 7px}
+  /* Mode toggle: hide header toggle on mobile, mob-nav toggle handles it */
+  #modeToggle{display:none!important}
+  .mob-nav .mode-toggle{margin-bottom:0;padding:1px;gap:1px}
+  .mob-nav .mode-btn{font-size:.58rem;padding:3px 7px}
   /* Step 2: Sidebar stats compact, no progress */
   .prog-wrap{display:none}
   .sb-top{padding:8px 8px 4px}
@@ -703,7 +704,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v105 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v106 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -1141,6 +1142,9 @@ async function doRegister() {
         }
         if (invite.verwalteter_landkreis) {
           profileData.verwalteter_landkreis = invite.verwalteter_landkreis;
+        }
+        if (invite.gebietsverband_id) {
+          profileData.gebietsverband_id = invite.gebietsverband_id;
         }
         // Invite aus DB löschen (verbraucht)
         await sb.from('pending_invites').delete().eq('email', email.toLowerCase());
@@ -2685,7 +2689,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('newPasswordConfirm').addEventListener('keydown', e => {
     if (e.key === 'Enter') doSetPassword();
   });
-  window.addEventListener('resize', ()=>{ if(mapInited) showDrawToolbar(); });
+  window.addEventListener('resize', ()=>{ if(mapInited) showDrawToolbar(); showModeToggle(); });
 });
 
 // ============================================================
@@ -4412,8 +4416,10 @@ function openDetail(id){
     // ===== MOBILE: Quick-Actions (immer sichtbar am Ende) =====
     h+=`<div class="d-sec" style="padding:6px 12px"><div style="display:flex;gap:6px;justify-content:center">`;
     h+=`<button class="mob-action-btn" onclick="exportGebietPDF('${g.id}')" title="PDF exportieren">📄</button>`;
-    if(hasGeo&&kmlP[g.id]) h+=`<button class="mob-action-btn" onclick="editPolygon('${g.id}')" title="Polygon bearbeiten">✏️</button>`;
-    if(hasGeo) h+=`<button class="mob-action-btn" onclick="deleteGebiet('${g.id}')" title="Gebiet löschen" style="color:var(--red)">🗑</button>`;
+    const canEditPoly=curRole==='admin'||(istVerwalterOderKreisverwalter()&&verwalterHatGebietZugriff(g.id))||(curRole==='verteiler'&&currentProfile?.kann_polygon_bearbeiten);
+    if(hasGeo&&kmlP[g.id]&&canEditPoly) h+=`<button class="mob-action-btn" onclick="editPolygon('${g.id}')" title="Polygon bearbeiten">✏️</button>`;
+    const canDelete=curRole==='admin'||(istVerwalterOderKreisverwalter()&&verwalterHatGebietZugriff(g.id));
+    if(hasGeo&&canDelete) h+=`<button class="mob-action-btn" onclick="deleteGebiet('${g.id}')" title="Gebiet löschen" style="color:var(--red)">🗑</button>`;
     h+=`</div></div>`;
 
   } else {
@@ -4523,6 +4529,10 @@ function openDetail(id){
         ${kmlP[g.id]?`<button class="btn btn-g" onclick="editPolygon('${g.id}')">✏️ Polygon bearbeiten</button>`:''}
         <button class="btn btn-g" onclick="redrawGebiet('${g.id}')">🔄 Polygon neu zeichnen</button>
         <button class="btn btn-d" onclick="deleteGebiet('${g.id}')">Gebiet löschen</button>
+      </div></div>`;
+    } else if(curRole==='verteiler'&&currentProfile?.kann_polygon_bearbeiten&&kmlP[g.id]){
+      h+=`<div class="d-sec"><div class="sec-hd">Geodaten</div><div class="f-stack">
+        <button class="btn btn-g" onclick="editPolygon('${g.id}')">✏️ Polygon bearbeiten</button>
       </div></div>`;
     }
     h+=`<div class="d-sec"><div class="f-stack">
@@ -5404,7 +5414,6 @@ function editPolygon(id){
   const _eg=getG(id);
   const info=document.getElementById('drawInfo');
   info.innerHTML=`<span style="font-size:.82rem">✏️ <strong>${_eg?_eg.name:id}</strong> bearbeiten – Eckpunkte verschieben |
-    <a href="#" onclick="editPolyAddPoint();return false" style="color:var(--blue)">+ Punkt</a> |
     <a href="#" onclick="editPolySave();return false" style="color:var(--green)">💾 Speichern</a> |
     <a href="#" onclick="editPolyCancel();return false" style="color:var(--red)">❌ Abbrechen</a></span>`;
   info.style.display='block';
@@ -5516,20 +5525,32 @@ function updateMidMarkers(){
     const next=(i+1)%coords.length;
     const midLat=(coords[i][0]+coords[next][0])/2;
     const midLng=(coords[i][1]+coords[next][1])/2;
-    const mm=L.circleMarker([midLat,midLng],{radius:4,color:'#aaa',fillColor:'#ddd',fillOpacity:.8,weight:1}).addTo(map);
+    const isMob=window.innerWidth<=768;
+    const mm=L.circleMarker([midLat,midLng],{radius:isMob?8:4,color:'#aaa',fillColor:'#ddd',fillOpacity:.8,weight:1}).addTo(map);
     mm._insertAfter=i;
+    // Click handler (desktop)
     mm.on('click',function(e){
       L.DomEvent.stopPropagation(e);
       coords.splice(i+1,0,[midLat,midLng]);
       layers[editingGebietId].setLatLngs(coords);
       rebuildEditMarkers();
     });
+    // Touch handler (mobile) — tap on grey dot to insert vertex
+    (function(marker,insertIdx,mLat,mLng){
+      function attachMidTouch(){
+        const el=marker.getElement?marker.getElement():marker._path;
+        if(!el){setTimeout(attachMidTouch,50);return;}
+        el.addEventListener('touchend',function(e){
+          e.preventDefault();e.stopPropagation();
+          coords.splice(insertIdx+1,0,[mLat,mLng]);
+          layers[editingGebietId].setLatLngs(coords);
+          rebuildEditMarkers();
+        },{passive:false});
+      }
+      attachMidTouch();
+    })(mm,i,midLat,midLng);
     editMidMarkers.push(mm);
   }
-}
-
-function editPolyAddPoint(){
-  toast('💡 Klicke auf einen grauen Mittelpunkt um dort einen neuen Eckpunkt einzufügen');
 }
 
 async function editPolySave(){
@@ -5787,10 +5808,12 @@ function showModeToggle(){
   const typ=curKampagne?.typ||'flyer';
   const toggle=document.getElementById('modeToggle');
   const toggleMob=document.getElementById('modeToggleMob');
+  const isMobile=window.innerWidth<=768;
   // Nur anzeigen wenn Kampagne plakate oder beides unterstützt
   if(typ==='beides'){
-    toggle.style.display='flex';
-    if(toggleMob) toggleMob.style.display='flex';
+    // Desktop: Header-Toggle; Mobile: mob-nav Toggle (nie beide gleichzeitig)
+    toggle.style.display=isMobile?'none':'flex';
+    if(toggleMob) toggleMob.style.display=isMobile?'flex':'none';
   } else if(typ==='plakate'){
     toggle.style.display='none';
     if(toggleMob) toggleMob.style.display='none';
