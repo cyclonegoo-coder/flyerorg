@@ -704,7 +704,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v106 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v107 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -4847,10 +4847,27 @@ function toggleOverflowMenu(e){
   if(isManager) items+=`<button class="mob-overflow-item" onclick="openLogbuchModal();closeMobMenu()">📋 Logbuch</button>`;
   if(isManager) items+=`<button class="mob-overflow-item" onclick="jumpToMissingVerteiler();closeMobMenu()">🆘 Verteiler fehlen</button>`;
   items+=`<button class="mob-overflow-item" onclick="openProfilModal();closeMobMenu()">👤 Mein Profil</button>`;
+  items+=`<button class="mob-overflow-item" onclick="hardRefresh();closeMobMenu()" style="border-top:1px solid var(--sep);margin-top:4px;padding-top:8px;color:var(--text3)">🔄 App aktualisieren</button>`;
   menu.innerHTML=items;
   menu.classList.toggle('open');
 }
 function closeMobMenu(){document.getElementById('mobOverflowMenu').classList.remove('open');}
+async function hardRefresh(){
+  try{
+    // Service Worker Cache löschen
+    if('caches' in window){
+      const names=await caches.keys();
+      await Promise.all(names.map(n=>caches.delete(n)));
+    }
+    // Service Worker deregistrieren
+    if('serviceWorker' in navigator){
+      const regs=await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r=>r.unregister()));
+    }
+  }catch(e){console.warn('Cache-Clear fehlgeschlagen:',e);}
+  // Hard Reload
+  window.location.reload(true);
+}
 document.addEventListener('click',function(e){const m=document.getElementById('mobOverflowMenu');if(m&&!e.target.closest('.mob-overflow'))m.classList.remove('open');});
 
 // ── Mobile: Legende toggle ──
