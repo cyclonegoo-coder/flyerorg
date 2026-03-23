@@ -4307,7 +4307,7 @@ function openDetail(id){
       .forEach(u => kontakte.push({ ...u, label: 'GV' }));
   }
   const darfHinweis = isAdmin || isM || isV;
-  const hasGeo=(curRole==='admin'||(istVerwalterOderKreisverwalter()&&verwalterHatGebietZugriff(id)));
+  const hasGeo=(curRole==='admin'||(istVerwalterOderKreisverwalter()&&verwalterHatGebietZugriff(id))||(curRole==='verteiler'&&currentProfile?.kann_polygon_bearbeiten));
 
   if(isMob){
     // ===== MOBILE: Kontakt als kompakte Zeile (immer sichtbar, kein Akkordeon) =====
