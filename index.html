@@ -104,7 +104,7 @@ header{height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturate(18
 .mob-overflow-item:active{background:var(--surface3)}
 .leg-toggle{display:none;position:absolute;bottom:22px;left:10px;z-index:401;width:36px;height:36px;border-radius:var(--r12);border:none;background:rgba(255,255,255,.92);backdrop-filter:blur(12px);box-shadow:var(--sh);cursor:pointer;font-size:.9rem;align-items:center;justify-content:center}
 .mob-nav{display:none;background:var(--bg);border-bottom:1px solid var(--sep);padding:6px 10px;gap:6px;flex-direction:column;z-index:900;flex-shrink:0;position:relative;overflow:visible}
-.mob-nav-bc{display:flex;align-items:center;gap:2px;overflow:visible;position:relative}
+.mob-nav-bc{display:flex;align-items:center;gap:4px;overflow:visible;position:relative;flex-wrap:nowrap}
 .mob-nav-bc .bc-drop{z-index:1100}
 .mob-nav-stats{display:flex;gap:8px;font-size:.68rem;font-weight:600}
 .mob-stat::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:currentColor;margin-right:3px;vertical-align:middle}
@@ -458,10 +458,6 @@ textarea{min-height:68px}
     <select class="kampagne-select" id="kampagneSelect">
       <option value="">Kampagne wählen…</option>
     </select>
-    <div class="mode-toggle" id="modeToggle" style="display:none">
-      <button class="mode-btn active" id="modeFlyer" onclick="switchMode('flyer')">📦 Flyer</button>
-      <button class="mode-btn" id="modePlakat" onclick="switchMode('plakate')">📌 Plakate</button>
-    </div>
   </div>
   <div class="h-right">
     <!-- Admin: Nutzer einladen -->
@@ -492,10 +488,6 @@ textarea{min-height:68px}
 <div class="mob-nav" id="mobNav" style="display:none">
   <div style="display:flex;align-items:center;gap:6px">
     <div class="mob-nav-bc" id="mobNavBc" style="flex:1"></div>
-    <div class="mode-toggle" id="modeToggleMob" style="display:none;flex-shrink:0">
-      <button class="mode-btn active" id="modeFlyerMob" onclick="switchMode('flyer')">📦 Flyer</button>
-      <button class="mode-btn" id="modePlakatMob" onclick="switchMode('plakate')">📌 Plakate</button>
-    </div>
   </div>
   <div class="mob-nav-stats">
     <span class="mob-stat" id="mobStatGesamt" style="color:var(--blue)">–</span>
@@ -722,7 +714,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v110 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v111 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -4121,12 +4113,23 @@ function renderBreadcrumb(){
     html+=`</div></div>`;
   }
   html+='</div>';
+  // Mode toggle (Flyer/Plakate) — neben Breadcrumbs, aber außerhalb des scroll-Containers
+  const typ=curKampagne?.typ||'flyer';
+  if(typ==='beides'){
+    const fActive=curMode==='flyer'?'active':'';
+    const pActive=curMode==='plakate'?'active':'';
+    html+=`<div class="mode-toggle" id="modeToggle" style="flex-shrink:0">
+      <button class="mode-btn ${fActive}" id="modeFlyer" onclick="switchMode('flyer')">📦 Flyer</button>
+      <button class="mode-btn ${pActive}" id="modePlakat" onclick="switchMode('plakate')">📌 Plakate</button>
+    </div>`;
+  }
   document.getElementById('regionPills').innerHTML=html;
   // Mobile nav breadcrumbs — separate IDs to avoid duplicate ID issue
   const mobBc=document.getElementById('mobNavBc');
   if(mobBc){
     const mobHtml=html.replace(/bcDropLK/g,'mobBcDropLK').replace(/bcDropGV/g,'mobBcDropGV').replace(/bcDropReg/g,'mobBcDropReg')
-      .replace(/toggleBcDrop\('lk'\)/g,"toggleBcDrop('lk',true)").replace(/toggleBcDrop\('gv'\)/g,"toggleBcDrop('gv',true)").replace(/toggleBcDrop\('reg'\)/g,"toggleBcDrop('reg',true)");
+      .replace(/toggleBcDrop\('lk'\)/g,"toggleBcDrop('lk',true)").replace(/toggleBcDrop\('gv'\)/g,"toggleBcDrop('gv',true)").replace(/toggleBcDrop\('reg'\)/g,"toggleBcDrop('reg',true)")
+      .replace('id="modeToggle"','id="modeToggleMob"').replace('id="modeFlyer"','id="modeFlyerMob"').replace('id="modePlakat"','id="modePlakatMob"');
     mobBc.innerHTML=mobHtml;
   }
 }
@@ -5958,11 +5961,11 @@ function showImpTab(tab) {
 function switchMode(mode){
   if(curMode===mode) return;
   curMode=mode;
-  document.getElementById('modeFlyer').classList.toggle('active',mode==='flyer');
-  document.getElementById('modePlakat').classList.toggle('active',mode==='plakate');
-  // Sync mobile toggle
-  const fMob=document.getElementById('modeFlyerMob');
-  const pMob=document.getElementById('modePlakatMob');
+  // Toggle-Buttons aktualisieren (Desktop + Mobile, dynamisch in Breadcrumbs)
+  const mf=document.getElementById('modeFlyer');const mp=document.getElementById('modePlakat');
+  if(mf) mf.classList.toggle('active',mode==='flyer');
+  if(mp) mp.classList.toggle('active',mode==='plakate');
+  const fMob=document.getElementById('modeFlyerMob');const pMob=document.getElementById('modePlakatMob');
   if(fMob) fMob.classList.toggle('active',mode==='flyer');
   if(pMob) pMob.classList.toggle('active',mode==='plakate');
   // Legend umschalten: Flyer-Legende aus, Plakat-Legende an (und umgekehrt)
@@ -5986,23 +5989,10 @@ function switchMode(mode){
 
 function showModeToggle(){
   const typ=curKampagne?.typ||'flyer';
-  const toggle=document.getElementById('modeToggle');
-  const toggleMob=document.getElementById('modeToggleMob');
-  const isMobile=window.innerWidth<=768;
-  // Nur anzeigen wenn Kampagne plakate oder beides unterstützt
-  if(typ==='beides'){
-    // Desktop: Header-Toggle; Mobile: mob-nav Toggle (nie beide gleichzeitig)
-    toggle.style.display=isMobile?'none':'flex';
-    if(toggleMob) toggleMob.style.display=isMobile?'flex':'none';
-  } else if(typ==='plakate'){
-    toggle.style.display='none';
-    if(toggleMob) toggleMob.style.display='none';
-    if(curMode!=='plakate') switchMode('plakate');
-  } else {
-    toggle.style.display='none';
-    if(toggleMob) toggleMob.style.display='none';
-    if(curMode!=='flyer') switchMode('flyer');
-  }
+  if(typ==='plakate'&&curMode!=='plakate') switchMode('plakate');
+  else if(typ==='flyer'&&curMode!=='flyer') switchMode('flyer');
+  // Toggle wird direkt in renderBreadcrumb() gerendert — einfach neu rendern
+  renderBreadcrumb();
 }
 function updateModeForKampagne(){
   const typ=curKampagne?.typ||'flyer';
