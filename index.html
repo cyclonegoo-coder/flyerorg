@@ -722,7 +722,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v109 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v110 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -1026,6 +1026,8 @@ document.addEventListener('mousedown',function(e){
 const SUPABASE_URL  = 'https://mphrgrjuqulzmlsstyvk.supabase.co';
 const SUPABASE_KEY  = 'sb_publishable_soGOkSVAkCSqPI-9e6n_Rg_T2dpnxb7';
 const { createClient } = supabase;
+// Hash VOR createClient speichern – Supabase entfernt ihn beim Token-Processing
+const _savedHash = window.location.hash || '';
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ============================================================
@@ -2598,9 +2600,11 @@ async function showApp() {
 }
 
 // Check if already logged in on page load
+let _authHandledByLink = false; // Flag: Auth wurde bereits vom Link-Handler behandelt
+
 async function checkSession() {
-  // Detect invite/recovery link tokens in URL hash
-  const hash = window.location.hash;
+  // Gespeicherten Hash verwenden (vor createClient gesichert)
+  const hash = _savedHash;
 
   // #register → Registrierungsformular automatisch öffnen
   if (hash === '#register') {
@@ -2612,18 +2616,24 @@ async function checkSession() {
 
   // Listen for auth state change (Supabase processes the token from the URL)
   if (isInviteLink) {
+    _authHandledByLink = true;
     const { data: { subscription } } = sb.auth.onAuthStateChange(async (event, session) => {
-      if (session && (event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY')) {
+      if (session && (event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION')) {
+        // Nur einmal ausführen
+        if(!_authHandledByLink) return;
+        _authHandledByLink = false;
         currentUser = session.user;
 
         // Pending-Invite-Daten aus DB laden und anwenden
         try {
           const invite = await ladePendingInvite(session.user.email);
+          const _isSignup = hash.includes('type=signup') && !hash.includes('type=magiclink') && !hash.includes('type=invite');
           const profileData = {
             id: session.user.id,
             email: session.user.email,
             name: invite?.name || session.user.user_metadata?.name || session.user.email.split('@')[0],
-            rolle: invite?.rolle || 'verteiler'
+            rolle: invite?.rolle || 'verteiler',
+            passwort_gesetzt: _isSignup ? true : false
           };
           if (invite?.telefon) profileData.telefon = invite.telefon;
           if (invite?.verwaltete_regionen?.length > 0) {
@@ -2636,19 +2646,20 @@ async function checkSession() {
           if (invite?.gebietsverband_id) {
             profileData.gebietsverband_id = invite.gebietsverband_id;
           }
-          await sb.from('user_profiles').upsert(profileData, { onConflict: 'id' });
+          await sb.from('user_profiles').upsert(profileData, { onConflict: 'id', ignoreDuplicates: false });
           if (invite) {
             await sb.from('pending_invites').delete().eq('email', session.user.email.toLowerCase());
           }
         } catch(e) { console.warn('Pending invite apply failed:', e); }
 
-        // Prüfe ob Nutzer ein Passwort hat (identities mit provider=email und identity_data)
-        // Bei Magic-Link-Erstanmeldung: immer Passwort setzen lassen
+        // Nutzer hat sich per Einladung (Magic Link) registriert → immer Passwort setzen
+        // Ausnahme: Nutzer hat sich selbst mit Passwort registriert (type=signup OHNE invite/magiclink)
         const isSignupConfirm = hash.includes('type=signup');
         const isMagicOrInvite = hash.includes('type=magiclink') || hash.includes('type=invite') || hash.includes('type=recovery') || hash.includes('type=email');
 
         if (isSignupConfirm && !isMagicOrInvite) {
           // Nutzer hat sich selbst registriert mit Passwort → direkt rein
+          await sb.from('user_profiles').update({ passwort_gesetzt: true }).eq('id', session.user.id);
           await loadProfile();
           showApp();
         } else {
@@ -4925,16 +4936,22 @@ function openHierarchyModal(){
 function closeHierarchyModal(){document.getElementById('hierarchyModalOv').classList.remove('open');}
 
 // ── Tree state ──
-let hTreeCollapsed=new Set();
+let hTreeExpanded=new Set();
 let hTreeFilter='';
 
 function filterHTree(){
   hTreeFilter=(document.getElementById('hTreeSearchInput')?.value||'').toLowerCase().trim();
+  // Bei Suche alles aufklappen, damit Treffer sichtbar sind
+  if(hTreeFilter){
+    Object.keys(landkreise).forEach(id=>hTreeExpanded.add('lk_'+id));
+    Object.keys(gebietsverbaende).forEach(id=>hTreeExpanded.add('gv_'+id));
+    Object.keys(regionen).forEach(id=>hTreeExpanded.add('reg_'+id));
+  }
   renderHTree();
 }
 
 function toggleHNode(key){
-  if(hTreeCollapsed.has(key)) hTreeCollapsed.delete(key); else hTreeCollapsed.add(key);
+  if(hTreeExpanded.has(key)) hTreeExpanded.delete(key); else hTreeExpanded.add(key);
   renderHTree();
 }
 
@@ -4964,7 +4981,7 @@ function renderHTree(){
 
   lkEntries.forEach(([lkId,lk])=>{
     const lkKey='lk_'+lkId;
-    const lkOpen=!hTreeCollapsed.has(lkKey);
+    const lkOpen=hTreeExpanded.has(lkKey);
     // GVs in diesem LK
     let gvEntries=Object.entries(gebietsverbaende).filter(([,gv])=>gv.landkreis_id===lkId);
     if(isGV) gvEntries=gvEntries.filter(([id])=>gvVerwIds.has(id));
@@ -4980,7 +4997,7 @@ function renderHTree(){
 
     gvEntries.forEach(([gvId,gv])=>{
       const gvKey='gv_'+gvId;
-      const gvOpen=!hTreeCollapsed.has(gvKey);
+      const gvOpen=hTreeExpanded.has(gvKey);
       let regEntries=Object.entries(regionen).filter(([,r])=>r.gebietsverband_id===gvId);
       if(isGV) regEntries=regEntries.filter(([id])=>(currentProfile?.verwaltete_regionen||[]).includes(id));
       regEntries.sort((a,b)=>a[1].name.localeCompare(b[1].name));
@@ -4991,7 +5008,7 @@ function renderHTree(){
 
       regEntries.forEach(([rId,r])=>{
         const rKey='reg_'+rId;
-        const rOpen=!hTreeCollapsed.has(rKey);
+        const rOpen=hTreeExpanded.has(rKey);
         const gebiete=(r.gebiete||[]).slice().sort((a,b)=>(a.name||'').localeCompare(b.name||''));
         const rMatch=!hTreeFilter||r.name.toLowerCase().includes(hTreeFilter);
         let rChildHtml='';
