@@ -1980,7 +1980,8 @@ function _renderUserRow(u,isAdmin,isKV){
   }
   const regEdit=(!isSelf&&!isGV&&(u.rolle==='verwalter'||u.rolle==='kreisverwalter'))
     ?`<button onclick="openEditZuweisungModal('${u.id}','${(u.name||'').replace(/'/g,"\\'")}','${u.rolle}',${JSON.stringify(u.verwaltete_regionen||[]).replace(/"/g,'&quot;')},'${(u.verwalteter_landkreis||'').replace(/'/g,"\\'")}')" style="background:none;border:none;color:var(--blue);cursor:pointer;font-size:.75rem;padding:1px 3px" title="${u.rolle==='kreisverwalter'?'LK':'Regionen'} bearbeiten">🗺</button>`:'';
-  const deleteBtn=(isSelf||isGV)?'':`<button onclick="deleteUser('${u.id}','${(u.name||'').replace(/'/g,"\\'")}')" style="background:none;border:none;color:var(--text4);cursor:pointer;font-size:.75rem;padding:1px 3px" title="Entfernen">🗑</button>`;
+  const canDelete=!isSelf&&!isGV&&!(isKV&&(istAdmin||u.rolle==='kreisverwalter'));
+  const deleteBtn=canDelete?`<button onclick="deleteUser('${u.id}','${(u.name||'').replace(/'/g,"\\'")}')" style="background:none;border:none;color:var(--text4);cursor:pointer;font-size:.75rem;padding:1px 3px" title="Entfernen">🗑</button>`:'';
   const noGVWarning=!u.gebietsverband_id&&u.rolle!=='admin'?'<span style="color:var(--orange);font-size:.65rem" title="Kein GV zugewiesen">⚠️</span>':'';
   return `<div style="display:flex;align-items:center;gap:6px;padding:4px 6px;background:var(--surface);border-radius:var(--r8);font-size:.78rem">
     <div style="flex:1;min-width:0">
@@ -2367,6 +2368,11 @@ async function sendInvite(channel) {
 }
 
 async function deleteUser(userId, userName) {
+  // Sicherheitscheck: nur Admins dürfen Admins/KVs löschen
+  if(curRole!=='admin'){
+    const target=allUsers?.find(p=>p.id===userId);
+    if(target&&(target.rolle==='admin'||target.rolle==='kreisverwalter')){toast('⚠️ Keine Berechtigung');return;}
+  }
   if(!await appConfirm('Nutzer löschen',`Nutzer „${userName}" wirklich vollständig löschen?\n\nDies entfernt Login-Zugang und Profil dauerhaft.`,'Löschen','Abbrechen'))return;
   try {
     const { data, error } = await sb.functions.invoke('delete-user', {
