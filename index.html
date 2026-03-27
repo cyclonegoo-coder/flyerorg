@@ -890,6 +890,10 @@ textarea{min-height:68px}
           <button class="btn btn-p" onclick="saveProfilTelefon()" style="font-size:.78rem">Speichern</button>
         </div>
       </div>
+      <div id="profilUebergabeWrap" style="display:none">
+        <div style="font-size:.65rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:2px">Übergabe-Info</div>
+        <div id="profilUebergabe" style="font-size:.82rem;color:var(--text2);padding:6px 8px;background:var(--surface2);border-radius:var(--r8)">–</div>
+      </div>
     </div>
     <div id="profilStatus" style="font-size:.78rem;margin-top:8px;min-height:18px"></div>
     <div class="m-actions" style="margin-top:10px">
@@ -1788,6 +1792,17 @@ function openProfilModal() {
   document.getElementById('profilRolle').textContent = (currentProfile?.rolle || 'verteiler').charAt(0).toUpperCase() + (currentProfile?.rolle || 'verteiler').slice(1);
   document.getElementById('profilTelefon').value = currentProfile?.telefon || '';
   document.getElementById('profilStatus').textContent = '';
+  // Übergabe-Info anzeigen (readonly)
+  const ueWrap=document.getElementById('profilUebergabeWrap');
+  const ueText=document.getElementById('profilUebergabe');
+  const myUser=allUsers.find(u=>u.id===currentUser?.id);
+  const ueInfo=myUser?._kampUebergabe||currentProfile?.uebergabe_info||myUser?.uebergabe_info||'';
+  if(ueInfo){
+    ueWrap.style.display='';
+    ueText.textContent='📦 '+ueInfo;
+  } else {
+    ueWrap.style.display='none';
+  }
   document.getElementById('profilModalOv').classList.add('open');
 }
 function closeProfilModal() {
@@ -1995,7 +2010,13 @@ function _renderUserRow(u,isAdmin,isKV){
   const noGVWarning=!u.gebietsverband_id&&u.rolle!=='admin'?'<span style="color:var(--orange);font-size:.65rem" title="Kein GV zugewiesen">⚠️</span>':'';
   const offlineBadge=u.is_offline?'<span style="font-size:.55rem;background:var(--orange);color:#fff;border-radius:3px;padding:1px 4px;margin-left:3px">Offline</span>':'';
   const uebergabeHtml=u.uebergabe_info?`<div style="font-size:.6rem;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${(u.uebergabe_info||'').replace(/"/g,'&quot;')}">📦 ${u.uebergabe_info}</div>`:'';
-  const uebergabeBtn=(!isSelf&&!isGV)?`<button onclick="editUebergabeInfo('${u.id}','${(u.name||'').replace(/'/g,"\\'")}')" style="background:none;border:none;color:var(--text4);cursor:pointer;font-size:.75rem;padding:1px 3px" title="Übergabe-Info bearbeiten">📦</button>`:'';
+  // Übergabe-Info bearbeiten: nur bei Nutzern die man auch verwalten darf
+  const canEditUe=!isSelf&&(
+    isAdmin||
+    (isKV&&(u.rolle==='verwalter'||u.rolle==='verteiler'))||
+    (isGV&&u.rolle==='verteiler')
+  );
+  const uebergabeBtn=canEditUe?`<button onclick="editUebergabeInfo('${u.id}','${(u.name||'').replace(/'/g,"\\'")}')" style="background:none;border:none;color:var(--text4);cursor:pointer;font-size:.75rem;padding:1px 3px" title="Übergabe-Info bearbeiten">📦</button>`:'';
   return `<div style="display:flex;align-items:center;gap:6px;padding:4px 6px;background:var(--surface);border-radius:var(--r8);font-size:.78rem">
     <div style="flex:1;min-width:0">
       <div style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${u.name||'–'}${offlineBadge} ${noGVWarning}</div>
@@ -2385,7 +2406,13 @@ async function sendInvite(channel) {
 }
 
 async function editUebergabeInfo(userId,userName){
-  const user=allUsers.find(u=>u.id===userId);
+  // Berechtigungsprüfung
+  const target=allUsers.find(u=>u.id===userId);
+  if(!target){toast('⚠️ Nutzer nicht gefunden');return;}
+  if(curRole==='verteiler'){toast('⚠️ Keine Berechtigung');return;}
+  if(curRole==='kreisverwalter'&&(target.rolle==='admin'||target.rolle==='kreisverwalter')){toast('⚠️ Keine Berechtigung');return;}
+  if(curRole==='verwalter'&&target.rolle!=='verteiler'){toast('⚠️ Keine Berechtigung');return;}
+  const user=target;
   const current=user?.uebergabe_info||'';
   const kampInfo=user?._kampUebergabe||'';
   const hasKampagne=curKampagne?.id;
