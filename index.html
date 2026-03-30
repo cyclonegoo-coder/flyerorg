@@ -718,7 +718,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v114 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v115 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -815,7 +815,17 @@ textarea{min-height:68px}
       </select>
       <div id="inviteGVWrap" style="display:none">
         <div style="font-size:.6rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:4px">Gebietsverband</div>
-        <select id="inviteGV" style="width:100%;padding:6px 10px;border:1px solid var(--sep);border-radius:var(--r8);font-size:.8rem"></select>
+        <input type="hidden" id="inviteGV" value="">
+        <div id="inviteGVPicker" style="position:relative">
+          <div id="inviteGVDisplay" onclick="toggleInviteGVTree()" style="width:100%;padding:6px 10px;border:1px solid var(--sep);border-radius:var(--r8);font-size:.8rem;cursor:pointer;background:#fff;display:flex;justify-content:space-between;align-items:center;min-height:34px;box-sizing:border-box">
+            <span id="inviteGVLabel" style="color:var(--text3)">— Gebietsverband wählen —</span>
+            <span style="font-size:.6rem">▾</span>
+          </div>
+          <div id="inviteGVTreeDrop" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:3200;background:#fff;border:1px solid var(--sep);border-radius:var(--r8);box-shadow:0 4px 16px rgba(0,0,0,.15);max-height:260px;overflow:hidden;flex-direction:column">
+            <input type="text" id="inviteGVSearch" placeholder="Suchen…" oninput="renderInviteGVTree()" style="width:100%;padding:6px 10px;border:none;border-bottom:1px solid var(--sep);font-size:.75rem;outline:none;box-sizing:border-box">
+            <div id="inviteGVTreeList" style="overflow-y:auto;max-height:220px;padding:4px 0"></div>
+          </div>
+        </div>
       </div>
       <div id="inviteRegionenWrap" style="display:none">
         <div style="font-size:.6rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:4px">Zugewiesene Gebietsverbände</div>
@@ -1859,24 +1869,12 @@ function openInviteModal() {
   if(isGVInvite){
     document.getElementById('inviteRolle').disabled = true;
     document.getElementById('inviteGVWrap').style.display = 'block';
-    const meineGVIds = new Set();
-    (currentProfile?.verwaltete_regionen||[]).forEach(rId=>{const reg=regionen[rId];if(reg)meineGVIds.add(reg.gebietsverband_id);});
-    const gvOpts = Object.entries(gebietsverbaende)
-      .filter(([id])=>meineGVIds.has(id))
-      .sort((a,b)=>a[1].name.localeCompare(b[1].name))
-      .map(([id,gv])=>`<option value="${id}">${gv.name}</option>`).join('');
-    document.getElementById('inviteGV').innerHTML = `<option value="">— Gebietsverband wählen —</option>` + gvOpts;
+    resetInviteGVPicker(); renderInviteGVTree();
   } else {
     document.getElementById('inviteRolle').disabled = false;
-    // Verteiler ist Default → GV-Dropdown sofort anzeigen und befüllen
+    // Verteiler ist Default → GV-Baum sofort anzeigen
     document.getElementById('inviteGVWrap').style.display = 'block';
-    const isKVI = curRole === 'kreisverwalter';
-    const kvLK = currentProfile?.verwalteter_landkreis;
-    const gvOptsList = Object.entries(gebietsverbaende)
-      .filter(([,gv]) => !isKVI || gv.landkreis_id === kvLK)
-      .sort((a,b) => a[1].name.localeCompare(b[1].name))
-      .map(([id,gv]) => `<option value="${id}">${gv.name}</option>`).join('');
-    document.getElementById('inviteGV').innerHTML = `<option value="">— Gebietsverband wählen —</option>` + gvOptsList;
+    resetInviteGVPicker(); renderInviteGVTree();
   }
   document.getElementById('inviteModalOv').classList.add('open');
 }
@@ -1884,6 +1882,87 @@ function openInviteModal() {
 function closeInviteModal() {
   document.getElementById('inviteModalOv').classList.remove('open');
 }
+
+/* ── Invite GV Tree Picker ── */
+function resetInviteGVPicker(){
+  document.getElementById('inviteGV').value='';
+  document.getElementById('inviteGVLabel').textContent='— Gebietsverband wählen —';
+  document.getElementById('inviteGVLabel').style.color='var(--text3)';
+  const s=document.getElementById('inviteGVSearch');if(s)s.value='';
+  document.getElementById('inviteGVTreeDrop').style.display='none';
+}
+function toggleInviteGVTree(){
+  const d=document.getElementById('inviteGVTreeDrop');
+  if(d.style.display==='none'||d.style.display===''){
+    d.style.display='flex'; renderInviteGVTree();
+    setTimeout(()=>document.getElementById('inviteGVSearch')?.focus(),50);
+  } else d.style.display='none';
+}
+function selectInviteGV(gvId,gvName,lkName){
+  document.getElementById('inviteGV').value=gvId;
+  const label=document.getElementById('inviteGVLabel');
+  label.textContent=lkName?`${lkName} › ${gvName}`:gvName;
+  label.style.color='var(--text)';
+  document.getElementById('inviteGVTreeDrop').style.display='none';
+}
+let _invGVTreeExp=new Set();
+function toggleInvGVNode(key,ev){if(ev)ev.stopPropagation();if(_invGVTreeExp.has(key))_invGVTreeExp.delete(key);else _invGVTreeExp.add(key);renderInviteGVTree();}
+function getInviteGVAllowed(){
+  const isKV=curRole==='kreisverwalter',isGV=curRole==='verwalter';
+  const kvLK=currentProfile?.verwalteter_landkreis;
+  if(isGV){
+    const s=new Set();(currentProfile?.verwaltete_regionen||[]).forEach(rId=>{const r=regionen[rId];if(r)s.add(r.gebietsverband_id);});
+    return{filterLK:null,filterGV:s};
+  }
+  if(isKV) return{filterLK:kvLK,filterGV:null};
+  return{filterLK:null,filterGV:null};
+}
+function renderInviteGVTree(){
+  const list=document.getElementById('inviteGVTreeList');if(!list)return;
+  const q=(document.getElementById('inviteGVSearch')?.value||'').toLowerCase().trim();
+  const {filterLK,filterGV}=getInviteGVAllowed();
+  const selGV=document.getElementById('inviteGV')?.value||'';
+
+  let lkEntries=Object.entries(landkreise);
+  if(filterLK) lkEntries=lkEntries.filter(([id])=>id===filterLK);
+  lkEntries.sort((a,b)=>a[1].name.localeCompare(b[1].name));
+
+  let html='';
+  lkEntries.forEach(([lkId,lk])=>{
+    let gvEntries=Object.entries(gebietsverbaende).filter(([,gv])=>gv.landkreis_id===lkId);
+    if(filterGV) gvEntries=gvEntries.filter(([id])=>filterGV.has(id));
+    gvEntries.sort((a,b)=>a[1].name.localeCompare(b[1].name));
+    if(!gvEntries.length) return;
+
+    // Suchfilter
+    const lkMatch=!q||lk.name.toLowerCase().includes(q);
+    const matchedGVs=gvEntries.filter(([,gv])=>lkMatch||gv.name.toLowerCase().includes(q));
+    if(!matchedGVs.length) return;
+
+    const lkKey='inv_lk_'+lkId;
+    const lkOpen=_invGVTreeExp.has(lkKey)||!!q;
+    // Nur 1 LK → automatisch offen
+    const autoOpen=lkEntries.length===1||lkOpen;
+
+    html+=`<div style="padding:0 6px">
+      <div onclick="toggleInvGVNode('${lkKey}',event)" style="display:flex;align-items:center;gap:4px;padding:4px 4px;cursor:pointer;font-size:.72rem;font-weight:600;color:var(--text2);border-radius:4px;user-select:none" onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background=''">
+        <span style="font-size:.6rem;width:12px;text-align:center">${autoOpen?'▾':'▸'}</span>${lk.name}<span style="color:var(--text3);font-weight:400;margin-left:auto;font-size:.6rem">${matchedGVs.length}</span>
+      </div>`;
+    if(autoOpen){
+      matchedGVs.forEach(([gvId,gv])=>{
+        const isSel=gvId===selGV;
+        html+=`<div onclick="selectInviteGV('${gvId}','${gv.name.replace(/'/g,"\\'")}','${lk.name.replace(/'/g,"\\'")}')" style="display:flex;align-items:center;gap:6px;padding:4px 8px 4px 22px;cursor:pointer;font-size:.75rem;border-radius:4px;${isSel?'background:var(--blue);color:#fff':'color:var(--text)'}" onmouseover="if(!${isSel})this.style.background='var(--bg2)'" onmouseout="if(!${isSel})this.style.background=''">
+          ${gv.name}
+        </div>`;
+      });
+    }
+    html+='</div>';
+  });
+  if(!html) html='<div style="padding:12px;text-align:center;font-size:.72rem;color:var(--text3)">Keine Ergebnisse</div>';
+  list.innerHTML=html;
+}
+// Klick außerhalb → Tree schließen
+document.addEventListener('click',e=>{if(!e.target.closest('#inviteGVPicker')){const d=document.getElementById('inviteGVTreeDrop');if(d)d.style.display='none';}});
 
 function renderUserList() {
   const list = document.getElementById('manageUserList');
@@ -2214,24 +2293,10 @@ document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('inviteRegionenWrap').style.display = v === 'verwalter' ? 'block' : 'none';
       // Landkreis-Dropdown für Kreisverwalter
       document.getElementById('inviteLandkreisWrap').style.display = v === 'kreisverwalter' ? 'block' : 'none';
-      // GV-Dropdown für Verteiler (Einzelauswahl)
+      // GV-Baum für Verteiler (Einzelauswahl)
       const showGV = v === 'verteiler';
       document.getElementById('inviteGVWrap').style.display = showGV ? 'block' : 'none';
-      if (showGV) {
-        const isKV = curRole === 'kreisverwalter';
-        const isGVI = curRole === 'verwalter';
-        const kvLK = currentProfile?.verwalteter_landkreis;
-        const meineGVIds = isGVI ? (function(){ const s=new Set(); (currentProfile?.verwaltete_regionen||[]).forEach(rId=>{const reg=regionen[rId];if(reg)s.add(reg.gebietsverband_id);}); return s; })() : null;
-        const gvOpts = Object.entries(gebietsverbaende)
-          .filter(([id,gv]) => {
-            if(isGVI) return meineGVIds.has(id);
-            if(isKV) return gv.landkreis_id === kvLK;
-            return true;
-          })
-          .sort((a,b) => a[1].name.localeCompare(b[1].name))
-          .map(([id,gv]) => `<option value="${id}">${gv.name}</option>`).join('');
-        document.getElementById('inviteGV').innerHTML = `<option value="">— Gebietsverband wählen —</option>` + gvOpts;
-      }
+      if (showGV) { resetInviteGVPicker(); renderInviteGVTree(); }
       if (v === 'kreisverwalter') {
         const sel = document.getElementById('inviteLandkreis');
         sel.innerHTML = Object.entries(landkreise).map(([id,lk]) => `<option value="${id}">${lk.name}</option>`).join('');
