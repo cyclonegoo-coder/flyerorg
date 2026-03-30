@@ -718,7 +718,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v113 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v114 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -4315,21 +4315,23 @@ function renderList(){
   const q=(document.getElementById('gebietSearch')?.value||'').toLowerCase().trim();
   const filtered=q?allGs.filter(g=>g.name.toLowerCase().includes(q)):allGs;
   // Status-Zähler für Filter-Buttons
-  const counts={alle:filtered.length,offen:0,zugeteilt:0,fertig:0,problem:0};
+  const counts={alle:filtered.length,offen:0,zugeteilt:0,fertig:0,problem:0,kein_verteiler:0};
   filtered.forEach(g=>{
     counts[g.status]=(counts[g.status]||0)+1;
+    if(!g.verteilerId) counts.kein_verteiler=(counts.kein_verteiler||0)+1;
     if(curRole==='verteiler'&&!g.verteilerId) counts.problem=(counts.problem||0)+1;
   });
   // Filter-Buttons rendern
   const fEl=document.getElementById('gebietFilter');
   if(fEl) fEl.innerHTML=[
-    ['alle','Alle'],['offen','Offen'],['zugeteilt','Zugestellt'],['fertig','Verteilt']
+    ['alle','Alle'],['offen','Offen'],['zugeteilt','Zugestellt'],['fertig','Verteilt'],['kein_verteiler','⚠️ Verteiler fehlt']
   ].filter(([k])=>k==='alle'||counts[k]>0).map(([k,l])=>
     `<button class="g-filter-btn${gListFilter===k?' active':''}" onclick="setGFilter('${k}')">${l}<span class="g-filter-cnt">${counts[k]||0}</span></button>`
   ).join('')+(counts.problem>0?`<button class="g-filter-btn${gListFilter==='problem'?' active':''}" onclick="setGFilter('problem')">🆘<span class="g-filter-cnt">${counts.problem}</span></button>`:'');
   // Status-Filter anwenden
   let gs=filtered;
-  if(gListFilter==='problem') gs=gs.filter(g=>curRole==='verteiler'&&!g.verteilerId);
+  if(gListFilter==='kein_verteiler') gs=gs.filter(g=>!g.verteilerId);
+  else if(gListFilter==='problem') gs=gs.filter(g=>curRole==='verteiler'&&!g.verteilerId);
   else if(gListFilter!=='alle') gs=gs.filter(g=>g.status===gListFilter);
   // Gruppierung nach Region (wenn >15 Gebiete und keine spez. Region gewählt)
   const useGroups=gs.length>15&&curReg==='alle';
