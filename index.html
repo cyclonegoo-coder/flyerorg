@@ -718,7 +718,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v115 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v116 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -869,6 +869,14 @@ textarea{min-height:68px}
     <div class="m-handle"></div>
     <div class="m-title">👥 Nutzerverwaltung</div>
     <div id="manageUserList" style="max-height:350px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;margin-bottom:10px"></div>
+    <div id="pendingInvitesSection" style="display:none;margin-bottom:10px">
+      <div onclick="document.getElementById('pendingInvitesList').style.display=document.getElementById('pendingInvitesList').style.display==='none'?'flex':'none';this.querySelector('.pi-arrow').textContent=document.getElementById('pendingInvitesList').style.display==='none'?'▸':'▾'" style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:6px 0;border-top:1px solid var(--sep)">
+        <span class="pi-arrow" style="font-size:.7rem;color:var(--text3)">▸</span>
+        <span style="font-size:.72rem;font-weight:600;color:var(--text2)">📨 Offene Einladungen</span>
+        <span id="pendingInvitesBadge" style="font-size:.6rem;background:var(--orange);color:#fff;border-radius:10px;padding:1px 6px;font-weight:600">0</span>
+      </div>
+      <div id="pendingInvitesList" style="display:none;flex-direction:column;gap:4px;max-height:200px;overflow-y:auto"></div>
+    </div>
     <div class="m-actions">
       <button class="btn btn-g" onclick="closeManageUsersModal()">Schließen</button>
     </div>
@@ -1160,6 +1168,9 @@ async function doRegister() {
         if (invite.gebietsverband_id) {
           profileData.gebietsverband_id = invite.gebietsverband_id;
         }
+        if (invite.uebergabe_info) {
+          profileData.uebergabe_info = invite.uebergabe_info;
+        }
         // Invite aus DB löschen (verbraucht)
         await sb.from('pending_invites').delete().eq('email', email.toLowerCase());
       }
@@ -1292,6 +1303,9 @@ async function pruefePendingInviteBeiLogin(user) {
     }
     if (invite.gebietsverband_id) {
       upd.gebietsverband_id = invite.gebietsverband_id;
+    }
+    if (invite.uebergabe_info) {
+      upd.uebergabe_info = invite.uebergabe_info;
     }
     await sb.from('user_profiles').update(upd).eq('id', user.id);
     // Invite verbraucht → löschen
@@ -1839,6 +1853,7 @@ async function saveProfilTelefon() {
 // ============================================================
 function openManageUsersModal() {
   renderUserList();
+  loadPendingInvites();
   document.getElementById('manageUsersModalOv').classList.add('open');
 }
 function closeManageUsersModal() {
@@ -2045,6 +2060,47 @@ function renderUserList() {
       el.style.maxHeight=el.scrollHeight+'px';
     });
   });
+}
+
+/* ── Offene Einladungen (pending_invites) ── */
+let pendingInvites=[];
+async function loadPendingInvites(){
+  try{
+    const {data,error}=await sb.from('pending_invites').select('*').order('created_at',{ascending:false});
+    if(error){console.warn('loadPendingInvites:',error.message);pendingInvites=[];} else pendingInvites=data||[];
+  }catch(e){console.warn('loadPendingInvites:',e);pendingInvites=[];}
+  renderPendingInvites();
+}
+function renderPendingInvites(){
+  const sec=document.getElementById('pendingInvitesSection');
+  const list=document.getElementById('pendingInvitesList');
+  const badge=document.getElementById('pendingInvitesBadge');
+  if(!sec||!list) return;
+  if(!pendingInvites.length){sec.style.display='none';return;}
+  sec.style.display='block';
+  if(badge) badge.textContent=pendingInvites.length;
+  const rolleLabel={verteiler:'Verteiler',verwalter:'Gebietsverwalter',kreisverwalter:'Kreisverwalter',admin:'Admin'};
+  list.innerHTML=pendingInvites.map(inv=>{
+    const datum=inv.created_at?new Date(inv.created_at).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'2-digit'}):'';
+    const einlVon=inv.eingeladen_von?allUsers.find(u=>u.id===inv.eingeladen_von):null;
+    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--surface2);border-radius:var(--r8);border-left:3px solid var(--orange)">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:.78rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${inv.name||'–'}</div>
+        <div style="font-size:.65rem;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${inv.email} · ${rolleLabel[inv.rolle]||inv.rolle}${einlVon?' · von '+einlVon.name:''}</div>
+        <div style="font-size:.6rem;color:var(--text4)">${datum}</div>
+      </div>
+      <button onclick="deletePendingInvite('${inv.email.replace(/'/g,"\\'")}')" title="Einladung löschen" style="background:none;border:none;font-size:.9rem;cursor:pointer;padding:4px;color:var(--red)">🗑️</button>
+    </div>`;
+  }).join('');
+}
+async function deletePendingInvite(email){
+  const ok=await appConfirm('🗑️ Einladung löschen',`Einladung für „${email}" wirklich löschen?`,'Ja, löschen','Abbrechen');
+  if(!ok) return;
+  const {error}=await sb.from('pending_invites').delete().eq('email',email.toLowerCase());
+  if(error){toast('⚠️ Fehler: '+error.message);return;}
+  pendingInvites=pendingInvites.filter(i=>i.email.toLowerCase()!==email.toLowerCase());
+  renderPendingInvites();
+  toast('✅ Einladung gelöscht');
 }
 
 function _renderUserRow(u,isAdmin,isKV){
@@ -2372,6 +2428,7 @@ async function sendInvite(channel) {
       verwaltete_regionen: verwaltete_regionen.length > 0 ? verwaltete_regionen : null,
       verwalteter_landkreis: verwalteter_landkreis || null,
       gebietsverband_id: gebietsverband_id || null,
+      uebergabe_info: uebergabeInfo || null,
       eingeladen_von: currentUser.id
     }, { onConflict: 'email' });
     if (piErr) console.warn('pending_invites speichern fehlgeschlagen:', piErr.message);
@@ -2844,6 +2901,9 @@ async function checkSession() {
           if (invite?.gebietsverband_id) {
             profileData.gebietsverband_id = invite.gebietsverband_id;
           }
+          if (invite?.uebergabe_info) {
+            profileData.uebergabe_info = invite.uebergabe_info;
+          }
           await sb.from('user_profiles').upsert(profileData, { onConflict: 'id', ignoreDuplicates: false });
           if (invite) {
             await sb.from('pending_invites').delete().eq('email', session.user.email.toLowerCase());
@@ -3047,31 +3107,43 @@ function renderAnfragenList() {
       const userName = user ? user.name : 'Unbekannt';
       const datum = new Date(a.created_at).toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
       const typLabel = a.typ === 'uebernahme' ? '🙋 Übernahme' : a.typ === 'abgabe' ? '🔄 Abgabe' : a.typ === 'zuweisung_anfrage' ? '👤 Zuweisung' : a.typ === 'plakat_abhaengen' ? '📌 Plakat abhängen' : '📦 Stückzahl';
+      // Prüfe ob der aktuelle Nutzer der Ersteller dieser Anfrage ist (z.B. Verwalter hat Zuweisung gesendet)
+      const istEigeneAnfrage = a.eingeladen_von === currentUser?.id || (a.typ === 'zuweisung_anfrage' && a.user_id === currentUser?.id);
+      const zielUser = a.ziel_user_id ? allUsers.find(u => u.id === a.ziel_user_id) : null;
       const beschreibung = a.typ === 'uebernahme'
         ? `🙋 ${userName} möchte dieses Problemgebiet übernehmen`
         : a.typ === 'abgabe'
         ? `🔄 ${userName} möchte dieses Gebiet abgeben`
         : a.typ === 'plakat_abhaengen'
         ? `📌 ${userName} braucht Hilfe beim Abhängen`
+        : a.typ === 'zuweisung_anfrage'
+        ? `👤 Anfrage an ${zielUser?.name||'Verteiler'}`
         : `👤 ${userName} → 📦 <strong>${a.neue_stueckzahl}</strong> Stück`;
-      const genehmigtBtn = a.typ === 'uebernahme'
-        ? `<button onclick="handleUebernahmeAnfrage('${a.id}','genehmigt','${a.gebiet_id}','${a.user_id}')" style="flex:1;padding:5px;border:none;border-radius:var(--r8);background:var(--green);color:#fff;font-size:.75rem;font-weight:600;cursor:pointer">✓ Genehmigen</button>`
-        : a.typ === 'abgabe'
-        ? `<button onclick="handleAbgabeAnfrage('${a.id}','genehmigt','${a.gebiet_id}')" style="flex:1;padding:5px;border:none;border-radius:var(--r8);background:var(--green);color:#fff;font-size:.75rem;font-weight:600;cursor:pointer">✓ Genehmigen</button>`
-        : a.typ === 'plakat_abhaengen'
-        ? `<button onclick="handlePlakatHilfeAnfrage('${a.id}','genehmigt','${a.plakat_id}')" style="flex:1;padding:5px;border:none;border-radius:var(--r8);background:var(--green);color:#fff;font-size:.75rem;font-weight:600;cursor:pointer">✓ Erledigt</button>`
-        : `<button onclick="handleAnfrage('${a.id}','genehmigt',${a.neue_stueckzahl},'${a.gebiet_id}')" style="flex:1;padding:5px;border:none;border-radius:var(--r8);background:var(--green);color:#fff;font-size:.75rem;font-weight:600;cursor:pointer">✓ Genehmigen</button>`;
-      return `<div style="background:var(--surface2);border-radius:var(--r8);padding:10px;border-left:3px solid var(--orange)">
+      let actionBtns;
+      if (istEigeneAnfrage) {
+        // Eigene Anfrage → nur Zurückziehen
+        actionBtns = `<button onclick="zurueckziehenAnfrage('${a.id}')" style="flex:1;padding:5px;border:none;border-radius:var(--r8);background:var(--orange);color:#fff;font-size:.75rem;font-weight:600;cursor:pointer">↩ Zurückziehen</button>`;
+      } else {
+        const genehmigtBtn = a.typ === 'uebernahme'
+          ? `<button onclick="handleUebernahmeAnfrage('${a.id}','genehmigt','${a.gebiet_id}','${a.user_id}')" style="flex:1;padding:5px;border:none;border-radius:var(--r8);background:var(--green);color:#fff;font-size:.75rem;font-weight:600;cursor:pointer">✓ Genehmigen</button>`
+          : a.typ === 'abgabe'
+          ? `<button onclick="handleAbgabeAnfrage('${a.id}','genehmigt','${a.gebiet_id}')" style="flex:1;padding:5px;border:none;border-radius:var(--r8);background:var(--green);color:#fff;font-size:.75rem;font-weight:600;cursor:pointer">✓ Genehmigen</button>`
+          : a.typ === 'plakat_abhaengen'
+          ? `<button onclick="handlePlakatHilfeAnfrage('${a.id}','genehmigt','${a.plakat_id}')" style="flex:1;padding:5px;border:none;border-radius:var(--r8);background:var(--green);color:#fff;font-size:.75rem;font-weight:600;cursor:pointer">✓ Erledigt</button>`
+          : `<button onclick="handleAnfrage('${a.id}','genehmigt',${a.neue_stueckzahl},'${a.gebiet_id}')" style="flex:1;padding:5px;border:none;border-radius:var(--r8);background:var(--green);color:#fff;font-size:.75rem;font-weight:600;cursor:pointer">✓ Genehmigen</button>`;
+        actionBtns = genehmigtBtn + `
+          <button onclick="handleAnfrage('${a.id}','abgelehnt',null,null)" style="flex:1;padding:5px;border:none;border-radius:var(--r8);background:var(--red);color:#fff;font-size:.75rem;font-weight:600;cursor:pointer">✗ Ablehnen</button>`;
+      }
+      return `<div style="background:var(--surface2);border-radius:var(--r8);padding:10px;border-left:3px solid ${istEigeneAnfrage?'var(--blue)':'var(--orange)'}">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
           <span style="font-size:.82rem;font-weight:600">${gebietName}</span>
           <span style="font-size:.65rem;color:var(--text4)">${datum}</span>
         </div>
-        <div style="font-size:.7rem;font-weight:600;color:var(--blue);margin-bottom:2px">${typLabel}</div>
+        <div style="font-size:.7rem;font-weight:600;color:var(--blue);margin-bottom:2px">${typLabel}${istEigeneAnfrage?' <span style="color:var(--text3);font-weight:400">(von dir)</span>':''}</div>
         <div style="font-size:.78rem;color:var(--text2);margin-bottom:2px">${beschreibung}</div>
         ${a.grund ? `<div style="font-size:.75rem;color:var(--text3);margin-bottom:6px;font-style:italic">${a.grund}</div>` : ''}
         <div style="display:flex;gap:6px">
-          ${genehmigtBtn}
-          <button onclick="handleAnfrage('${a.id}','abgelehnt',null,null)" style="flex:1;padding:5px;border:none;border-radius:var(--r8);background:var(--red);color:#fff;font-size:.75rem;font-weight:600;cursor:pointer">✗ Ablehnen</button>
+          ${actionBtns}
         </div>
       </div>`;
     }).join('');
@@ -3139,6 +3211,20 @@ async function handleAnfrage(anfrageId, entscheidung, neueStueckzahl, gebietId) 
   const _ag=getG(gebietId);
   logAction('anfrage',`Stückzahl-Anfrage ${entscheidung}${neueStueckzahl?' (neue Stückzahl: '+neueStueckzahl+')':''}`,gebietId,_ag?.name||gebietId);
   toast(entscheidung === 'genehmigt' ? '✅ Anfrage genehmigt' : '❌ Anfrage abgelehnt');
+}
+
+// Eigene Anfrage zurückziehen
+async function zurueckziehenAnfrage(anfrageId) {
+  const ok = await appConfirm('↩ Anfrage zurückziehen','Möchtest du diese Anfrage wirklich zurückziehen?','Ja, zurückziehen','Abbrechen');
+  if (!ok) return;
+  const { error } = await sb.from('anfragen').delete().eq('id', anfrageId);
+  if (error) { toast('⚠️ Fehler beim Zurückziehen'); console.warn(error); return; }
+  alleAnfragen = alleAnfragen.filter(a => a.id !== anfrageId);
+  meineZuweisungsAnfragen = meineZuweisungsAnfragen.filter(a => a.id !== anfrageId);
+  updateAnfragenBadge();
+  renderAnfragenList();
+  if (selId) openDetail(selId);
+  toast('✅ Anfrage zurückgezogen');
 }
 
 // Verwalter genehmigt Übernahme-Anfrage eines Verteilers
@@ -4577,12 +4663,17 @@ function openDetail(id){
         h+=`<div class="d-sec" style="padding:6px 12px"><div class="sec-hd" style="color:var(--orange)">📦 Anfragen (${gebietAnfragen.length})</div><div class="f-stack">`;
         gebietAnfragen.forEach(a=>{
           const user=allUsers.find(u=>u.id===a.user_id);const userName=user?user.name:'?';
-          h+=`<div style="background:var(--surface2);border-radius:var(--r8);padding:6px;border-left:3px solid var(--orange)">
-            <div style="font-size:.72rem;margin-bottom:4px">👤 ${userName} → <strong>${a.neue_stueckzahl}</strong> Stk.</div>
+          const _eigene=a.user_id===currentUser?.id&&(a.typ==='zuweisung_anfrage');
+          const zielU=a.ziel_user_id?allUsers.find(u=>u.id===a.ziel_user_id):null;
+          const _desc=a.typ==='zuweisung_anfrage'?`👤 Anfrage an ${zielU?.name||'Verteiler'}`:`👤 ${userName} → <strong>${a.neue_stueckzahl}</strong> Stk.`;
+          h+=`<div style="background:var(--surface2);border-radius:var(--r8);padding:6px;border-left:3px solid ${_eigene?'var(--blue)':'var(--orange)'}">
+            <div style="font-size:.72rem;margin-bottom:4px">${_desc}</div>
             ${a.grund?`<div style="font-size:.68rem;color:var(--text3);margin-bottom:4px;font-style:italic">${a.grund}</div>`:''}
             <div style="display:flex;gap:4px">
-              <button onclick="handleAnfrage('${a.id}','genehmigt',${a.neue_stueckzahl},'${a.gebiet_id}')" style="flex:1;padding:4px;border:none;border-radius:var(--r8);background:var(--green);color:#fff;font-size:.68rem;font-weight:600;cursor:pointer">✓</button>
-              <button onclick="handleAnfrage('${a.id}','abgelehnt',null,null)" style="flex:1;padding:4px;border:none;border-radius:var(--r8);background:var(--red);color:#fff;font-size:.68rem;font-weight:600;cursor:pointer">✗</button>
+              ${_eigene
+                ?`<button onclick="zurueckziehenAnfrage('${a.id}')" style="flex:1;padding:4px;border:none;border-radius:var(--r8);background:var(--orange);color:#fff;font-size:.68rem;font-weight:600;cursor:pointer">↩ Zurückziehen</button>`
+                :`<button onclick="handleAnfrage('${a.id}','genehmigt',${a.neue_stueckzahl},'${a.gebiet_id}')" style="flex:1;padding:4px;border:none;border-radius:var(--r8);background:var(--green);color:#fff;font-size:.68rem;font-weight:600;cursor:pointer">✓</button>
+              <button onclick="handleAnfrage('${a.id}','abgelehnt',null,null)" style="flex:1;padding:4px;border:none;border-radius:var(--r8);background:var(--red);color:#fff;font-size:.68rem;font-weight:600;cursor:pointer">✗</button>`}
             </div>
           </div>`;
         });
@@ -4688,12 +4779,17 @@ function openDetail(id){
       if(gebietAnfragen.length>0){
         h+=`<div class="d-sec"><div class="sec-hd">📦 Offene Anfragen (${gebietAnfragen.length})</div><div class="f-stack">`;
         gebietAnfragen.forEach(a=>{const user=allUsers.find(u=>u.id===a.user_id);const userName=user?user.name:'Unbekannt';
-          h+=`<div style="background:var(--surface2);border-radius:var(--r8);padding:8px;border-left:3px solid var(--orange)">
-            <div style="font-size:.78rem;margin-bottom:4px">👤 ${userName} → 📦 <strong>${a.neue_stueckzahl}</strong> Stück</div>
+          const _eig2=a.user_id===currentUser?.id&&(a.typ==='zuweisung_anfrage');
+          const _zu2=a.ziel_user_id?allUsers.find(u=>u.id===a.ziel_user_id):null;
+          const _dsc2=a.typ==='zuweisung_anfrage'?`👤 Anfrage an ${_zu2?.name||'Verteiler'}`:`👤 ${userName} → 📦 <strong>${a.neue_stueckzahl}</strong> Stück`;
+          h+=`<div style="background:var(--surface2);border-radius:var(--r8);padding:8px;border-left:3px solid ${_eig2?'var(--blue)':'var(--orange)'}">
+            <div style="font-size:.78rem;margin-bottom:4px">${_dsc2}</div>
             ${a.grund?`<div style="font-size:.72rem;color:var(--text3);margin-bottom:4px;font-style:italic">${a.grund}</div>`:''}
             <div style="display:flex;gap:6px">
-              <button onclick="handleAnfrage('${a.id}','genehmigt',${a.neue_stueckzahl},'${a.gebiet_id}')" style="flex:1;padding:4px;border:none;border-radius:var(--r8);background:var(--green);color:#fff;font-size:.7rem;font-weight:600;cursor:pointer">✓ Genehmigen</button>
-              <button onclick="handleAnfrage('${a.id}','abgelehnt',null,null)" style="flex:1;padding:4px;border:none;border-radius:var(--r8);background:var(--red);color:#fff;font-size:.7rem;font-weight:600;cursor:pointer">✗ Ablehnen</button>
+              ${_eig2
+                ?`<button onclick="zurueckziehenAnfrage('${a.id}')" style="flex:1;padding:4px;border:none;border-radius:var(--r8);background:var(--orange);color:#fff;font-size:.7rem;font-weight:600;cursor:pointer">↩ Zurückziehen</button>`
+                :`<button onclick="handleAnfrage('${a.id}','genehmigt',${a.neue_stueckzahl},'${a.gebiet_id}')" style="flex:1;padding:4px;border:none;border-radius:var(--r8);background:var(--green);color:#fff;font-size:.7rem;font-weight:600;cursor:pointer">✓ Genehmigen</button>
+              <button onclick="handleAnfrage('${a.id}','abgelehnt',null,null)" style="flex:1;padding:4px;border:none;border-radius:var(--r8);background:var(--red);color:#fff;font-size:.7rem;font-weight:600;cursor:pointer">✗ Ablehnen</button>`}
             </div></div>`;
         });
         h+=`</div></div>`;
