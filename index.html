@@ -692,7 +692,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v117 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v119 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -1231,7 +1231,19 @@ async function doSetPassword() {
   }
 
   // Flag setzen: Passwort wurde vergeben
-  await sb.from('user_profiles').update({ passwort_gesetzt: true }).eq('id', currentUser.id);
+  // Falls Profil noch nicht existiert (RLS hat upsert vorher blockiert), jetzt anlegen
+  const {data:existsCheck} = await sb.from('user_profiles').select('id').eq('id',currentUser.id).maybeSingle();
+  if (existsCheck) {
+    await sb.from('user_profiles').update({ passwort_gesetzt: true }).eq('id', currentUser.id);
+  } else {
+    await sb.from('user_profiles').upsert({
+      id: currentUser.id,
+      email: currentUser.email,
+      name: currentUser.user_metadata?.name || currentUser.email.split('@')[0],
+      rolle: 'verteiler',
+      passwort_gesetzt: true
+    }, { onConflict: 'id' });
+  }
 
   // Hide password screen, show app
   document.getElementById('setPasswordScreen').style.display = 'none';
@@ -2068,13 +2080,13 @@ function renderPendingInvites(){
   }).join('');
 }
 async function deletePendingInvite(email){
-  const ok=await appConfirm('🗑️ Einladung löschen',`Einladung für „${email}" wirklich löschen?`,'Ja, löschen','Abbrechen');
+  const ok=await appConfirm('🗑️ Einladung löschen',`Einladung für „${email}" wirklich zurückziehen? Die Person kann sich dann nicht mehr registrieren.`,'Ja, zurückziehen','Abbrechen');
   if(!ok) return;
   const {error}=await sb.from('pending_invites').delete().eq('email',email.toLowerCase());
   if(error){toast('⚠️ Fehler: '+error.message);return;}
   pendingInvites=pendingInvites.filter(i=>i.email.toLowerCase()!==email.toLowerCase());
   renderPendingInvites();
-  toast('✅ Einladung gelöscht');
+  toast('✅ Einladung zurückgezogen');
 }
 
 function _renderUserRow(u,isAdmin,isKV){
@@ -2775,7 +2787,9 @@ function setRollenbasierterFilter() {
 async function showApp() {
   // Passwort-Pflicht: Kein Zugang ohne gesetztes Passwort
   if (!currentProfile) await loadProfile();
-  if (currentProfile && !currentProfile.passwort_gesetzt) {
+  // Kein Profil gefunden ODER Passwort nicht gesetzt → Passwort-Screen
+  if (!currentProfile || !currentProfile.passwort_gesetzt) {
+    console.log('showApp: Passwort-Screen erzwungen. Profil:', currentProfile ? 'vorhanden, passwort_gesetzt=' + currentProfile.passwort_gesetzt : 'FEHLT');
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('setPasswordScreen').style.display = 'flex';
     return;
@@ -2860,29 +2874,48 @@ async function checkSession() {
         // Pending-Invite-Daten aus DB laden und anwenden
         try {
           const invite = await ladePendingInvite(session.user.email);
-          const _isSignup = hash.includes('type=signup') && !hash.includes('type=magiclink') && !hash.includes('type=invite');
-          const profileData = {
-            id: session.user.id,
-            email: session.user.email,
-            name: invite?.name || session.user.user_metadata?.name || session.user.email.split('@')[0],
-            rolle: invite?.rolle || 'verteiler',
-            passwort_gesetzt: _isSignup ? true : false
-          };
-          if (invite?.telefon) profileData.telefon = invite.telefon;
-          if (invite?.verwaltete_regionen?.length > 0) {
-            profileData.verwaltete_regionen = invite.verwaltete_regionen;
-            profileData.verwaltete_gebietsverbaende = invite.verwaltete_regionen;
+
+          // Prüfe ob bereits ein Profil existiert (bestehender Nutzer)
+          const {data:existingProfile} = await sb.from('user_profiles').select('id').eq('id',session.user.id).maybeSingle();
+
+          // Kein Profil UND keine Einladung → Einladung wurde zurückgezogen → abweisen
+          if (!existingProfile && !invite) {
+            await sb.auth.signOut();
+            currentUser = null;
+            document.getElementById('loginScreen').style.display = 'flex';
+            document.getElementById('setPasswordScreen').style.display = 'none';
+            showLoginError('⚠️ Deine Einladung wurde zurückgezogen. Bitte wende dich an deinen Verwalter.');
+            subscription.unsubscribe();
+            return;
           }
-          if (invite?.verwalteter_landkreis) {
-            profileData.verwalteter_landkreis = invite.verwalteter_landkreis;
+
+          // Profil anlegen/aktualisieren
+          if (invite || !existingProfile) {
+            const profileData = {
+              id: session.user.id,
+              email: session.user.email,
+              name: invite?.name || session.user.user_metadata?.name || session.user.email.split('@')[0],
+              rolle: invite?.rolle || 'verteiler',
+              passwort_gesetzt: false
+            };
+            if (invite?.telefon) profileData.telefon = invite.telefon;
+            if (invite?.verwaltete_regionen?.length > 0) {
+              profileData.verwaltete_regionen = invite.verwaltete_regionen;
+              profileData.verwaltete_gebietsverbaende = invite.verwaltete_regionen;
+            }
+            if (invite?.verwalteter_landkreis) {
+              profileData.verwalteter_landkreis = invite.verwalteter_landkreis;
+            }
+            if (invite?.gebietsverband_id) {
+              profileData.gebietsverband_id = invite.gebietsverband_id;
+            }
+            if (invite?.uebergabe_info) {
+              profileData.uebergabe_info = invite.uebergabe_info;
+            }
+            const {error:upErr}=await sb.from('user_profiles').upsert(profileData, { onConflict: 'id', ignoreDuplicates: false });
+            if(upErr) console.error('Profil-Upsert fehlgeschlagen:', upErr.message, upErr);
+            else console.log('Profil erstellt/aktualisiert, passwort_gesetzt=false');
           }
-          if (invite?.gebietsverband_id) {
-            profileData.gebietsverband_id = invite.gebietsverband_id;
-          }
-          if (invite?.uebergabe_info) {
-            profileData.uebergabe_info = invite.uebergabe_info;
-          }
-          await sb.from('user_profiles').upsert(profileData, { onConflict: 'id', ignoreDuplicates: false });
           if (invite) {
             await sb.from('pending_invites').delete().eq('email', session.user.email.toLowerCase());
           }
