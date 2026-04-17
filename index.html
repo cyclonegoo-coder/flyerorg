@@ -2041,8 +2041,8 @@ let pendingInvites=[];
 async function loadPendingInvites(){
   try{
     const {data,error}=await sb.from('pending_invites').select('*').order('created_at',{ascending:false});
-    if(error){console.warn('loadPendingInvites:',error.message);pendingInvites=[];} else pendingInvites=data||[];
-  }catch(e){console.warn('loadPendingInvites:',e);pendingInvites=[];}
+    if(error){console.warn('loadPendingInvites error:',error.message,error);pendingInvites=[];} else {pendingInvites=data||[];console.log('pendingInvites loaded:',pendingInvites.length);}
+  }catch(e){console.warn('loadPendingInvites catch:',e);pendingInvites=[];}
   renderPendingInvites();
 }
 function renderPendingInvites(){
