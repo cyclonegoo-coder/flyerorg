@@ -382,9 +382,8 @@ textarea{min-height:68px}
     <button class="login-btn" id="loginBtn" onclick="doLogin()">Anmelden</button>
     <div class="login-error" id="loginError"></div>
 
-    <div id="loginLinks" style="margin-top:12px;text-align:center;display:flex;justify-content:center;gap:16px">
+    <div id="loginLinks" style="margin-top:12px;text-align:center">
       <a href="#" onclick="showResetForm();return false" style="font-size:.78rem;color:var(--blue);text-decoration:none">Passwort vergessen?</a>
-      <a href="#" onclick="showRegisterForm();return false" style="font-size:.78rem;color:var(--green);text-decoration:none;font-weight:500">Registrieren</a>
     </div>
     <div id="resetForm" style="display:none;margin-top:12px">
       <div class="login-field">
@@ -397,32 +396,7 @@ textarea{min-height:68px}
         <a href="#" onclick="hideResetForm();return false" style="font-size:.78rem;color:var(--text3);text-decoration:none">← Zurück zum Login</a>
       </div>
     </div>
-    <div id="registerForm" style="display:none;margin-top:12px">
-      <div style="background:rgba(0,158,224,.08);border:1px solid rgba(0,158,224,.2);border-radius:var(--r8);padding:8px 10px;margin-bottom:8px;font-size:.72rem;color:var(--text2);line-height:1.4">
-        Registrierung nur mit Einladung. Verwende die E-Mail-Adresse, an die deine Einladung gesendet wurde.
-      </div>
-      <div class="login-field">
-        <label class="login-label">Name</label>
-        <input class="login-input" type="text" id="regName" placeholder="Max Mustermann" autocomplete="name">
-      </div>
-      <div class="login-field">
-        <label class="login-label">E-Mail (wie in der Einladung)</label>
-        <input class="login-input" type="email" id="regEmail" placeholder="deine@email.de" autocomplete="email">
-      </div>
-      <div class="login-field">
-        <label class="login-label">Passwort</label>
-        <input class="login-input" type="password" id="regPassword" placeholder="Mind. 6 Zeichen" autocomplete="new-password">
-      </div>
-      <label style="display:flex;align-items:flex-start;gap:8px;font-size:.72rem;color:var(--text2);cursor:pointer;margin:4px 0 8px;line-height:1.4">
-        <input type="checkbox" id="regDatenschutz" style="margin-top:2px;flex-shrink:0">
-        <span>Ich stimme der <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:var(--blue)">Datenschutzerklärung</a> zu und bin mit der Verarbeitung meiner Daten einverstanden.</span>
-      </label>
-      <button class="login-btn" id="regBtn" onclick="doRegister()" style="background:var(--green)">Registrieren</button>
-      <div id="regStatus" style="font-size:.78rem;margin-top:6px;min-height:18px;text-align:center"></div>
-      <div style="text-align:center;margin-top:8px">
-        <a href="#" onclick="hideRegisterForm();return false" style="font-size:.78rem;color:var(--text3);text-decoration:none">← Zurück zum Login</a>
-      </div>
-    </div>
+    <!-- Registrierung entfernt – Zugang nur per Einladung -->
 
     <div class="login-footer">Zugang nur für eingeladene Mitglieder</div>
   </div>
@@ -718,7 +692,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v116 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v117 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -2799,6 +2773,14 @@ function setRollenbasierterFilter() {
 }
 
 async function showApp() {
+  // Passwort-Pflicht: Kein Zugang ohne gesetztes Passwort
+  if (!currentProfile) await loadProfile();
+  if (currentProfile && !currentProfile.passwort_gesetzt) {
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('setPasswordScreen').style.display = 'flex';
+    return;
+  }
+  document.getElementById('setPasswordScreen').style.display = 'none';
   document.getElementById('loginScreen').classList.add('hidden');
   document.getElementById('appHeader').style.display = 'flex';
   document.getElementById('appBody').style.display   = 'flex';
@@ -2861,11 +2843,7 @@ async function checkSession() {
   // Gespeicherten Hash verwenden (vor createClient gesichert)
   const hash = _savedHash;
 
-  // #register → Registrierungsformular automatisch öffnen
-  if (hash === '#register') {
-    setTimeout(() => showRegisterForm(), 100);
-    window.location.hash = '';
-  }
+  // Registrierung entfernt – Zugang nur per Einladung
 
   const isInviteLink = hash.includes('type=invite') || hash.includes('type=recovery') || hash.includes('type=magiclink') || hash.includes('type=signup') || hash.includes('type=email');
 
@@ -2910,21 +2888,10 @@ async function checkSession() {
           }
         } catch(e) { console.warn('Pending invite apply failed:', e); }
 
-        // Nutzer hat sich per Einladung (Magic Link) registriert → immer Passwort setzen
-        // Ausnahme: Nutzer hat sich selbst mit Passwort registriert (type=signup OHNE invite/magiclink)
-        const isSignupConfirm = hash.includes('type=signup');
-        const isMagicOrInvite = hash.includes('type=magiclink') || hash.includes('type=invite') || hash.includes('type=recovery') || hash.includes('type=email');
-
-        if (isSignupConfirm && !isMagicOrInvite) {
-          // Nutzer hat sich selbst registriert mit Passwort → direkt rein
-          await sb.from('user_profiles').update({ passwort_gesetzt: true }).eq('id', session.user.id);
-          await loadProfile();
-          showApp();
-        } else {
-          // Magic Link / Invite / Recovery → Passwort setzen
-          document.getElementById('loginScreen').style.display = 'none';
-          document.getElementById('setPasswordScreen').style.display = 'flex';
-        }
+        // showApp() prüft automatisch ob Passwort gesetzt ist
+        // → zeigt Passwort-Screen wenn nötig, sonst App
+        await loadProfile();
+        showApp();
         subscription.unsubscribe();
       }
     });
@@ -2937,15 +2904,7 @@ async function checkSession() {
     // Prüfe ob ein pending_invite existiert (Admin hat Rolle/Region nachträglich geändert)
     await pruefePendingInviteBeiLogin(session.user);
     await loadProfile();
-
-    // Prüfe ob Nutzer ein Passwort gesetzt hat
-    if (currentProfile && !currentProfile.passwort_gesetzt) {
-      // Kein Passwort gesetzt → Passwort-Screen anzeigen
-      document.getElementById('loginScreen').style.display = 'none';
-      document.getElementById('setPasswordScreen').style.display = 'flex';
-      return;
-    }
-
+    // showApp() prüft automatisch ob Passwort gesetzt → zeigt ggf. Passwort-Screen
     showApp();
   }
 }
