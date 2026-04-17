@@ -289,7 +289,7 @@ textarea{min-height:68px}
   .draw-info{left:10px;right:10px;transform:none;white-space:normal;font-size:.72rem;padding:6px 10px;top:auto;bottom:10px;z-index:701}
   /* Step 1: Header overflow menu */
   .mob-overflow{display:block}
-  #bulkPdfBtn,#hierarchyBtn,#inviteUserBtn,#manageUsersBtn,#logbuchBtn,#missingVerteilerBtn{display:none!important}
+  #bulkPdfBtn,#hierarchyBtn,#inviteUserBtn,#manageUsersBtn,#logbuchBtn,#kampagnenBtn,#missingVerteilerBtn{display:none!important}
   .user-name,.role-badge{display:none}
   .user-pill{padding:4px;border-radius:50%}
   .h-left{min-width:40px;gap:4px}
@@ -445,6 +445,7 @@ textarea{min-height:68px}
     <button id="inviteUserBtn" onclick="openInviteModal()" title="Nutzer einladen" style="display:none;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='var(--text3)'">➕👤</button>
     <button id="manageUsersBtn" onclick="openManageUsersModal()" title="Nutzerverwaltung" style="display:none;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='var(--text3)'">👥</button>
     <button id="logbuchBtn" onclick="openLogbuchModal()" title="Logbuch" style="display:none;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='var(--text3)'">📋</button>
+    <button id="kampagnenBtn" onclick="openKampagnenModal()" title="Kampagnen verwalten" style="display:none;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='var(--text3)'">⚙️</button>
     <button id="missingVerteilerBtn" onclick="jumpToMissingVerteiler()" title="Gebiete ohne Verteiler" style="display:none;position:relative;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--orange)'" onmouseout="this.style.color='var(--text3)'">🆘<span id="missingVerteilerBadge" style="display:none;position:absolute;top:-2px;right:-2px;background:var(--orange);color:#fff;font-size:.55rem;font-weight:700;min-width:14px;height:14px;border-radius:7px;align-items:center;justify-content:center;padding:0 3px">0</span></button>
     <!-- Mobile overflow menu (populated by JS based on role) -->
     <div class="mob-overflow" id="mobOverflow">
@@ -692,7 +693,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v119 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v120 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -2822,6 +2823,7 @@ async function showApp() {
   if (rolle === 'admin' || rolle === 'kreisverwalter' || rolle === 'verwalter') {
     document.getElementById('bulkPdfBtn').style.display = 'block';
     document.getElementById('logbuchBtn').style.display = 'block';
+    document.getElementById('kampagnenBtn').style.display = 'block';
     document.getElementById('missingVerteilerBtn').style.display = 'inline-block';
   }
   // Anfragen-Glocke für alle Rollen (Admin/Verwalter: offene Anfragen, Verteiler: Rückmeldungen)
