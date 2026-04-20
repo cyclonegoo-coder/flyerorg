@@ -696,7 +696,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v123 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v124 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -2690,6 +2690,7 @@ async function loadHierarchy() {
     (regRes.data || []).forEach(r => {
       regionen[r.id] = { ...r, center: [r.center_lat, r.center_lng], gebiete: [] };
     });
+    console.log('loadHierarchy:', Object.keys(landkreise).length, 'LK,', Object.keys(gebietsverbaende).length, 'GV,', Object.keys(regionen).length, 'Reg. verwalteter_landkreis:', currentProfile?.verwalteter_landkreis);
     const lkKeys = Object.keys(landkreise);
     if (lkKeys.length === 1) curLK = lkKeys[0];
     const gvKeys = Object.keys(gebietsverbaende);
@@ -5379,7 +5380,12 @@ function renderHTree(){
 
   let html='';
   // Filter: welche LKs anzeigen?
-  const lkEntries=isKV?Object.entries(landkreise).filter(([id])=>id===kvLK):Object.entries(landkreise);
+  // KV: nur seinen Landkreis zeigen. Falls verwalteter_landkreis nicht gesetzt → alle LKs zeigen
+  const lkEntries=(isKV&&kvLK)?Object.entries(landkreise).filter(([id])=>id===kvLK):
+    isGV?Object.entries(landkreise).filter(([lkId])=>{
+      // GV: nur LKs zeigen die GVs enthalten auf die er Zugriff hat
+      return Object.values(gebietsverbaende).some(gv=>gv.landkreis_id===lkId&&gvVerwIds?.has(gv.id));
+    }):Object.entries(landkreise);
   lkEntries.sort((a,b)=>a[1].name.localeCompare(b[1].name));
 
   lkEntries.forEach(([lkId,lk])=>{
