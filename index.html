@@ -1428,7 +1428,10 @@ function renderKampagnenDropdown() {
     sel.innerHTML=`<option value="${kampagnen[0].id}" selected>${kampagnen[0].name}</option>`;
   }
 
-  if (kampagnen.length > 0 && !curKampagne) {
+  // curKampagne auf die erste SICHTBARE Kampagne setzen (für Verteiler: ohne Basis)
+  if (sichtbar.length > 0 && !curKampagne) {
+    curKampagne = sichtbar[0];
+  } else if (kampagnen.length > 0 && !curKampagne) {
     curKampagne = kampagnen[0];
   }
 
