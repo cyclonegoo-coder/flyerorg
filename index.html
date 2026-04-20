@@ -696,7 +696,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v124 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v126 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -857,6 +857,58 @@ textarea{min-height:68px}
     </div>
     <div class="m-actions">
       <button class="btn btn-g" onclick="closeManageUsersModal()">Schließen</button>
+    </div>
+  </div>
+</div>
+
+<!-- NUTZER BEARBEITEN MODAL -->
+<div class="modal-ov" id="editUserModalOv" onclick="if(event.target===this)closeEditUserModal()" style="z-index:3100">
+  <div class="modal" style="max-width:380px">
+    <div class="m-handle"></div>
+    <div class="m-title" id="editUserTitle">👤 Nutzer bearbeiten</div>
+    <input type="hidden" id="editUserId">
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <!-- Name -->
+      <div>
+        <div style="font-size:.65rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:2px">Name</div>
+        <input type="text" id="editUserName" style="width:100%;font-size:.85rem;padding:8px 10px;border:1px solid var(--sep);border-radius:var(--r8);font-family:inherit">
+      </div>
+      <!-- E-Mail -->
+      <div>
+        <div style="font-size:.65rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:2px">E-Mail</div>
+        <div id="editUserEmail" style="font-size:.8rem;color:var(--text3);padding:4px 0"></div>
+      </div>
+      <!-- Rolle -->
+      <div id="editUserRolleWrap">
+        <div style="font-size:.65rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:2px">Rolle</div>
+        <div id="editUserRolleContainer"></div>
+      </div>
+      <!-- GV-Zuordnung -->
+      <div id="editUserGVWrap" style="display:none">
+        <div style="font-size:.65rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:2px">Gebietsverband</div>
+        <select id="editUserGV" style="width:100%;font-size:.8rem;padding:6px 8px;border:1px solid var(--sep);border-radius:var(--r8)"></select>
+      </div>
+      <!-- Übergabe-Info -->
+      <div id="editUserUeWrap" style="display:none">
+        <div style="font-size:.65rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:2px">Übergabe-Info</div>
+        <input type="text" id="editUserUebergabe" placeholder="z.B. Briefkasten links, 2. Klingel…" style="width:100%;font-size:.8rem;padding:8px 10px;border:1px solid var(--sep);border-radius:var(--r8);font-family:inherit">
+      </div>
+      <!-- Polygon-Bearbeitungsrecht -->
+      <div id="editUserPolyWrap" style="display:none">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.8rem;color:var(--text2)">
+          <input type="checkbox" id="editUserPoly" style="width:18px;height:18px;cursor:pointer">
+          ✏️ Polygon-Bearbeitung erlauben
+        </label>
+      </div>
+      <!-- Regionen/LK bearbeiten -->
+      <div id="editUserRegWrap" style="display:none">
+        <button id="editUserRegBtn" class="btn btn-g" style="width:100%;font-size:.78rem">🗺 Regionen / Landkreis bearbeiten</button>
+      </div>
+    </div>
+    <div class="m-actions" style="margin-top:14px;display:flex;gap:8px">
+      <button class="btn btn-g" onclick="closeEditUserModal()" style="flex:1">Abbrechen</button>
+      <button id="editUserDeleteBtn" class="btn" onclick="editUserDelete()" style="flex:0;padding:8px 14px;background:var(--red);color:#fff;border:none;border-radius:var(--r8);font-size:.78rem;cursor:pointer;display:none">🗑</button>
+      <button class="btn btn-p" onclick="saveEditUser()" style="flex:1">Speichern</button>
     </div>
   </div>
 </div>
@@ -2100,61 +2152,18 @@ async function deletePendingInvite(email){
 }
 
 function _renderUserRow(u,isAdmin,isKV){
-  const isSelf=u.id===currentUser?.id;
   const istAdmin=u.rolle==='admin';
-  const isGV=curRole==='verwalter';
-  // GV darf keine Rollen ändern, nur Polygon-Recht vergeben
-  const readOnly=isSelf||(isKV&&istAdmin)||isGV;
-  let rolleSelect;
-  if(readOnly){
-    const rl={verteiler:'Verteiler',verwalter:'Gebietsverwalter',kreisverwalter:'Kreisverwalter',admin:'Admin'}[u.rolle]||u.rolle;
-    rolleSelect=`<span style="font-size:.65rem;font-weight:600;padding:2px 7px;border-radius:4px;background:${istAdmin?'var(--red)':'var(--blue)'}22;color:${istAdmin?'var(--red)':'var(--blue)'}">${rl}</span>`;
-  }else{
-    let opts;
-    if(isKV){
-      opts=`<option value="verteiler" ${u.rolle==='verteiler'?'selected':''}>Verteiler</option><option value="verwalter" ${u.rolle==='verwalter'?'selected':''}>GV</option><option value="kreisverwalter" ${u.rolle==='kreisverwalter'?'selected':''}>KV</option>`;
-    } else if(isAdmin){
-      opts=`<option value="verteiler" ${u.rolle==='verteiler'?'selected':''}>Verteiler</option><option value="verwalter" ${u.rolle==='verwalter'?'selected':''}>GV</option><option value="kreisverwalter" ${u.rolle==='kreisverwalter'?'selected':''}>KV</option><option value="admin" ${u.rolle==='admin'?'selected':''}>Admin</option>`;
-    }
-    rolleSelect=`<select onchange="changeRole('${u.id}',this.value)" style="font-size:.7rem;padding:2px 4px;border-radius:4px;border:1px solid var(--sep);cursor:pointer">${opts}</select>`;
-  }
-  // GV-Änderung (nur Admin/KV)
-  let gvSelect='';
-  if(!isSelf&&(isAdmin||isKV)&&u.rolle!=='admin'){
-    const gvOpts=`<option value="">—</option>`+Object.entries(gebietsverbaende)
-      .filter(([,gv])=>isAdmin||gv.landkreis_id===currentProfile?.verwalteter_landkreis)
-      .sort((a,b)=>a[1].name.localeCompare(b[1].name))
-      .map(([id,gv])=>`<option value="${id}" ${u.gebietsverband_id===id?'selected':''}>${gv.name}</option>`).join('');
-    gvSelect=`<select onchange="reassignUserGV('${u.id}',this.value)" style="font-size:.65rem;padding:1px 3px;border-radius:4px;border:1px solid var(--sep);max-width:100px;cursor:pointer" title="GV ändern">${gvOpts}</select>`;
-  }
-  // Polygon-Bearbeitungsrecht (GV/KV/Admin kann bei Verteilern togglen)
-  let polyToggle='';
-  if(!isSelf&&u.rolle==='verteiler'&&(isGV||isKV||isAdmin)){
-    const checked=u.kann_polygon_bearbeiten?'checked':'';
-    polyToggle=`<label style="display:flex;align-items:center;gap:3px;cursor:pointer;font-size:.6rem;color:var(--text3)" title="Polygon-Bearbeitung erlauben">
-      <input type="checkbox" ${checked} onchange="togglePolygonRecht('${u.id}',this.checked)" style="width:14px;height:14px;cursor:pointer">✏️</label>`;
-  }
-  const regEdit=(!isSelf&&!isGV&&(u.rolle==='verwalter'||u.rolle==='kreisverwalter'))
-    ?`<button onclick="openEditZuweisungModal('${u.id}','${(u.name||'').replace(/'/g,"\\'")}','${u.rolle}',${JSON.stringify(u.verwaltete_regionen||[]).replace(/"/g,'&quot;')},'${(u.verwalteter_landkreis||'').replace(/'/g,"\\'")}')" style="background:none;border:none;color:var(--blue);cursor:pointer;font-size:.75rem;padding:1px 3px" title="${u.rolle==='kreisverwalter'?'LK':'Regionen'} bearbeiten">🗺</button>`:'';
-  const canDelete=!isSelf&&!isGV&&!(isKV&&(istAdmin||u.rolle==='kreisverwalter'));
-  const deleteBtn=canDelete?`<button onclick="deleteUser('${u.id}','${(u.name||'').replace(/'/g,"\\'")}')" style="background:none;border:none;color:var(--text4);cursor:pointer;font-size:.75rem;padding:1px 3px" title="Entfernen">🗑</button>`:'';
-  const noGVWarning=!u.gebietsverband_id&&u.rolle!=='admin'?'<span style="color:var(--orange);font-size:.65rem" title="Kein GV zugewiesen">⚠️</span>':'';
+  const rl={verteiler:'Verteiler',verwalter:'GV',kreisverwalter:'KV',admin:'Admin'}[u.rolle]||u.rolle;
+  const rolleColor=istAdmin?'var(--red)':u.rolle==='kreisverwalter'?'var(--purple,#8e44ad)':'var(--blue)';
   const offlineBadge=u.is_offline?'<span style="font-size:.55rem;background:var(--orange);color:#fff;border-radius:3px;padding:1px 4px;margin-left:3px">Offline</span>':'';
-  const uebergabeHtml=u.uebergabe_info?`<div style="font-size:.6rem;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${(u.uebergabe_info||'').replace(/"/g,'&quot;')}">📦 ${u.uebergabe_info}</div>`:'';
-  // Übergabe-Info bearbeiten: nur bei Nutzern die man auch verwalten darf
-  const canEditUe=!isSelf&&(
-    isAdmin||
-    (isKV&&(u.rolle==='verwalter'||u.rolle==='verteiler'))||
-    (isGV&&u.rolle==='verteiler')
-  );
-  const uebergabeBtn=canEditUe?`<button onclick="editUebergabeInfo('${u.id}','${(u.name||'').replace(/'/g,"\\'")}')" style="background:none;border:none;color:var(--text4);cursor:pointer;font-size:.75rem;padding:1px 3px" title="Übergabe-Info bearbeiten">📦</button>`:'';
-  return `<div style="display:flex;align-items:center;gap:6px;padding:4px 6px;background:var(--surface);border-radius:var(--r8);font-size:.78rem">
+  const noGVWarning=!u.gebietsverband_id&&u.rolle!=='admin'?'<span style="color:var(--orange);font-size:.6rem" title="Kein GV zugewiesen">⚠️</span>':'';
+  const isSelf=u.id===currentUser?.id;
+  return `<div style="display:flex;align-items:center;gap:6px;padding:5px 6px;background:var(--surface);border-radius:var(--r8);font-size:.78rem;cursor:pointer" onclick="openEditUserModal('${u.id}')">
     <div style="flex:1;min-width:0">
-      <div style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${u.name||'–'}${offlineBadge} ${noGVWarning}</div>
-      <div style="font-size:.65rem;color:var(--text4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${u.is_offline?'(kein App-Zugang)':u.email||''}</div>
-      ${uebergabeHtml}
+      <div style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${u.name||'–'}${offlineBadge} ${noGVWarning}${isSelf?' <span style="font-size:.55rem;color:var(--text4)">(du)</span>':''}</div>
     </div>
-    ${rolleSelect} ${polyToggle} ${gvSelect} ${uebergabeBtn} ${regEdit} ${deleteBtn}
+    <span style="font-size:.62rem;font-weight:600;padding:2px 7px;border-radius:4px;background:${rolleColor}18;color:${rolleColor}">${rl}</span>
+    <span style="font-size:.8rem;color:var(--text4)">›</span>
   </div>`;
 }
 
@@ -2169,6 +2178,154 @@ function umpToggle(arrow){
     let el=children.parentElement?.closest('.ump-children');
     while(el){if(el.style.maxHeight!=='0px')el.style.maxHeight=el.scrollHeight+'px';el=el.parentElement?.closest('.ump-children');}
   },220);
+}
+
+// ── Nutzer-Bearbeitungs-Modal ──
+function openEditUserModal(userId){
+  const u=allUsers.find(x=>x.id===userId);
+  if(!u)return;
+  const isAdmin=curRole==='admin';
+  const isKV=curRole==='kreisverwalter';
+  const isGV=curRole==='verwalter';
+  const isSelf=u.id===currentUser?.id;
+  const istAdmin=u.rolle==='admin';
+
+  document.getElementById('editUserId').value=userId;
+  document.getElementById('editUserName').value=u.name||'';
+  document.getElementById('editUserEmail').textContent=u.is_offline?'(Offline-Nutzer, kein App-Zugang)':u.email||'–';
+  document.getElementById('editUserTitle').textContent=`👤 ${u.name||'Nutzer'} bearbeiten`;
+
+  // Name editierbar? Nur wenn nicht man selbst (Profil-Modal dafür) und Berechtigung
+  document.getElementById('editUserName').readOnly=isSelf;
+
+  // Rolle
+  const rc=document.getElementById('editUserRolleContainer');
+  const readOnly=isSelf||(isKV&&istAdmin)||isGV;
+  if(readOnly){
+    const rl={verteiler:'Verteiler',verwalter:'Gebietsverwalter',kreisverwalter:'Kreisverwalter',admin:'Admin'}[u.rolle]||u.rolle;
+    rc.innerHTML=`<span style="font-size:.8rem;font-weight:600;padding:3px 10px;border-radius:6px;background:var(--blue)15;color:var(--blue)">${rl}</span>`;
+  }else{
+    let opts='';
+    if(isKV||isAdmin) opts+=`<option value="verteiler" ${u.rolle==='verteiler'?'selected':''}>Verteiler</option><option value="verwalter" ${u.rolle==='verwalter'?'selected':''}>Gebietsverwalter</option><option value="kreisverwalter" ${u.rolle==='kreisverwalter'?'selected':''}>Kreisverwalter</option>`;
+    if(isAdmin) opts+=`<option value="admin" ${u.rolle==='admin'?'selected':''}>Admin</option>`;
+    rc.innerHTML=`<select id="editUserRolle" style="width:100%;font-size:.8rem;padding:6px 8px;border:1px solid var(--sep);border-radius:var(--r8)">${opts}</select>`;
+  }
+
+  // GV-Zuordnung (Admin/KV, nicht für Admins)
+  const gvWrap=document.getElementById('editUserGVWrap');
+  if(!isSelf&&(isAdmin||isKV)&&u.rolle!=='admin'){
+    gvWrap.style.display='block';
+    const gvSel=document.getElementById('editUserGV');
+    const gvOpts=`<option value="">— Kein GV —</option>`+Object.entries(gebietsverbaende)
+      .filter(([,gv])=>isAdmin||gv.landkreis_id===currentProfile?.verwalteter_landkreis)
+      .sort((a,b)=>a[1].name.localeCompare(b[1].name))
+      .map(([id,gv])=>`<option value="${id}" ${u.gebietsverband_id===id?'selected':''}>${gv.name}</option>`).join('');
+    gvSel.innerHTML=gvOpts;
+  }else{ gvWrap.style.display='none'; }
+
+  // Übergabe-Info
+  const ueWrap=document.getElementById('editUserUeWrap');
+  const canEditUe=!isSelf&&(isAdmin||(isKV&&(u.rolle==='verwalter'||u.rolle==='verteiler'))||(isGV&&u.rolle==='verteiler'));
+  if(canEditUe){
+    ueWrap.style.display='block';
+    document.getElementById('editUserUebergabe').value=u.uebergabe_info||'';
+  }else{ ueWrap.style.display='none'; }
+
+  // Polygon-Recht
+  const polyWrap=document.getElementById('editUserPolyWrap');
+  if(!isSelf&&u.rolle==='verteiler'&&(isGV||isKV||isAdmin)){
+    polyWrap.style.display='block';
+    document.getElementById('editUserPoly').checked=!!u.kann_polygon_bearbeiten;
+  }else{ polyWrap.style.display='none'; }
+
+  // Regionen/LK bearbeiten
+  const regWrap=document.getElementById('editUserRegWrap');
+  if(!isSelf&&!isGV&&(u.rolle==='verwalter'||u.rolle==='kreisverwalter')){
+    regWrap.style.display='block';
+    document.getElementById('editUserRegBtn').onclick=()=>{
+      closeEditUserModal();
+      openEditZuweisungModal(u.id,(u.name||'').replace(/'/g,"\\'"),u.rolle,u.verwaltete_regionen||[],(u.verwalteter_landkreis||'').replace(/'/g,"\\'"));
+    };
+  }else{ regWrap.style.display='none'; }
+
+  // Löschen-Button
+  const canDelete=!isSelf&&!isGV&&!(isKV&&(istAdmin||u.rolle==='kreisverwalter'));
+  document.getElementById('editUserDeleteBtn').style.display=canDelete?'block':'none';
+
+  document.getElementById('editUserModalOv').classList.add('open');
+}
+
+function closeEditUserModal(){
+  document.getElementById('editUserModalOv').classList.remove('open');
+}
+
+async function saveEditUser(){
+  const userId=document.getElementById('editUserId').value;
+  const u=allUsers.find(x=>x.id===userId);
+  if(!u){toast('⚠️ Nutzer nicht gefunden');return;}
+
+  const updates={};
+  let changed=false;
+
+  // Name
+  const newName=document.getElementById('editUserName').value.trim();
+  if(newName&&newName!==u.name){updates.name=newName;changed=true;}
+
+  // Rolle
+  const rolleEl=document.getElementById('editUserRolle');
+  if(rolleEl){
+    const newRolle=rolleEl.value;
+    if(newRolle!==u.rolle){
+      // Berechtigungsprüfung
+      if(curRole==='verwalter'){toast('⚠️ Keine Berechtigung');return;}
+      if(newRolle==='admin'&&curRole!=='admin'){toast('⚠️ Admin-Rolle kann nur von Admins vergeben werden');return;}
+      if(u.rolle==='admin'&&curRole!=='admin'){toast('⚠️ Admins können nur von Admins geändert werden');return;}
+      updates.rolle=newRolle;changed=true;
+    }
+  }
+
+  // GV
+  const gvWrap=document.getElementById('editUserGVWrap');
+  if(gvWrap.style.display!=='none'){
+    const newGV=document.getElementById('editUserGV').value||null;
+    if(newGV!==u.gebietsverband_id){updates.gebietsverband_id=newGV;changed=true;}
+  }
+
+  // Übergabe-Info
+  const ueWrap=document.getElementById('editUserUeWrap');
+  if(ueWrap.style.display!=='none'){
+    const newUe=document.getElementById('editUserUebergabe').value.trim();
+    if(newUe!==(u.uebergabe_info||'')){updates.uebergabe_info=newUe;changed=true;}
+  }
+
+  // Polygon-Recht
+  const polyWrap=document.getElementById('editUserPolyWrap');
+  if(polyWrap.style.display!=='none'){
+    const newPoly=document.getElementById('editUserPoly').checked;
+    if(newPoly!==!!u.kann_polygon_bearbeiten){updates.kann_polygon_bearbeiten=newPoly;changed=true;}
+  }
+
+  if(!changed){closeEditUserModal();return;}
+
+  const {data,error}=await sb.from('user_profiles').update(updates).eq('id',userId).select();
+  if(error){toast('⚠️ Fehler: '+(error.message||error.code));return;}
+  if(!data||data.length===0){toast('⚠️ Keine Berechtigung (RLS)');return;}
+
+  // Lokal aktualisieren
+  Object.assign(u,updates);
+  renderUserList();
+  closeEditUserModal();
+  const changeDesc=Object.keys(updates).join(', ');
+  toast(`✅ ${u.name} aktualisiert`);
+  logAction('nutzerverwaltung',`Nutzer bearbeitet: ${u.name} (${changeDesc})`,null,u.name);
+}
+
+async function editUserDelete(){
+  const userId=document.getElementById('editUserId').value;
+  const u=allUsers.find(x=>x.id===userId);
+  if(!u)return;
+  closeEditUserModal();
+  await deleteUser(userId,(u.name||''));
 }
 
 async function reassignUserGV(userId,newGvId){
@@ -5222,6 +5379,12 @@ async function deleteGebiet(id){
   toast(`🗑 Gebiet ${_gName} gelöscht`);
 }
 
+// Gebiet aus Hierarchie-Baum löschen (Wrapper für deleteGebiet + Tree-Refresh)
+async function hTreeDeleteGebiet(id){
+  await deleteGebiet(id);
+  renderHTree();
+}
+
 // ============================================================
 // MODAL
 // ============================================================
@@ -5428,6 +5591,7 @@ function renderHTree(){
           if(!gMatch&&!rMatch&&!gvMatch&&!lkMatch) return;
           rHasVisible=true;
           const stColor=g.status==='fertig'?'var(--green)':g.status==='zugeteilt'?'var(--blue)':'var(--orange)';
+          const canDeleteG=isAdmin||isKV||(isGV&&(currentProfile?.verwaltete_regionen||[]).includes(rId));
           rChildHtml+=`<div class="htree-node"><div class="htree-row" draggable="true" data-type="gebiet" data-id="${g.id}" data-region="${rId}"
             ondragstart="hDragStart(event)" ondragover="hDragOver(event)" ondragleave="hDragLeave(event)" ondrop="hDrop(event)"
             ondblclick="hTreeRenameStart(this,'gebiete','${g.id}')">
@@ -5436,6 +5600,7 @@ function renderHTree(){
             <span class="htree-badge">${g.stueckzahl||0} St.</span>
             <span class="htree-actions">
               <button onclick="hTreeRenameStart(this.closest('.htree-row'),'gebiete','${g.id}')" title="Umbenennen">✏️</button>
+              ${canDeleteG?`<button onclick="event.stopPropagation();hTreeDeleteGebiet('${g.id}')" title="Gebiet löschen" style="color:var(--red)">🗑</button>`:''}
             </span>
           </div></div>`;
         });
