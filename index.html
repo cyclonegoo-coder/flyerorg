@@ -62,8 +62,11 @@ body{font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;background:
 
 .login-footer{text-align:center;font-size:.72rem;color:var(--text4);margin-top:20px}
 
+/* ── iOS Safe Area (Notch / Dynamic Island) ── */
+header,#loginScreen,#setPasswordScreen{padding-top:env(safe-area-inset-top,0px);padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)}
+
 /* ── HEADER ── */
-header{height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px);border-bottom:1px solid var(--sep);display:flex;align-items:center;padding:0 16px;gap:0;flex-shrink:0;z-index:1000}
+header{min-height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px);border-bottom:1px solid var(--sep);display:flex;align-items:center;padding:env(safe-area-inset-top,0px) 16px 0 16px;gap:0;flex-shrink:0;z-index:1000}
 .h-left{display:flex;align-items:center;gap:8px;min-width:130px}
 .h-center{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.25}
 .h-right{display:flex;align-items:center;gap:8px;min-width:130px;justify-content:flex-end}
@@ -693,7 +696,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v122 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v123 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
