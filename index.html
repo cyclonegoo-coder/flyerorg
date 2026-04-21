@@ -1047,7 +1047,7 @@ textarea{min-height:68px}
       </div>
     </div>
     <div class="m-actions" style="margin-top:12px">
-      <button class="btn btn-g" onclick="resetKampForm()">Abbrechen</button>
+      <button class="btn btn-g" onclick="resetKampForm();closeKampagnenModal()">Schließen</button>
       <button class="btn btn-p" id="kampSaveBtn" onclick="saveKampagne()">Erstellen</button>
     </div>
   </div>
@@ -1642,9 +1642,19 @@ function addKampBereichZeile(typ, id) {
 
   const typSel = document.createElement('select');
   typSel.style.cssText = 'font-size:.75rem;flex:0 0 auto;width:110px';
-  typSel.innerHTML = `<option value="landkreis" ${typ==='landkreis'?'selected':''}>Landkreis</option>
-    <option value="gebietsverband" ${typ==='gebietsverband'?'selected':''}>Gebietsverband</option>
-    <option value="region" ${typ==='region'?'selected':''}>Region</option>`;
+  // Typ-Optionen nach Rolle einschränken
+  let typOpts = '';
+  if (curRole === 'admin' || curRole === 'kreisverwalter') {
+    typOpts = `<option value="landkreis" ${typ==='landkreis'?'selected':''}>Landkreis</option>
+      <option value="gebietsverband" ${typ==='gebietsverband'?'selected':''}>Gebietsverband</option>
+      <option value="region" ${typ==='region'?'selected':''}>Region</option>`;
+  } else if (curRole === 'verwalter') {
+    typOpts = `<option value="gebietsverband" ${typ==='gebietsverband'?'selected':''}>Gebietsverband</option>
+      <option value="region" ${typ==='region'?'selected':''}>Region</option>`;
+  } else if (curRole === 'regionalverwalter') {
+    typOpts = `<option value="region" ${typ==='region'?'selected':''}>Region</option>`;
+  }
+  typSel.innerHTML = typOpts;
 
   const idSel = document.createElement('select');
   idSel.style.cssText = 'font-size:.75rem;flex:1';
@@ -1653,9 +1663,48 @@ function addKampBereichZeile(typ, id) {
   function fillIdOptions() {
     const t = typSel.value;
     let items = [];
-    if (t === 'landkreis') items = Object.entries(landkreise).map(([k,v])=>({id:k,name:v.name}));
-    else if (t === 'gebietsverband') items = Object.entries(gebietsverbaende).map(([k,v])=>({id:k,name:v.name}));
-    else if (t === 'region') items = Object.entries(regionen).map(([k,v])=>({id:k,name:v.short||v.name}));
+    if (t === 'landkreis') {
+      if (curRole === 'kreisverwalter') {
+        const myLK = currentProfile?.verwalteter_landkreis;
+        items = myLK && landkreise[myLK] ? [{id:myLK,name:landkreise[myLK].name}] : [];
+      } else {
+        items = Object.entries(landkreise).map(([k,v])=>({id:k,name:v.name}));
+      }
+    } else if (t === 'gebietsverband') {
+      if (curRole === 'verwalter') {
+        const verwGV = currentProfile?.verwaltete_gebietsverbaende || [];
+        items = verwGV.map(gvId => gebietsverbaende[gvId] ? {id:gvId,name:gebietsverbaende[gvId].name} : null).filter(Boolean);
+        if (items.length === 0) {
+          // Fallback alte Logik
+          const gvIds = new Set(); (currentProfile?.verwaltete_regionen||[]).forEach(rId=>{const r=regionen[rId];if(r)gvIds.add(r.gebietsverband_id);});
+          items = [...gvIds].map(gvId => gebietsverbaende[gvId] ? {id:gvId,name:gebietsverbaende[gvId].name} : null).filter(Boolean);
+        }
+      } else if (curRole === 'kreisverwalter') {
+        const myLK = currentProfile?.verwalteter_landkreis;
+        items = Object.entries(gebietsverbaende).filter(([,gv])=>gv.landkreis_id===myLK).map(([k,v])=>({id:k,name:v.name}));
+      } else {
+        items = Object.entries(gebietsverbaende).map(([k,v])=>({id:k,name:v.name}));
+      }
+    } else if (t === 'region') {
+      if (curRole === 'regionalverwalter') {
+        const verwReg = currentProfile?.verwaltete_regionen || [];
+        items = verwReg.map(rId => regionen[rId] ? {id:rId,name:regionen[rId].short||regionen[rId].name} : null).filter(Boolean);
+      } else if (curRole === 'verwalter') {
+        // VV: alle Regionen in seinen GVs
+        const verwGV = currentProfile?.verwaltete_gebietsverbaende || [];
+        if (verwGV.length > 0) {
+          items = Object.entries(regionen).filter(([,r])=>verwGV.includes(r.gebietsverband_id)).map(([k,v])=>({id:k,name:v.short||v.name}));
+        } else {
+          items = Object.entries(regionen).map(([k,v])=>({id:k,name:v.short||v.name}));
+        }
+      } else if (curRole === 'kreisverwalter') {
+        const myLK = currentProfile?.verwalteter_landkreis;
+        items = Object.entries(regionen).filter(([,r])=>{const gv=gebietsverbaende[r.gebietsverband_id];return gv&&gv.landkreis_id===myLK;}).map(([k,v])=>({id:k,name:v.short||v.name}));
+      } else {
+        items = Object.entries(regionen).map(([k,v])=>({id:k,name:v.short||v.name}));
+      }
+    }
+    items.sort((a,b)=>a.name.localeCompare(b.name));
     idSel.innerHTML = items.map(i=>`<option value="${i.id}" ${i.id===id?'selected':''}>${i.name}</option>`).join('');
   }
   typSel.onchange = fillIdOptions;
