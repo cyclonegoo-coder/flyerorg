@@ -96,6 +96,7 @@ header{min-height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturat
 .role-badge{font-size:.58rem;font-weight:600;padding:1px 6px;border-radius:4px;text-transform:uppercase;letter-spacing:.04em}
 .rb-admin{background:rgba(255,59,48,.12);color:var(--red)}
 .rb-verwalter{background:rgba(0,158,224,.12);color:var(--blue)}
+.rb-regionalverwalter{background:rgba(255,149,0,.12);color:#e68a00}
 .rb-kreisverwalter{background:#9c27b022;color:#9c27b0}
 .rb-verteiler{background:rgba(52,199,89,.12);color:var(--green)}
 .mob-btn{display:none;background:none;border:none;color:var(--blue);font-size:1.1rem;cursor:pointer;padding:4px 8px;border-radius:var(--r8)}
@@ -696,7 +697,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v126 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v129 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -787,7 +788,8 @@ textarea{min-height:68px}
       <input type="tel"   id="inviteTelefon" placeholder="Telefon (z.B. +49 176 12345678)">
       <select id="inviteRolle">
         <option value="verteiler">Verteiler</option>
-        <option value="verwalter">Gebietsverwalter</option>
+        <option value="regionalverwalter">Regionalverwalter</option>
+        <option value="verwalter">Verbandsverwalter</option>
         <option value="kreisverwalter">Kreisverwalter</option>
         <option value="admin">Admin</option>
       </select>
@@ -1188,9 +1190,15 @@ async function doRegister() {
       if (invite) {
         profileData.name = invite.name || name;
         profileData.rolle = invite.rolle || 'verteiler';
-        if (invite.verwaltete_regionen?.length > 0) {
+        if (invite.rolle === 'regionalverwalter' && invite.verwaltete_regionen?.length > 0) {
+          // RV: Regionen direkt + GVs ableiten
           profileData.verwaltete_regionen = invite.verwaltete_regionen;
-          profileData.verwaltete_gebietsverbaende = invite.verwaltete_regionen;
+          const gvIds=[...new Set(invite.verwaltete_regionen.map(rId=>regionen[rId]?.gebietsverband_id).filter(Boolean))];
+          profileData.verwaltete_gebietsverbaende = gvIds;
+        } else if (invite.rolle === 'verwalter' && invite.gebietsverband_id) {
+          // VV: ganzer GV — verwaltete_gebietsverbaende setzen
+          profileData.verwaltete_gebietsverbaende = [invite.gebietsverband_id];
+          profileData.verwaltete_regionen = null;
         }
         if (invite.verwalteter_landkreis) {
           profileData.verwalteter_landkreis = invite.verwalteter_landkreis;
@@ -1336,9 +1344,13 @@ async function pruefePendingInviteBeiLogin(user) {
     const upd = { rolle: invite.rolle };
     if (invite.name) upd.name = invite.name;
     if (invite.telefon) upd.telefon = invite.telefon;
-    if (invite.verwaltete_regionen?.length > 0) {
+    if (invite.rolle === 'regionalverwalter' && invite.verwaltete_regionen?.length > 0) {
       upd.verwaltete_regionen = invite.verwaltete_regionen;
-      upd.verwaltete_gebietsverbaende = invite.verwaltete_regionen;
+      const gvIds=[...new Set(invite.verwaltete_regionen.map(rId=>regionen[rId]?.gebietsverband_id).filter(Boolean))];
+      upd.verwaltete_gebietsverbaende = gvIds;
+    } else if (invite.rolle === 'verwalter' && invite.gebietsverband_id) {
+      upd.verwaltete_gebietsverbaende = [invite.gebietsverband_id];
+      upd.verwaltete_regionen = null;
     }
     if (invite.verwalteter_landkreis) {
       upd.verwalteter_landkreis = invite.verwalteter_landkreis;
@@ -1920,16 +1932,19 @@ function openInviteModal() {
   const ueField=document.getElementById('inviteUebergabe');if(ueField)ueField.value='';
   // Rollen-Optionen einschränken je nach eigener Rolle
   const isGVInvite = curRole === 'verwalter';
+  const isRVInvite = curRole === 'regionalverwalter';
   const isKVInvite = curRole === 'kreisverwalter';
   const adminOpt = document.querySelector('#inviteRolle option[value="admin"]');
   const kvOpt = document.querySelector('#inviteRolle option[value="kreisverwalter"]');
   const gvOpt = document.querySelector('#inviteRolle option[value="verwalter"]');
-  // GV darf nur Verteiler einladen
-  if (adminOpt) adminOpt.style.display = (isKVInvite || isGVInvite) ? 'none' : '';
-  if (kvOpt) kvOpt.style.display = isGVInvite ? 'none' : '';
-  if (gvOpt) gvOpt.style.display = isGVInvite ? 'none' : '';
-  // GV: Rolle ist fix "Verteiler", Rollen-Dropdown deaktivieren, GV-Auswahl sofort anzeigen
-  if(isGVInvite){
+  const rvOpt = document.querySelector('#inviteRolle option[value="regionalverwalter"]');
+  // VV/RV darf nur Verteiler einladen
+  if (adminOpt) adminOpt.style.display = (isKVInvite || isGVInvite || isRVInvite) ? 'none' : '';
+  if (kvOpt) kvOpt.style.display = (isGVInvite || isRVInvite) ? 'none' : '';
+  if (gvOpt) gvOpt.style.display = (isGVInvite || isRVInvite) ? 'none' : '';
+  if (rvOpt) rvOpt.style.display = (isGVInvite || isRVInvite) ? 'none' : '';
+  // VV/RV: Rolle ist fix "Verteiler", Rollen-Dropdown deaktivieren, GV-Auswahl sofort anzeigen
+  if(isGVInvite || isRVInvite){
     document.getElementById('inviteRolle').disabled = true;
     document.getElementById('inviteGVWrap').style.display = 'block';
     resetInviteGVPicker(); renderInviteGVTree();
@@ -1971,9 +1986,17 @@ function selectInviteGV(gvId,gvName,lkName){
 let _invGVTreeExp=new Set();
 function toggleInvGVNode(key,ev){if(ev)ev.stopPropagation();if(_invGVTreeExp.has(key))_invGVTreeExp.delete(key);else _invGVTreeExp.add(key);renderInviteGVTree();}
 function getInviteGVAllowed(){
-  const isKV=curRole==='kreisverwalter',isGV=curRole==='verwalter';
+  const isKV=curRole==='kreisverwalter',isGV=curRole==='verwalter',isRV=curRole==='regionalverwalter';
   const kvLK=currentProfile?.verwalteter_landkreis;
   if(isGV){
+    // VV: über verwaltete_gebietsverbaende
+    const s=new Set();
+    (currentProfile?.verwaltete_gebietsverbaende||[]).forEach(gvId=>s.add(gvId));
+    // Fallback: alte Logik
+    if(s.size===0)(currentProfile?.verwaltete_regionen||[]).forEach(rId=>{const r=regionen[rId];if(r)s.add(r.gebietsverband_id);});
+    return{filterLK:null,filterGV:s};
+  }
+  if(isRV){
     const s=new Set();(currentProfile?.verwaltete_regionen||[]).forEach(rId=>{const r=regionen[rId];if(r)s.add(r.gebietsverband_id);});
     return{filterLK:null,filterGV:s};
   }
@@ -2037,10 +2060,11 @@ function renderUserList() {
   const isAdmin = curRole === 'admin';
   const isKV = curRole === 'kreisverwalter';
   const isGVUM = curRole === 'verwalter';
+  const isRVUM = curRole === 'regionalverwalter';
   let sichtbareNutzer;
   if(isAdmin) sichtbareNutzer = allUsers;
   else if(isKV) sichtbareNutzer = allUsers.filter(u => nutzerImLandkreis(u));
-  else if(isGVUM) sichtbareNutzer = allUsers.filter(u => nutzerImGebietsverband(u));
+  else if(isGVUM || isRVUM) sichtbareNutzer = allUsers.filter(u => nutzerImGebietsverband(u));
   else sichtbareNutzer = [];
 
   // Gruppierung: LK → GV → Nutzer
@@ -2127,7 +2151,7 @@ function renderPendingInvites(){
   if(!pendingInvites.length){sec.style.display='none';return;}
   sec.style.display='block';
   if(badge) badge.textContent=pendingInvites.length;
-  const rolleLabel={verteiler:'Verteiler',verwalter:'Gebietsverwalter',kreisverwalter:'Kreisverwalter',admin:'Admin'};
+  const rolleLabel={verteiler:'Verteiler',regionalverwalter:'Regionalverwalter',verwalter:'Verbandsverwalter',kreisverwalter:'Kreisverwalter',admin:'Admin'};
   list.innerHTML=pendingInvites.map(inv=>{
     const datum=inv.created_at?new Date(inv.created_at).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'2-digit'}):'';
     const einlVon=inv.eingeladen_von?allUsers.find(u=>u.id===inv.eingeladen_von):null;
@@ -2153,10 +2177,10 @@ async function deletePendingInvite(email){
 
 function _renderUserRow(u,isAdmin,isKV){
   const istAdmin=u.rolle==='admin';
-  const rl={verteiler:'Verteiler',verwalter:'GV',kreisverwalter:'KV',admin:'Admin'}[u.rolle]||u.rolle;
+  const rl={verteiler:'Verteiler',regionalverwalter:'RV',verwalter:'VV',kreisverwalter:'KV',admin:'Admin'}[u.rolle]||u.rolle;
   const rolleColor=istAdmin?'var(--red)':u.rolle==='kreisverwalter'?'var(--purple,#8e44ad)':'var(--blue)';
   const offlineBadge=u.is_offline?'<span style="font-size:.55rem;background:var(--orange);color:#fff;border-radius:3px;padding:1px 4px;margin-left:3px">Offline</span>':'';
-  const noGVWarning=!u.gebietsverband_id&&u.rolle!=='admin'?'<span style="color:var(--orange);font-size:.6rem" title="Kein GV zugewiesen">⚠️</span>':'';
+  const noGVWarning=!u.gebietsverband_id&&u.rolle!=='admin'&&u.rolle!=='kreisverwalter'?'<span style="color:var(--orange);font-size:.6rem" title="Kein GV zugewiesen">⚠️</span>':'';
   const isSelf=u.id===currentUser?.id;
   return `<div style="display:flex;align-items:center;gap:6px;padding:5px 6px;background:var(--surface);border-radius:var(--r8);font-size:.78rem;cursor:pointer" onclick="openEditUserModal('${u.id}')">
     <div style="flex:1;min-width:0">
@@ -2187,6 +2211,7 @@ function openEditUserModal(userId){
   const isAdmin=curRole==='admin';
   const isKV=curRole==='kreisverwalter';
   const isGV=curRole==='verwalter';
+  const isRV=curRole==='regionalverwalter';
   const isSelf=u.id===currentUser?.id;
   const istAdmin=u.rolle==='admin';
 
@@ -2200,13 +2225,13 @@ function openEditUserModal(userId){
 
   // Rolle
   const rc=document.getElementById('editUserRolleContainer');
-  const readOnly=isSelf||(isKV&&istAdmin)||isGV;
+  const readOnly=isSelf||(isKV&&istAdmin)||isGV||isRV;
   if(readOnly){
-    const rl={verteiler:'Verteiler',verwalter:'Gebietsverwalter',kreisverwalter:'Kreisverwalter',admin:'Admin'}[u.rolle]||u.rolle;
+    const rl={verteiler:'Verteiler',regionalverwalter:'Regionalverwalter',verwalter:'Verbandsverwalter',kreisverwalter:'Kreisverwalter',admin:'Admin'}[u.rolle]||u.rolle;
     rc.innerHTML=`<span style="font-size:.8rem;font-weight:600;padding:3px 10px;border-radius:6px;background:var(--blue)15;color:var(--blue)">${rl}</span>`;
   }else{
     let opts='';
-    if(isKV||isAdmin) opts+=`<option value="verteiler" ${u.rolle==='verteiler'?'selected':''}>Verteiler</option><option value="verwalter" ${u.rolle==='verwalter'?'selected':''}>Gebietsverwalter</option><option value="kreisverwalter" ${u.rolle==='kreisverwalter'?'selected':''}>Kreisverwalter</option>`;
+    if(isKV||isAdmin) opts+=`<option value="verteiler" ${u.rolle==='verteiler'?'selected':''}>Verteiler</option><option value="regionalverwalter" ${u.rolle==='regionalverwalter'?'selected':''}>Regionalverwalter</option><option value="verwalter" ${u.rolle==='verwalter'?'selected':''}>Verbandsverwalter</option><option value="kreisverwalter" ${u.rolle==='kreisverwalter'?'selected':''}>Kreisverwalter</option>`;
     if(isAdmin) opts+=`<option value="admin" ${u.rolle==='admin'?'selected':''}>Admin</option>`;
     rc.innerHTML=`<select id="editUserRolle" style="width:100%;font-size:.8rem;padding:6px 8px;border:1px solid var(--sep);border-radius:var(--r8)">${opts}</select>`;
   }
@@ -2223,24 +2248,26 @@ function openEditUserModal(userId){
     gvSel.innerHTML=gvOpts;
   }else{ gvWrap.style.display='none'; }
 
-  // Übergabe-Info
+  // Übergabe-Info (KV = wie Admin in seinem LK, nur nicht für Admins)
   const ueWrap=document.getElementById('editUserUeWrap');
-  const canEditUe=!isSelf&&(isAdmin||(isKV&&(u.rolle==='verwalter'||u.rolle==='verteiler'))||(isGV&&u.rolle==='verteiler'));
+  const canEditUe=!isSelf&&(isAdmin||(isKV&&!istAdmin)||((isGV||isRV)&&u.rolle==='verteiler'));
   if(canEditUe){
     ueWrap.style.display='block';
     document.getElementById('editUserUebergabe').value=u.uebergabe_info||'';
   }else{ ueWrap.style.display='none'; }
 
-  // Polygon-Recht
+  // Polygon-Recht (KV/Admin: für alle Rollen außer Admin; GV: nur Verteiler)
   const polyWrap=document.getElementById('editUserPolyWrap');
-  if(!isSelf&&u.rolle==='verteiler'&&(isGV||isKV||isAdmin)){
+  const canEditPoly=!isSelf&&!istAdmin&&((isAdmin||isKV)||((isGV||isRV)&&u.rolle==='verteiler'));
+  if(canEditPoly){
     polyWrap.style.display='block';
     document.getElementById('editUserPoly').checked=!!u.kann_polygon_bearbeiten;
   }else{ polyWrap.style.display='none'; }
 
   // Regionen/LK bearbeiten
   const regWrap=document.getElementById('editUserRegWrap');
-  if(!isSelf&&!isGV&&(u.rolle==='verwalter'||u.rolle==='kreisverwalter')){
+  // Regionen-Zuweisung: nur für Regionalverwalter und KV (VV ist für ganzen GV zuständig)
+  if(!isSelf&&!isGV&&!isRV&&(u.rolle==='regionalverwalter'||u.rolle==='kreisverwalter')){
     regWrap.style.display='block';
     document.getElementById('editUserRegBtn').onclick=()=>{
       closeEditUserModal();
@@ -2248,8 +2275,8 @@ function openEditUserModal(userId){
     };
   }else{ regWrap.style.display='none'; }
 
-  // Löschen-Button
-  const canDelete=!isSelf&&!isGV&&!(isKV&&(istAdmin||u.rolle==='kreisverwalter'));
+  // Löschen-Button (KV darf alle außer Admins löschen)
+  const canDelete=!isSelf&&(isAdmin?!false:(isKV?!istAdmin:false));
   document.getElementById('editUserDeleteBtn').style.display=canDelete?'block':'none';
 
   document.getElementById('editUserModalOv').classList.add('open');
@@ -2277,7 +2304,7 @@ async function saveEditUser(){
     const newRolle=rolleEl.value;
     if(newRolle!==u.rolle){
       // Berechtigungsprüfung
-      if(curRole==='verwalter'){toast('⚠️ Keine Berechtigung');return;}
+      if(curRole==='verwalter'||curRole==='regionalverwalter'){toast('⚠️ Keine Berechtigung');return;}
       if(newRolle==='admin'&&curRole!=='admin'){toast('⚠️ Admin-Rolle kann nur von Admins vergeben werden');return;}
       if(u.rolle==='admin'&&curRole!=='admin'){toast('⚠️ Admins können nur von Admins geändert werden');return;}
       updates.rolle=newRolle;changed=true;
@@ -2389,9 +2416,11 @@ function getRegionVerwalter(regionKey, excludeUserId) {
   if (!reg) return null;
   return allUsers.find(u => {
     if (u.id === excludeUserId) return false;
-    if (u.rolle !== 'verwalter' && u.rolle !== 'kreisverwalter' && u.rolle !== 'admin') return false;
+    if (u.rolle !== 'verwalter' && u.rolle !== 'regionalverwalter' && u.rolle !== 'kreisverwalter' && u.rolle !== 'admin') return false;
+    // VV: über verwaltete_gebietsverbaende
+    if (u.rolle === 'verwalter' && u.verwaltete_gebietsverbaende?.includes(reg.gebietsverband_id)) return true;
+    // RV: über verwaltete_regionen
     const verwReg = u.verwaltete_regionen || [];
-    // Prüfe ob der User eine Region in demselben GV verwaltet
     return verwReg.some(rId => {
       const r = regionen[rId];
       return r && r.gebietsverband_id === reg.gebietsverband_id;
@@ -2420,7 +2449,7 @@ function openEditZuweisungModal(userId, userName, zielRolle, currentRegionen, cu
       </label>`;
     }).join('') || '<div style="font-size:.78rem;color:var(--text4)">Keine Landkreise verfügbar</div>';
   } else {
-    // Gebietsverwalter → Regionen-Auswahl (Checkboxen)
+    // Verbandsverwalter → Regionen-Auswahl (Checkboxen)
     document.getElementById('editRegModalTitle').textContent = `🗺 Regionen: ${userName}`;
     const sichtbar = myIsKV
       ? Object.entries(regionen).filter(([,r])=>{const gv=gebietsverbaende[r.gebietsverband_id];return gv&&gv.landkreis_id===myLK;})
@@ -2461,11 +2490,12 @@ async function saveRegionen() {
     closeEditRegModal();
     toast('✅ Landkreis gespeichert');
   } else {
-    // Regionen speichern
+    // Regionen speichern (für RV: verwaltete_regionen + GVs ableiten)
     const selected = Array.from(document.querySelectorAll('#editRegList input[type=checkbox]:checked')).map(cb => cb.value);
-    const { error } = await sb.from('user_profiles').update({ verwaltete_regionen: selected, verwaltete_gebietsverbaende: selected }).eq('id', userId);
+    const abgeleiteteGVs = [...new Set(selected.map(rId => regionen[rId]?.gebietsverband_id).filter(Boolean))];
+    const { error } = await sb.from('user_profiles').update({ verwaltete_regionen: selected, verwaltete_gebietsverbaende: abgeleiteteGVs }).eq('id', userId);
     if (error) { toast('⚠️ Fehler: ' + (error.message || error.code)); return; }
-    if (u) { u.verwaltete_regionen = selected; u.verwaltete_gebietsverbaende = selected; }
+    if (u) { u.verwaltete_regionen = selected; u.verwaltete_gebietsverbaende = abgeleiteteGVs; }
     renderUserList();
     closeEditRegModal();
     toast('✅ Regionen gespeichert');
@@ -2476,15 +2506,16 @@ function renderInviteRegionen() {
   const list = document.getElementById('inviteRegionenList');
   const isKV = curRole === 'kreisverwalter';
   const kvLK = currentProfile?.verwalteter_landkreis;
-  // Gebietsverbände als Checkboxen rendern (für Gebietsverwalter-Einladung)
+  // Gebietsverbände als Checkboxen rendern (für Verbandsverwalter-Einladung)
   const sichtbar = isKV
     ? Object.entries(gebietsverbaende).filter(([,gv])=>gv.landkreis_id===kvLK)
     : Object.entries(gebietsverbaende);
   list.innerHTML = sichtbar.sort((a,b)=>a[1].name.localeCompare(b[1].name)).map(([k, gv]) => {
     // Prüfe ob dieser GV schon einen Verwalter hat
-    const hatVerwalter = allUsers.find(u => u.rolle === 'verwalter' && (u.verwaltete_regionen||[]).some(rId => {
-      const reg = regionen[rId]; return reg && reg.gebietsverband_id === k;
-    }));
+    const hatVerwalter = allUsers.find(u => u.rolle === 'verwalter' && (
+      (u.verwaltete_gebietsverbaende||[]).includes(k) ||
+      (u.verwaltete_regionen||[]).some(rId => { const reg = regionen[rId]; return reg && reg.gebietsverband_id === k; })
+    ));
     const hint = hatVerwalter ? `<span style="font-size:.7rem;color:var(--text4);margin-left:4px">(${hatVerwalter.name})</span>` : '';
     return `<label style="display:flex;align-items:center;gap:6px;font-size:.8rem;cursor:pointer">
       <input type="checkbox" id="invGV_${k}" value="${k}">
@@ -2498,8 +2529,10 @@ document.addEventListener('DOMContentLoaded', () => {
   document.body.addEventListener('change', e => {
     if (e.target.id === 'inviteRolle') {
       const v = e.target.value;
-      // GV-Checkboxen für Gebietsverwalter
+      // GV-Checkboxen für Verbandsverwalter (VV verwaltet ganzen GV)
       document.getElementById('inviteRegionenWrap').style.display = v === 'verwalter' ? 'block' : 'none';
+      // Regionen-Checkboxen für Regionalverwalter (RV verwaltet ausgewählte Regionen)
+      document.getElementById('inviteRegionenWrap').style.display = (v === 'verwalter' || v === 'regionalverwalter') ? 'block' : 'none';
       // Landkreis-Dropdown für Kreisverwalter
       document.getElementById('inviteLandkreisWrap').style.display = v === 'kreisverwalter' ? 'block' : 'none';
       // GV-Baum für Verteiler (Einzelauswahl)
@@ -2510,7 +2543,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const sel = document.getElementById('inviteLandkreis');
         sel.innerHTML = Object.entries(landkreise).map(([id,lk]) => `<option value="${id}">${lk.name}</option>`).join('');
       }
-      if (v === 'verwalter') {
+      if (v === 'verwalter' || v === 'regionalverwalter') {
         renderInviteRegionen();
       }
     }
@@ -2527,7 +2560,7 @@ async function sendInvite(channel) {
   if (!email) { statusEl.style.color = 'var(--red)'; statusEl.textContent = '⚠️ Bitte E-Mail eingeben'; return; }
   if (!name)  { statusEl.style.color = 'var(--red)'; statusEl.textContent = '⚠️ Bitte Name eingeben'; return; }
   if (curRole === 'kreisverwalter' && rolle === 'admin') { statusEl.style.color = 'var(--red)'; statusEl.textContent = '⚠️ Keine Berechtigung: Admin-Rolle kann nur von Admins vergeben werden'; return; }
-  if (rolle === 'verwalter' && Object.keys(gebietsverbaende).filter(k => document.getElementById(`invGV_${k}`)?.checked).length === 0) {
+  if ((rolle === 'verwalter' || rolle === 'regionalverwalter') && Object.keys(gebietsverbaende).filter(k => document.getElementById(`invGV_${k}`)?.checked).length === 0) {
     statusEl.style.color = 'var(--red)'; statusEl.textContent = '⚠️ Bitte mindestens einen Gebietsverband auswählen'; return;
   }
   if ((channel === 'whatsapp' || channel === 'telegram') && !telefon) {
@@ -2536,12 +2569,15 @@ async function sendInvite(channel) {
     return;
   }
 
-  // Für Gebietsverwalter: GV-Checkboxen lesen → Regionen aus diesen GVs ableiten
+  // GV-Checkboxen lesen
   let verwaltete_regionen = [];
   let verwaltete_gv_ids = [];
   if (rolle === 'verwalter') {
+    // VV ist für den ganzen GV zuständig → keine Regionen nötig, nur GV-IDs
     verwaltete_gv_ids = Object.keys(gebietsverbaende).filter(k => document.getElementById(`invGV_${k}`)?.checked);
-    // Alle Regionen ableiten die zu den gewählten GVs gehören
+  } else if (rolle === 'regionalverwalter') {
+    // RV: GV-Checkboxen = die GVs in denen er arbeitet → Regionen ableiten
+    verwaltete_gv_ids = Object.keys(gebietsverbaende).filter(k => document.getElementById(`invGV_${k}`)?.checked);
     verwaltete_regionen = Object.entries(regionen)
       .filter(([,r]) => verwaltete_gv_ids.includes(r.gebietsverband_id))
       .map(([k]) => k);
@@ -2551,7 +2587,7 @@ async function sendInvite(channel) {
     : null;
   const gebietsverband_id = rolle !== 'admin'
     ? (rolle === 'verteiler' ? document.getElementById('inviteGV')?.value || null
-      : rolle === 'verwalter' && verwaltete_gv_ids.length > 0
+      : (rolle === 'verwalter' || rolle === 'regionalverwalter') && verwaltete_gv_ids.length > 0
         ? verwaltete_gv_ids[0]
         : rolle === 'kreisverwalter' && verwalteter_landkreis
           ? Object.entries(gebietsverbaende).find(([,gv])=>gv.landkreis_id===verwalteter_landkreis)?.[0] || null
@@ -2565,7 +2601,7 @@ async function sendInvite(channel) {
 
   try {
     const APP_URL = window.location.origin + window.location.pathname;
-    const rolleLabel = {verteiler:'Verteiler',verwalter:'Gebietsverwalter',kreisverwalter:'Kreisverwalter',admin:'Admin'}[rolle]||rolle;
+    const rolleLabel = {verteiler:'Verteiler',regionalverwalter:'Regionalverwalter',verwalter:'Verbandsverwalter',kreisverwalter:'Kreisverwalter',admin:'Admin'}[rolle]||rolle;
 
     // Telefonnummer normalisieren für WhatsApp/Telegram (nur Ziffern, mit Ländervorwahl)
     const telefonClean = telefon.replace(/[\s\-\(\)\/]/g, '').replace(/^00/, '+').replace(/^0/, '+49');
@@ -2592,7 +2628,12 @@ async function sendInvite(channel) {
       const upd = { name, rolle };
       if (telefon) upd.telefon = telefon;
       if (uebergabeInfo) upd.uebergabe_info = uebergabeInfo;
-      if (rolle === 'verwalter' && verwaltete_regionen.length > 0) {
+      if (rolle === 'verwalter') {
+        // VV: ganzer GV — verwaltete_gebietsverbaende setzen, verwaltete_regionen leeren
+        upd.verwaltete_gebietsverbaende = verwaltete_gv_ids;
+        upd.verwaltete_regionen = null;
+      }
+      if (rolle === 'regionalverwalter' && verwaltete_regionen.length > 0) {
         upd.verwaltete_regionen = verwaltete_regionen;
         upd.verwaltete_gebietsverbaende = verwaltete_gv_ids;
       }
@@ -2699,7 +2740,7 @@ async function editUebergabeInfo(userId,userName){
   if(!target){toast('⚠️ Nutzer nicht gefunden');return;}
   if(curRole==='verteiler'){toast('⚠️ Keine Berechtigung');return;}
   if(curRole==='kreisverwalter'&&(target.rolle==='admin'||target.rolle==='kreisverwalter')){toast('⚠️ Keine Berechtigung');return;}
-  if(curRole==='verwalter'&&target.rolle!=='verteiler'){toast('⚠️ Keine Berechtigung');return;}
+  if((curRole==='verwalter'||curRole==='regionalverwalter')&&target.rolle!=='verteiler'){toast('⚠️ Keine Berechtigung');return;}
   const user=target;
   const current=user?.uebergabe_info||'';
   const kampInfo=user?._kampUebergabe||'';
@@ -2787,11 +2828,13 @@ async function createOfflineVerteiler(){
 }
 
 async function deleteUser(userId, userName) {
-  // Sicherheitscheck: nur Admins dürfen Admins/KVs löschen
-  if(curRole!=='admin'){
-    const target=allUsers?.find(p=>p.id===userId);
-    if(target&&(target.rolle==='admin'||target.rolle==='kreisverwalter')){toast('⚠️ Keine Berechtigung');return;}
+  // Sicherheitscheck: Admin darf alle löschen; KV darf alle außer Admins löschen; GV darf niemanden löschen
+  const _delTarget=allUsers?.find(p=>p.id===userId);
+  if(curRole==='admin'){/* alles erlaubt */}
+  else if(curRole==='kreisverwalter'){
+    if(_delTarget?.rolle==='admin'){toast('⚠️ Keine Berechtigung: Admins können nur von Admins gelöscht werden');return;}
   }
+  else{toast('⚠️ Keine Berechtigung');return;}
   if(!await appConfirm('Nutzer löschen',`Nutzer „${userName}" wirklich vollständig löschen?\n\nDies entfernt Login-Zugang und Profil dauerhaft.`,'Löschen','Abbrechen'))return;
   try {
     const { data, error } = await sb.functions.invoke('delete-user', {
@@ -2898,21 +2941,36 @@ function setRollenbasierterFilter() {
       if (gvs.length === 1) curGV = gvs[0][0];
     }
   } else if (rolle === 'verwalter') {
-    // Gebietsverwalter → auf ersten zugewiesenen Gebietsverband filtern
+    // Verbandsverwalter → auf ersten zugewiesenen Gebietsverband filtern
+    const verwGV = currentProfile?.verwaltete_gebietsverbaende || [];
+    let erstesGV = verwGV.length > 0 ? verwGV[0] : null;
+    // Fallback: alte Logik via verwaltete_regionen
+    if (!erstesGV) {
+      const verwReg = currentProfile?.verwaltete_regionen || [];
+      if (verwReg.length > 0) { const ersteReg = regionen[verwReg[0]]; erstesGV = ersteReg?.gebietsverband_id; }
+    }
+    if (erstesGV && gebietsverbaende[erstesGV]) {
+      curGV = erstesGV;
+      const gv = gebietsverbaende[erstesGV];
+      if (gv?.landkreis_id && landkreise[gv.landkreis_id]) {
+        curLK = gv.landkreis_id;
+      }
+      const regs = Object.entries(regionen).filter(([,r]) => r.gebietsverband_id === erstesGV);
+      if (regs.length === 1) curReg = regs[0][0];
+    }
+  } else if (rolle === 'regionalverwalter') {
+    // Regionalverwalter → auf erste zugewiesene Region filtern
     const verwReg = currentProfile?.verwaltete_regionen || [];
     if (verwReg.length > 0) {
       const ersteReg = regionen[verwReg[0]];
       const erstesGV = ersteReg?.gebietsverband_id;
       if (erstesGV && gebietsverbaende[erstesGV]) {
         curGV = erstesGV;
-        // Landkreis passend setzen
         const gv = gebietsverbaende[erstesGV];
         if (gv?.landkreis_id && landkreise[gv.landkreis_id]) {
           curLK = gv.landkreis_id;
         }
-        // Auto-selektiere Region wenn nur eine im GV
-        const regs = Object.entries(regionen).filter(([,r]) => r.gebietsverband_id === erstesGV);
-        if (regs.length === 1) curReg = regs[0][0];
+        if (verwReg.length === 1) curReg = verwReg[0];
       }
     }
   } else if (rolle === 'verteiler') {
@@ -2986,21 +3044,17 @@ async function showApp() {
   document.getElementById('userAvatar').textContent  = name.charAt(0).toUpperCase();
   document.getElementById('userName').textContent    = name;
   const badge = document.getElementById('roleBadge');
-  const rolleLabels = {verteiler:'Verteiler',verwalter:'Gebietsverwalter',kreisverwalter:'Kreisverwalter',admin:'Admin'};
+  const rolleLabels = {verteiler:'Verteiler',regionalverwalter:'Regionalverwalter',verwalter:'Verbandsverwalter',kreisverwalter:'Kreisverwalter',admin:'Admin'};
   badge.textContent  = rolleLabels[rolle] || rolle;
   badge.className    = `role-badge rb-${rolle}`;
 
   curRole = rolle;
-  // Admin-Buttons: Nutzer einladen + Nutzerverwaltung (auch GV)
-  if (rolle === 'admin' || rolle === 'kreisverwalter' || rolle === 'verwalter') {
+  // Manager-Buttons: Nutzer einladen + Nutzerverwaltung (Admin, KV, VV, RV)
+  const istMgr = rolle === 'admin' || rolle === 'kreisverwalter' || rolle === 'verwalter' || rolle === 'regionalverwalter';
+  if (istMgr) {
     document.getElementById('inviteUserBtn').style.display = 'block';
     document.getElementById('manageUsersBtn').style.display = 'block';
-  }
-  if (rolle === 'admin' || rolle === 'kreisverwalter' || rolle === 'verwalter') {
     document.getElementById('hierarchyBtn').style.display = 'block';
-  }
-  // PDF-Export + Logbuch + Verteiler-fehlen für Manager (Admin, Kreisverwalter, Gebietsverwalter)
-  if (rolle === 'admin' || rolle === 'kreisverwalter' || rolle === 'verwalter') {
     document.getElementById('bulkPdfBtn').style.display = 'block';
     document.getElementById('logbuchBtn').style.display = 'block';
     document.getElementById('kampagnenBtn').style.display = 'block';
@@ -3081,9 +3135,12 @@ async function checkSession() {
               passwort_gesetzt: false
             };
             if (invite?.telefon) profileData.telefon = invite.telefon;
-            if (invite?.verwaltete_regionen?.length > 0) {
+            if (invite?.rolle === 'regionalverwalter' && invite?.verwaltete_regionen?.length > 0) {
               profileData.verwaltete_regionen = invite.verwaltete_regionen;
-              profileData.verwaltete_gebietsverbaende = invite.verwaltete_regionen;
+              profileData.verwaltete_gebietsverbaende = invite.verwaltete_regionen.map(rId=>regionen[rId]?.gebietsverband_id).filter(Boolean);
+            } else if (invite?.rolle === 'verwalter' && invite?.gebietsverband_id) {
+              profileData.verwaltete_gebietsverbaende = [invite.gebietsverband_id];
+              profileData.verwaltete_regionen = null;
             }
             if (invite?.verwalteter_landkreis) {
               profileData.verwalteter_landkreis = invite.verwalteter_landkreis;
@@ -3542,7 +3599,7 @@ async function sendeUebernahmeAnfrage(gebietId) {
     }
   } else {
     // Basis-Kampagne oder keine → einfache Bestätigung
-    const ok = await appConfirm('🙋 Gebiet übernehmen',`Möchtest du „${g.name}" wirklich übernehmen? Dadurch wird eine Anfrage an den zuständigen Gebietsverwalter gesendet.`,'Ja, übernehmen','Abbrechen');
+    const ok = await appConfirm('🙋 Gebiet übernehmen',`Möchtest du „${g.name}" wirklich übernehmen? Dadurch wird eine Anfrage an den zuständigen Verbandsverwalter gesendet.`,'Ja, übernehmen','Abbrechen');
     if (!ok) return;
   }
 
@@ -3568,7 +3625,7 @@ async function sendeUebernahmeAnfrage(gebietId) {
 async function sendeAbgabeAnfrage(gebietId) {
   const g = getG(gebietId);
   if (!g) return;
-  const ok=await appConfirm('🔄 Gebiet abgeben',`Möchtest du „${g.name}" wirklich abgeben? Dein Gebietsverwalter wird benachrichtigt.`,'Ja, abgeben','Abbrechen');
+  const ok=await appConfirm('🔄 Gebiet abgeben',`Möchtest du „${g.name}" wirklich abgeben? Dein Verbandsverwalter wird benachrichtigt.`,'Ja, abgeben','Abbrechen');
   if(!ok)return;
   const { error } = await sb.from('anfragen').insert({
     gebiet_id: gebietId,
@@ -3692,7 +3749,8 @@ const scol={offen:{f:'#aeaeb2',s:'#8e8e93'},offen_zugewiesen:{f:'#cfd8dc',s:'#54
 function getGebietFarbe(g){if(!g.verteilerId)return scol.problem;return(g.status==='offen'&&g.verteilerId)?scol.offen_zugewiesen:(scol[g.status]||scol.offen);}
 
 // ── HELPER: Rollen-Prüfungen ──
-function istVerwalterOderKreisverwalter() { return curRole === 'verwalter' || curRole === 'kreisverwalter'; }
+function istVerwalterOderKreisverwalter() { return curRole === 'verwalter' || curRole === 'kreisverwalter' || curRole === 'regionalverwalter'; }
+function istRegionalverwalter() { return curRole === 'regionalverwalter'; }
 function istManager() { return curRole === 'admin' || istVerwalterOderKreisverwalter(); }
 function pruefeGebietZugriff(gebietId) {
   if (istVerwalterOderKreisverwalter() && !verwalterHatGebietZugriff(gebietId)) {
@@ -3746,11 +3804,13 @@ async function toggleVerwaltungsgrenzen(show){
     const lkName=lk?.name||'';
     bereichName=lkName||'Landkreis';
     query=`[out:json][timeout:90];area["name"="${lkName}"]["admin_level"="6"]->.lk;(relation["boundary"="administrative"]["admin_level"="8"](area.lk);relation["boundary"="administrative"]["admin_level"="7"](area.lk);relation["name"="${lkName}"]["boundary"="administrative"]["admin_level"="6"];);out geom;`;
-  } else if(curRole==='verwalter'){
-    // Gebietsverwalter: Gemeinde- + VG- + Landkreisgrenzen im Bereich des Gebietsverbands
+  } else if(curRole==='verwalter'||curRole==='regionalverwalter'){
+    // VV/RV: Gemeinde- + VG- + Landkreisgrenzen im Bereich des Gebietsverbands
+    const verwGV=currentProfile?.verwaltete_gebietsverbaende||[];
     const verwReg=currentProfile?.verwaltete_regionen||[];
-    const erstRegObj=verwReg.length>0?regionen[verwReg[0]]:null;
-    const erstGvId=erstRegObj?.gebietsverband_id;
+    // GV-ID ermitteln: VV über verwaltete_gebietsverbaende, RV über verwaltete_regionen
+    let erstGvId=verwGV.length>0?verwGV[0]:null;
+    if(!erstGvId&&verwReg.length>0){const erstRegObj=regionen[verwReg[0]];erstGvId=erstRegObj?.gebietsverband_id;}
     if(erstGvId && gebietsverbaende[erstGvId]){
       const gv=gebietsverbaende[erstGvId];
       bereichName=gv.name||'Gebietsverband';
@@ -4149,8 +4209,13 @@ async function notifyManagers(gebietId, betreff, inhalt){
       if(u.rolle==='admin')return true;
       if(u.rolle==='kreisverwalter'&&u.verwalteter_landkreis===lkId)return true;
       if(u.rolle==='verwalter'){
-        const vr=u.verwaltete_regionen||[];
-        return vr.includes(regionId);
+        // VV: über verwaltete_gebietsverbaende (ganzer GV)
+        if(u.verwaltete_gebietsverbaende?.length>0) return u.verwaltete_gebietsverbaende.includes(gvId);
+        // Fallback alte Logik
+        return (u.verwaltete_regionen||[]).includes(regionId);
+      }
+      if(u.rolle==='regionalverwalter'){
+        return (u.verwaltete_regionen||[]).includes(regionId);
       }
       return false;
     });
@@ -4176,6 +4241,11 @@ function countMissingVerteiler(){
   for(const [,r] of Object.entries(regionen)){
     // Sichtbarkeitsprüfung je nach Rolle
     if(rolle==='verwalter'){
+      // VV: über verwaltete_gebietsverbaende (ganzer GV)
+      const verwGV=currentProfile?.verwaltete_gebietsverbaende||[];
+      if(verwGV.length>0){if(!verwGV.includes(r.gebietsverband_id))continue;}
+      else{const verwReg=currentProfile?.verwaltete_regionen||[];if(!verwReg.includes(r.id))continue;}
+    } else if(rolle==='regionalverwalter'){
       const verwReg=currentProfile?.verwaltete_regionen||[];
       if(!verwReg.includes(r.id))continue;
     } else if(rolle==='kreisverwalter'){
@@ -4206,16 +4276,24 @@ function jumpToMissingVerteiler(){
   // Auf LK-Ebene navigieren (oder GV je nach Rolle) und Gebiete ohne Verteiler hervorheben
   const rolle=currentProfile?.rolle||'verteiler';
   if(rolle==='verwalter'){
+    // VV: über verwaltete_gebietsverbaende
+    const verwGV=currentProfile?.verwaltete_gebietsverbaende||[];
+    if(verwGV.length>0&&gebietsverbaende[verwGV[0]]){
+      curGV=verwGV[0];
+      const gv=gebietsverbaende[verwGV[0]];
+      if(gv)curLK=gv.landkreis_id;
+    } else {
+      const verwReg=currentProfile?.verwaltete_regionen||[];
+      if(verwReg.length>0){const reg=regionen[verwReg[0]];if(reg){curGV=reg.gebietsverband_id;const gv=gebietsverbaende[reg.gebietsverband_id];if(gv)curLK=gv.landkreis_id;}}
+    }
+    curReg='alle';
+  } else if(rolle==='regionalverwalter'){
     const verwReg=currentProfile?.verwaltete_regionen||[];
     if(verwReg.length>0){
       const reg=regionen[verwReg[0]];
-      if(reg){
-        curGV=reg.gebietsverband_id;
-        const gv=gebietsverbaende[reg.gebietsverband_id];
-        if(gv)curLK=gv.landkreis_id;
-      }
+      if(reg){curGV=reg.gebietsverband_id;const gv=gebietsverbaende[reg.gebietsverband_id];if(gv)curLK=gv.landkreis_id;}
     }
-    curReg='alle';
+    curReg=verwReg.length===1?verwReg[0]:'alle';
   } else if(rolle==='kreisverwalter'){
     curLK=currentProfile?.verwalteter_landkreis||'alle';
     curGV='alle'; curReg='alle';
@@ -4344,14 +4422,24 @@ function openBulkPdfModal(){
   } else if(curRole==='kreisverwalter'){
     const myLK=currentProfile?.verwalteter_landkreis;
     if(myLK&&landkreise[myLK]) lkEntries=[[myLK,landkreise[myLK]]];
-  } else if(curRole==='verwalter'){
-    // Verwalter: Regionen ermitteln, daraus GVs und LKs ableiten
-    const verwReg=currentProfile?.verwaltete_regionen||[];
+  } else if(curRole==='verwalter'||curRole==='regionalverwalter'){
+    // VV/RV: GVs/Regionen ermitteln, daraus LKs ableiten
     const lkIds=new Set();
-    verwReg.forEach(rId=>{
-      const reg=regionen[rId];
-      if(reg){const gv=gebietsverbaende[reg.gebietsverband_id];if(gv)lkIds.add(gv.landkreis_id);}
-    });
+    if(curRole==='verwalter'){
+      // VV: alle GVs
+      (currentProfile?.verwaltete_gebietsverbaende||[]).forEach(gvId=>{
+        const gv=gebietsverbaende[gvId];if(gv)lkIds.add(gv.landkreis_id);
+      });
+      // Fallback alte Logik
+      if(lkIds.size===0)(currentProfile?.verwaltete_regionen||[]).forEach(rId=>{
+        const reg=regionen[rId];if(reg){const gv=gebietsverbaende[reg.gebietsverband_id];if(gv)lkIds.add(gv.landkreis_id);}
+      });
+    } else {
+      // RV: über verwaltete_regionen
+      (currentProfile?.verwaltete_regionen||[]).forEach(rId=>{
+        const reg=regionen[rId];if(reg){const gv=gebietsverbaende[reg.gebietsverband_id];if(gv)lkIds.add(gv.landkreis_id);}
+      });
+    }
     lkEntries=[...lkIds].map(id=>[id,landkreise[id]]).filter(([,lk])=>lk);
   }
   if(!lkEntries.length){cont.innerHTML='<div style="padding:12px;font-size:.82rem;color:var(--text3)">Keine Gebiete verfügbar.</div>';document.getElementById('bulkPdfModalOv').classList.add('open');return;}
@@ -4360,10 +4448,14 @@ function openBulkPdfModal(){
   lkEntries.forEach(([lkId,lk])=>{
     // GVs in diesem Landkreis
     let gvEntries=Object.entries(gebietsverbaende).filter(([,gv])=>gv.landkreis_id===lkId);
-    if(curRole==='verwalter'){
-      const verwReg=currentProfile?.verwaltete_regionen||[];
+    if(curRole==='verwalter'||curRole==='regionalverwalter'){
       const erlaubteGVs=new Set();
-      verwReg.forEach(rId=>{const reg=regionen[rId];if(reg)erlaubteGVs.add(reg.gebietsverband_id);});
+      if(curRole==='verwalter'){
+        (currentProfile?.verwaltete_gebietsverbaende||[]).forEach(gvId=>erlaubteGVs.add(gvId));
+        if(erlaubteGVs.size===0)(currentProfile?.verwaltete_regionen||[]).forEach(rId=>{const reg=regionen[rId];if(reg)erlaubteGVs.add(reg.gebietsverband_id);});
+      } else {
+        (currentProfile?.verwaltete_regionen||[]).forEach(rId=>{const reg=regionen[rId];if(reg)erlaubteGVs.add(reg.gebietsverband_id);});
+      }
       gvEntries=gvEntries.filter(([gvId])=>erlaubteGVs.has(gvId));
     }
     gvEntries.sort((a,b)=>a[1].name.localeCompare(b[1].name));
@@ -4385,7 +4477,7 @@ function openBulkPdfModal(){
 
     gvEntries.forEach(([gvId,gv])=>{
       let regEntries=Object.entries(regionen).filter(([,r])=>r.gebietsverband_id===gvId);
-      if(curRole==='verwalter'){
+      if(curRole==='regionalverwalter'){
         const verwReg=currentProfile?.verwaltete_regionen||[];
         regEntries=regEntries.filter(([rId])=>verwReg.includes(rId));
       }
@@ -4834,16 +4926,26 @@ function openDetail(id){
   for (const [rk, r] of Object.entries(regionen)) {
     if (r.gebiete.find(gg => gg.id === g.id)) { gebietRegion = rk; break; }
   }
+  const gebietGvId = gebietRegion ? regionen[gebietRegion]?.gebietsverband_id : null;
   if (curRole === 'verteiler') {
-    allUsers.filter(u => (u.rolle === 'verwalter' || u.rolle === 'kreisverwalter') && u.verwaltete_regionen && u.verwaltete_regionen.includes(gebietRegion))
-      .forEach(u => kontakte.push({ ...u, label: 'GV' }));
-  } else if (curRole === 'verwalter' || curRole === 'kreisverwalter') {
+    // VVs über verwaltete_gebietsverbaende, RVs über verwaltete_regionen
+    allUsers.filter(u => {
+      if(u.rolle==='verwalter') return u.verwaltete_gebietsverbaende?.includes(gebietGvId) || (u.verwaltete_regionen||[]).includes(gebietRegion);
+      if(u.rolle==='regionalverwalter') return (u.verwaltete_regionen||[]).includes(gebietRegion);
+      if(u.rolle==='kreisverwalter') return true; // KVs immer anzeigen
+      return false;
+    }).forEach(u => kontakte.push({ ...u, label: u.rolle==='verwalter'?'VV':u.rolle==='regionalverwalter'?'RV':'KV' }));
+  } else if (curRole === 'verwalter' || curRole === 'kreisverwalter' || curRole === 'regionalverwalter') {
     if (g.verteilerId) { const vt = allUsers.find(u => u.id === g.verteilerId); if (vt) kontakte.push({ ...vt, label: 'Verteiler' }); }
     allUsers.filter(u => u.rolle === 'admin').forEach(u => kontakte.push({ ...u, label: 'Admin' }));
   } else if (isAdmin) {
     if (g.verteilerId) { const vt = allUsers.find(u => u.id === g.verteilerId); if (vt) kontakte.push({ ...vt, label: 'Verteiler' }); }
-    allUsers.filter(u => (u.rolle === 'verwalter' || u.rolle === 'kreisverwalter') && u.verwaltete_regionen && u.verwaltete_regionen.includes(gebietRegion))
-      .forEach(u => kontakte.push({ ...u, label: 'GV' }));
+    allUsers.filter(u => {
+      if(u.rolle==='verwalter') return u.verwaltete_gebietsverbaende?.includes(gebietGvId) || (u.verwaltete_regionen||[]).includes(gebietRegion);
+      if(u.rolle==='regionalverwalter') return (u.verwaltete_regionen||[]).includes(gebietRegion);
+      if(u.rolle==='kreisverwalter') return true;
+      return false;
+    }).forEach(u => kontakte.push({ ...u, label: u.rolle==='verwalter'?'VV':u.rolle==='regionalverwalter'?'RV':'KV' }));
   }
   const darfHinweis = isAdmin || isM || isV;
   const hasGeo=(curRole==='admin'||(istVerwalterOderKreisverwalter()&&verwalterHatGebietZugriff(id))||(curRole==='verteiler'&&currentProfile?.kann_polygon_bearbeiten));
@@ -4870,7 +4972,7 @@ function openDetail(id){
       const userOptions = `<option value="">— Verteiler fehlt</option>` +
         gebietVerteiler.map(u=>{
           const sel=g.verteilerId===u.id?'selected':'';
-          const rolleHint=u.rolle==='verwalter'?' (GV)':u.rolle==='kreisverwalter'?' (KV)':'';
+          const rolleHint=u.rolle==='verwalter'?' (VV)':u.rolle==='regionalverwalter'?' (RV)':u.rolle==='kreisverwalter'?' (KV)':'';
           const borrowedHint=u.borrowed?' 🔗':'';
           const gvHint=(!u.sameGV&&u.gvName)?' ['+u.gvName+']':'';
           return `<option value="${u.id}" data-name="${u.name}" ${sel} ${u.borrowed?'style="color:var(--orange)"':''}>${u.name}${rolleHint}${gvHint}${borrowedHint}</option>`;
@@ -4960,7 +5062,7 @@ function openDetail(id){
         g.hinweise.forEach(hw=>{
           const autor=allUsers.find(u=>u.id===hw.user_id);const autorName=autor?autor.name:'?';
           const datum=new Date(hw.created_at).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
-          const darfLoeschen=isAdmin||(isM&&(curRole==='verwalter'||curRole==='kreisverwalter'))||(hw.user_id===currentUser?.id);
+          const darfLoeschen=isAdmin||(isM&&(curRole==='verwalter'||curRole==='kreisverwalter'||curRole==='regionalverwalter'))||(hw.user_id===currentUser?.id);
           h+=`<div style="background:var(--surface2);border-radius:var(--r8);padding:6px;display:flex;gap:6px;align-items:flex-start">
             <div style="flex:1"><div style="font-size:.72rem">💬 ${hw.text}</div><div style="font-size:.6rem;color:var(--text4);margin-top:1px">${autorName} · ${datum}</div></div>
             ${darfLoeschen?`<button onclick="deleteHinweis('${hw.id}','${g.id}')" style="background:none;border:none;color:var(--text4);cursor:pointer;font-size:.7rem;padding:1px">🗑</button>`:''}
@@ -5011,7 +5113,7 @@ function openDetail(id){
     if(isM){
       const gebietVerteiler=getVerteilerFuerGebiet(g.id);
       const userOptions=`<option value="">— Verteiler fehlt</option>`+gebietVerteiler.map(u=>{
-        const sel=g.verteilerId===u.id?'selected':'';const rolleHint=u.rolle==='verwalter'?' (GV)':u.rolle==='kreisverwalter'?' (KV)':'';
+        const sel=g.verteilerId===u.id?'selected':'';const rolleHint=u.rolle==='verwalter'?' (VV)':u.rolle==='regionalverwalter'?' (RV)':u.rolle==='kreisverwalter'?' (KV)':'';
         const borrowedHint=u.borrowed?' 🔗':'';const gvHint=(!u.sameGV&&u.gvName)?' ['+u.gvName+']':'';
         return `<option value="${u.id}" data-name="${u.name}" ${sel} ${u.borrowed?'style="color:var(--orange)"':''}>${u.name}${rolleHint}${gvHint}${borrowedHint}</option>`;
       }).join('');
@@ -5083,7 +5185,7 @@ function openDetail(id){
       g.hinweise.forEach(hw=>{
         const autor=allUsers.find(u=>u.id===hw.user_id);const autorName=autor?autor.name:'Unbekannt';
         const datum=new Date(hw.created_at).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
-        const darfLoeschen=isAdmin||(isM&&(curRole==='verwalter'||curRole==='kreisverwalter'))||(hw.user_id===currentUser?.id);
+        const darfLoeschen=isAdmin||(isM&&(curRole==='verwalter'||curRole==='kreisverwalter'||curRole==='regionalverwalter'))||(hw.user_id===currentUser?.id);
         h+=`<div style="background:var(--surface2);border-radius:var(--r8);padding:8px;display:flex;align-items:flex-start;gap:8px">
           <div style="flex:1"><div style="font-size:.78rem">💬 ${hw.text}</div><div style="font-size:.65rem;color:var(--text4);margin-top:2px">👤 ${autorName} · ${datum}</div></div>
           ${darfLoeschen?`<button onclick="deleteHinweis('${hw.id}','${g.id}')" style="background:none;border:none;color:var(--text4);cursor:pointer;font-size:.75rem;padding:2px" title="Hinweis löschen">🗑</button>`:''}
@@ -5262,8 +5364,12 @@ function getVerteilerFuerGebiet(gebietId){
       if(gv.landkreis_id===myLK)erlaubteGVs.add(gvId);
     });
   } else if(curRole==='verwalter'){
-    const verwReg=currentProfile?.verwaltete_regionen||[];
-    verwReg.forEach(rId=>{const reg=regionen[rId];if(reg)erlaubteGVs.add(reg.gebietsverband_id);});
+    // VV: über verwaltete_gebietsverbaende
+    (currentProfile?.verwaltete_gebietsverbaende||[]).forEach(gvId=>erlaubteGVs.add(gvId));
+    // Fallback alte Logik
+    if(erlaubteGVs.size===0)(currentProfile?.verwaltete_regionen||[]).forEach(rId=>{const reg=regionen[rId];if(reg)erlaubteGVs.add(reg.gebietsverband_id);});
+  } else if(curRole==='regionalverwalter'){
+    (currentProfile?.verwaltete_regionen||[]).forEach(rId=>{const reg=regionen[rId];if(reg)erlaubteGVs.add(reg.gebietsverband_id);});
   }
   // Übernahme-Anfragen für dieses Gebiet (ausgeliehene Verteiler)
   const borrowedIds=new Set();
@@ -5528,8 +5634,19 @@ function renderHTree(){
   const isAdmin=curRole==='admin';
   const isKV=curRole==='kreisverwalter';
   const isGV=curRole==='verwalter';
+  const isRV=curRole==='regionalverwalter';
   const kvLK=currentProfile?.verwalteter_landkreis;
-  const gvVerwIds=isGV?(()=>{const s=new Set();(currentProfile?.verwaltete_regionen||[]).forEach(rId=>{const r=regionen[rId];if(r)s.add(r.gebietsverband_id);});return s;})():null;
+  // VV: GV-IDs über verwaltete_gebietsverbaende (Fallback: verwaltete_regionen)
+  const gvVerwIds=(isGV||isRV)?(()=>{
+    const s=new Set();
+    if(isGV){
+      (currentProfile?.verwaltete_gebietsverbaende||[]).forEach(gvId=>s.add(gvId));
+      if(s.size===0)(currentProfile?.verwaltete_regionen||[]).forEach(rId=>{const r=regionen[rId];if(r)s.add(r.gebietsverband_id);});
+    } else {
+      (currentProfile?.verwaltete_regionen||[]).forEach(rId=>{const r=regionen[rId];if(r)s.add(r.gebietsverband_id);});
+    }
+    return s;
+  })():null;
 
   // Add-Buttons oben
   const addBtns=document.getElementById('hTreeAddBtns');
@@ -5537,7 +5654,7 @@ function renderHTree(){
     let ab='';
     if(isAdmin) ab+=`<button class="pill" onclick="hTreeAddLK()" style="font-size:.6rem;padding:3px 8px">+ LK</button>`;
     if(isAdmin||isKV) ab+=`<button class="pill" onclick="hTreeAddGV()" style="font-size:.6rem;padding:3px 8px">+ GV</button>`;
-    if(isAdmin||isKV||isGV) ab+=`<button class="pill" onclick="hTreeAddReg()" style="font-size:.6rem;padding:3px 8px">+ Region</button>`;
+    if(isAdmin||isKV||isGV||isRV) ab+=`<button class="pill" onclick="hTreeAddReg()" style="font-size:.6rem;padding:3px 8px">+ Region</button>`;
     addBtns.innerHTML=ab;
   }
 
@@ -5545,8 +5662,7 @@ function renderHTree(){
   // Filter: welche LKs anzeigen?
   // KV: nur seinen Landkreis zeigen. Falls verwalteter_landkreis nicht gesetzt → alle LKs zeigen
   const lkEntries=(isKV&&kvLK)?Object.entries(landkreise).filter(([id])=>id===kvLK):
-    isGV?Object.entries(landkreise).filter(([lkId])=>{
-      // GV: nur LKs zeigen die GVs enthalten auf die er Zugriff hat
+    (isGV||isRV)?Object.entries(landkreise).filter(([lkId])=>{
       return Object.values(gebietsverbaende).some(gv=>gv.landkreis_id===lkId&&gvVerwIds?.has(gv.id));
     }):Object.entries(landkreise);
   lkEntries.sort((a,b)=>a[1].name.localeCompare(b[1].name));
@@ -5556,7 +5672,7 @@ function renderHTree(){
     const lkOpen=hTreeExpanded.has(lkKey);
     // GVs in diesem LK
     let gvEntries=Object.entries(gebietsverbaende).filter(([,gv])=>gv.landkreis_id===lkId);
-    if(isGV) gvEntries=gvEntries.filter(([id])=>gvVerwIds.has(id));
+    if(isGV||isRV) gvEntries=gvEntries.filter(([id])=>gvVerwIds.has(id));
     gvEntries.sort((a,b)=>a[1].name.localeCompare(b[1].name));
     const lkGebietCount=gvEntries.reduce((sum,[gvId])=>{
       return sum+Object.values(regionen).filter(r=>r.gebietsverband_id===gvId).reduce((s,r)=>(r.gebiete||[]).length+s,0);
@@ -5571,7 +5687,7 @@ function renderHTree(){
       const gvKey='gv_'+gvId;
       const gvOpen=hTreeExpanded.has(gvKey);
       let regEntries=Object.entries(regionen).filter(([,r])=>r.gebietsverband_id===gvId);
-      if(isGV) regEntries=regEntries.filter(([id])=>(currentProfile?.verwaltete_regionen||[]).includes(id));
+      if(isRV) regEntries=regEntries.filter(([id])=>(currentProfile?.verwaltete_regionen||[]).includes(id));
       regEntries.sort((a,b)=>a[1].name.localeCompare(b[1].name));
       const gvGebietCount=regEntries.reduce((s,[,r])=>(r.gebiete||[]).length+s,0);
       const gvMatch=!hTreeFilter||gv.name.toLowerCase().includes(hTreeFilter);
@@ -5591,7 +5707,7 @@ function renderHTree(){
           if(!gMatch&&!rMatch&&!gvMatch&&!lkMatch) return;
           rHasVisible=true;
           const stColor=g.status==='fertig'?'var(--green)':g.status==='zugeteilt'?'var(--blue)':'var(--orange)';
-          const canDeleteG=isAdmin||isKV||(isGV&&(currentProfile?.verwaltete_regionen||[]).includes(rId));
+          const canDeleteG=isAdmin||isKV||isGV||(isRV&&(currentProfile?.verwaltete_regionen||[]).includes(rId));
           rChildHtml+=`<div class="htree-node"><div class="htree-row" draggable="true" data-type="gebiet" data-id="${g.id}" data-region="${rId}"
             ondragstart="hDragStart(event)" ondragover="hDragOver(event)" ondragleave="hDragLeave(event)" ondrop="hDrop(event)"
             ondblclick="hTreeRenameStart(this,'gebiete','${g.id}')">
@@ -5826,8 +5942,14 @@ async function hTreeAddReg(){
     const kvLK=currentProfile?.verwalteter_landkreis;
     if(kvLK) filteredGV=gvOpts.filter(([,gv])=>gv.landkreis_id===kvLK);
   } else if(curRole==='verwalter'){
-    const verwReg=currentProfile?.verwaltete_regionen||[];
-    const myGVs=new Set();verwReg.forEach(rId=>{const r=regionen[rId];if(r)myGVs.add(r.gebietsverband_id);});
+    // VV: über verwaltete_gebietsverbaende
+    const myGVs=new Set();
+    (currentProfile?.verwaltete_gebietsverbaende||[]).forEach(gvId=>myGVs.add(gvId));
+    if(myGVs.size===0)(currentProfile?.verwaltete_regionen||[]).forEach(rId=>{const r=regionen[rId];if(r)myGVs.add(r.gebietsverband_id);});
+    filteredGV=gvOpts.filter(([id])=>myGVs.has(id));
+  } else if(curRole==='regionalverwalter'){
+    const myGVs=new Set();
+    (currentProfile?.verwaltete_regionen||[]).forEach(rId=>{const r=regionen[rId];if(r)myGVs.add(r.gebietsverband_id);});
     filteredGV=gvOpts.filter(([id])=>myGVs.has(id));
   }
   const gvId=filteredGV.length===1?filteredGV[0][0]:await hTreePickFromList('Gebietsverband wählen',filteredGV.map(([id,gv])=>({id,label:gv.name})));
@@ -5943,18 +6065,33 @@ function nutzerImLandkreis(user) {
 
 // Prüft ob ein Nutzer im Gebietsverband des aktuellen GV aktiv ist
 function nutzerImGebietsverband(user) {
-  const verwReg = currentProfile?.verwaltete_regionen || [];
-  // Welche GV-IDs verwaltet der GV?
-  const meineGVIds = new Set();
-  verwReg.forEach(rId => { const reg = regionen[rId]; if(reg) meineGVIds.add(reg.gebietsverband_id); });
-  if(meineGVIds.size === 0) return false;
   // Eigener Account → immer anzeigen
   if(user.id === currentUser?.id) return true;
-  // Verteiler im selben GV?
-  if(user.rolle === 'verteiler') {
+  // Welche GV-IDs verwaltet der aktuelle Nutzer?
+  const meineGVIds = new Set();
+  if (curRole === 'verwalter') {
+    // VV: über verwaltete_gebietsverbaende (ganzer GV)
+    (currentProfile?.verwaltete_gebietsverbaende || []).forEach(gvId => meineGVIds.add(gvId));
+    // Fallback: alte Logik via verwaltete_regionen
+    if (meineGVIds.size === 0) {
+      (currentProfile?.verwaltete_regionen || []).forEach(rId => { const reg = regionen[rId]; if(reg) meineGVIds.add(reg.gebietsverband_id); });
+    }
+  } else if (curRole === 'regionalverwalter') {
+    // RV: über verwaltete_regionen → GV ableiten
+    (currentProfile?.verwaltete_regionen || []).forEach(rId => { const reg = regionen[rId]; if(reg) meineGVIds.add(reg.gebietsverband_id); });
+  }
+  if(meineGVIds.size === 0) return false;
+  // Welcher Landkreis? (über GV ermitteln)
+  const meinLK = new Set();
+  meineGVIds.forEach(gvId => { const gv = gebietsverbaende[gvId]; if(gv) meinLK.add(gv.landkreis_id); });
+  // Verteiler, RV oder andere VVs im selben Gebietsverband?
+  if(user.rolle === 'verteiler' || user.rolle === 'verwalter' || user.rolle === 'regionalverwalter') {
     return user.gebietsverband_id && meineGVIds.has(user.gebietsverband_id);
   }
-  // Andere Rollen nicht anzeigen (Admin, KV, andere GV)
+  // KVs im selben Landkreis anzeigen (read-only, zur Info)
+  if(user.rolle === 'kreisverwalter') {
+    return user.verwalteter_landkreis && meinLK.has(user.verwalteter_landkreis);
+  }
   return false;
 }
 
@@ -5972,10 +6109,22 @@ function verwalterHatRegionZugriff(regionId) {
     const gv = gebietsverbaende[reg.gebietsverband_id];
     return gv ? kreisverwalterHatLandkreisZugriff(gv.landkreis_id) : false;
   }
-  if (curRole !== 'verwalter') return false;
-  // Direkt prüfen ob Region in verwalteten Regionen enthalten
-  const verwReg = currentProfile?.verwaltete_regionen || [];
-  return verwReg.includes(regionId);
+  // VV: Zugriff auf ganzen GV (über verwaltete_gebietsverbaende)
+  if (curRole === 'verwalter') {
+    const verwGV = currentProfile?.verwaltete_gebietsverbaende || currentProfile?.verwaltete_regionen || [];
+    // Wenn verwaltete_gebietsverbaende gesetzt → prüfe ob GV drin ist
+    if (currentProfile?.verwaltete_gebietsverbaende?.length > 0) {
+      return currentProfile.verwaltete_gebietsverbaende.includes(reg.gebietsverband_id);
+    }
+    // Fallback: alte Logik mit verwaltete_regionen (Kompatibilität)
+    return verwGV.includes(regionId);
+  }
+  // RV: Zugriff nur auf zugewiesene Regionen
+  if (curRole === 'regionalverwalter') {
+    const verwReg = currentProfile?.verwaltete_regionen || [];
+    return verwReg.includes(regionId);
+  }
+  return false;
 }
 
 function verwalterHatGebietsverbandZugriff(gvId) {
@@ -5984,19 +6133,33 @@ function verwalterHatGebietsverbandZugriff(gvId) {
     const gv = gebietsverbaende[gvId];
     return gv ? kreisverwalterHatLandkreisZugriff(gv.landkreis_id) : false;
   }
-  if (curRole !== 'verwalter') return false;
-  // Prüfe ob der Verwalter Regionen in diesem Gebietsverband verwaltet
-  const verwReg = currentProfile?.verwaltete_regionen || [];
-  return verwReg.some(rId => {
-    const reg = regionen[rId];
-    return reg && reg.gebietsverband_id === gvId;
-  });
+  // VV: ganzer GV
+  if (curRole === 'verwalter') {
+    if (currentProfile?.verwaltete_gebietsverbaende?.length > 0) {
+      return currentProfile.verwaltete_gebietsverbaende.includes(gvId);
+    }
+    // Fallback: alte Logik
+    const verwReg = currentProfile?.verwaltete_regionen || [];
+    return verwReg.some(rId => {
+      const reg = regionen[rId];
+      return reg && reg.gebietsverband_id === gvId;
+    });
+  }
+  // RV: prüfe ob eine seiner Regionen in diesem GV liegt
+  if (curRole === 'regionalverwalter') {
+    const verwReg = currentProfile?.verwaltete_regionen || [];
+    return verwReg.some(rId => {
+      const reg = regionen[rId];
+      return reg && reg.gebietsverband_id === gvId;
+    });
+  }
+  return false;
 }
 
-// Prüft ob Verwalter/Kreisverwalter Zugriff auf ein Gebiet hat (anhand Region)
+// Prüft ob Verwalter/KV/RV Zugriff auf ein Gebiet hat (anhand Region)
 function verwalterHatGebietZugriff(gebietId) {
   if (curRole === 'admin') return true;
-  if (curRole !== 'verwalter' && curRole !== 'kreisverwalter') return false;
+  if (curRole !== 'verwalter' && curRole !== 'kreisverwalter' && curRole !== 'regionalverwalter') return false;
   for (const [rk, r] of Object.entries(regionen)) {
     if (r.gebiete.find(g => g.id === gebietId)) {
       return verwalterHatRegionZugriff(rk);
