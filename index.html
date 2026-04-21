@@ -2264,7 +2264,7 @@ function openEditUserModal(userId){
 
   // Polygon-Recht (KV/Admin: für alle Rollen außer Admin; GV: nur Verteiler)
   const polyWrap=document.getElementById('editUserPolyWrap');
-  const canEditPoly=!isSelf&&!istAdmin&&((isAdmin||isKV)||((isGV||isRV)&&u.rolle==='verteiler'));
+  const canEditPoly=!isSelf&&u.rolle==='verteiler'&&(isAdmin||isKV||isGV||isRV);
   if(canEditPoly){
     polyWrap.style.display='block';
     document.getElementById('editUserPoly').checked=!!u.kann_polygon_bearbeiten;
