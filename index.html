@@ -5922,8 +5922,8 @@ async function hDrop(e){
 
 // ── Add functions (quick-add from tree header) ──
 async function hTreeAddLK(){
-  const name=prompt('Neuer Landkreis:');
-  if(!name||!name.trim()) return;
+  const name=await appPrompt('🏛 Neuer Landkreis','Name eingeben…','Erstellen');
+  if(!name) return;
   if(curRole!=='admin'){toast('⚠️ Nur Admins');return;}
   const {data,error}=await sb.from('landkreise').insert({name:name.trim()}).select().single();
   if(error){toast('⚠️ '+error.message);return;}
@@ -5938,8 +5938,8 @@ async function hTreeAddGV(){
   const filteredLK=curRole==='kreisverwalter'&&kvLK?lkOpts.filter(([id])=>id===kvLK):lkOpts;
   const lkId=filteredLK.length===1?filteredLK[0][0]:await hTreePickFromList('Landkreis wählen',filteredLK.map(([id,lk])=>({id,label:lk.name})));
   if(!lkId) return;
-  const name=prompt('Neuer Gebietsverband:');
-  if(!name||!name.trim()) return;
+  const name=await appPrompt('🏘 Neuer Gebietsverband','Name eingeben…','Erstellen');
+  if(!name) return;
   let data,error;
   ({data,error}=await sb.from('gebietsverbaende').insert({name:name.trim(),landkreis_id:lkId,center_lat:50.94,center_lng:12.10,zoom:11}).select().single());
   if(error){
@@ -5972,7 +5972,7 @@ async function hTreeAddReg(){
   }
   const gvId=filteredGV.length===1?filteredGV[0][0]:await hTreePickFromList('Gebietsverband wählen',filteredGV.map(([id,gv])=>({id,label:gv.name})));
   if(!gvId) return;
-  const name=prompt('Neue Region:');
+  const name=await appPrompt('🗺 Neue Region','Name eingeben…','Erstellen');
   if(!name||!name.trim()) return;
   const gv=gebietsverbaende[gvId];
   const insertObj={name:name.trim(),short:name.trim(),gebietsverband_id:gvId,center_lat:gv?.center_lat||50.94,center_lng:gv?.center_lng||12.10,zoom:13};
@@ -6657,6 +6657,32 @@ function appConfirm(title, msg, okText='OK', cancelText='Abbrechen'){
   });
 }
 
+function appPrompt(title, placeholder='', okText='OK', cancelText='Abbrechen'){
+  return new Promise(resolve=>{
+    let ov=document.getElementById('appPromptOv');
+    if(ov) ov.remove();
+    ov=document.createElement('div');
+    ov.id='appPromptOv';
+    ov.className='modal-ov open';
+    ov.innerHTML=`<div class="modal" style="max-width:340px;text-align:center">
+      <div class="m-handle"></div>
+      <div style="font-size:.95rem;font-weight:600;margin-bottom:10px">${title}</div>
+      <input id="appPromptInput" type="text" placeholder="${placeholder}" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--sep);border-radius:var(--r8);font-size:.85rem;margin-bottom:14px">
+      <div style="display:flex;gap:8px">
+        <button id="appPromptCancel" class="btn btn-g" style="flex:1">${cancelText}</button>
+        <button id="appPromptOk" class="btn btn-p" style="flex:1">${okText}</button>
+      </div>
+    </div>`;
+    document.body.appendChild(ov);
+    const inp=document.getElementById('appPromptInput');
+    setTimeout(()=>inp.focus(),100);
+    inp.addEventListener('keydown',e=>{if(e.key==='Enter'){const v=inp.value.trim();ov.remove();resolve(v||null);}if(e.key==='Escape'){ov.remove();resolve(null);}});
+    document.getElementById('appPromptOk').onclick=()=>{const v=inp.value.trim();ov.remove();resolve(v||null);};
+    document.getElementById('appPromptCancel').onclick=()=>{ov.remove();resolve(null);};
+    ov.onclick=(e)=>{if(e.target===ov){ov.remove();resolve(null);}};
+  });
+}
+
 // ============================================================
 // PWA INSTALL BANNER
 // ============================================================
@@ -7037,7 +7063,7 @@ async function toggleVorlage(id,checked){
 }
 
 async function deletePlakat(id){
-  if(!confirm('Plakat wirklich löschen?')) return;
+  if(!await appConfirm('🗑 Plakat löschen','Soll dieses Plakat wirklich gelöscht werden?','Löschen','Abbrechen')) return;
   const {error}=await sb.from('plakate').delete().eq('id',id);
   if(!error){
     plakate=plakate.filter(x=>x.id!==id);
@@ -7188,7 +7214,8 @@ function startPlakatRoute(status){
     window.open(url,'_blank');
   } else {
     // Zu viele für Google Maps — GPX anbieten
-    if(confirm(`${targets.length} Plakate — zu viele für Google Maps (max 10).\n\nGPX-Datei herunterladen stattdessen?`)){
+    const gpxWahl = await appConfirm('📍 Zu viele Plakate',`${targets.length} Plakate — zu viele für Google Maps (max 10).\n\nGPX-Datei herunterladen oder nur die ersten 10 navigieren?`,'GPX herunterladen','Erste 10 navigieren');
+    if(gpxWahl){
       exportPlakatGPX(targets);
     } else {
       // Nur erste 10 nehmen
