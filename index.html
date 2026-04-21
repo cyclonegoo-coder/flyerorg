@@ -2225,14 +2225,20 @@ function openEditUserModal(userId){
 
   // Rolle
   const rc=document.getElementById('editUserRolleContainer');
-  const readOnly=isSelf||(isKV&&istAdmin)||isGV||isRV;
-  if(readOnly){
+  // VV darf Verteiler↔RV ändern, KV/Admin alles (außer sich selbst)
+  const canEditRolle = !isSelf && (isAdmin || isKV || (isGV && (u.rolle==='verteiler'||u.rolle==='regionalverwalter')));
+  if(!canEditRolle){
     const rl={verteiler:'Verteiler',regionalverwalter:'Regionalverwalter',verwalter:'Verbandsverwalter',kreisverwalter:'Kreisverwalter',admin:'Admin'}[u.rolle]||u.rolle;
     rc.innerHTML=`<span style="font-size:.8rem;font-weight:600;padding:3px 10px;border-radius:6px;background:var(--blue)15;color:var(--blue)">${rl}</span>`;
   }else{
     let opts='';
-    if(isKV||isAdmin) opts+=`<option value="verteiler" ${u.rolle==='verteiler'?'selected':''}>Verteiler</option><option value="regionalverwalter" ${u.rolle==='regionalverwalter'?'selected':''}>Regionalverwalter</option><option value="verwalter" ${u.rolle==='verwalter'?'selected':''}>Verbandsverwalter</option><option value="kreisverwalter" ${u.rolle==='kreisverwalter'?'selected':''}>Kreisverwalter</option>`;
-    if(isAdmin) opts+=`<option value="admin" ${u.rolle==='admin'?'selected':''}>Admin</option>`;
+    if(isGV){
+      // VV: nur Verteiler und Regionalverwalter
+      opts+=`<option value="verteiler" ${u.rolle==='verteiler'?'selected':''}>Verteiler</option><option value="regionalverwalter" ${u.rolle==='regionalverwalter'?'selected':''}>Regionalverwalter</option>`;
+    } else {
+      if(isKV||isAdmin) opts+=`<option value="verteiler" ${u.rolle==='verteiler'?'selected':''}>Verteiler</option><option value="regionalverwalter" ${u.rolle==='regionalverwalter'?'selected':''}>Regionalverwalter</option><option value="verwalter" ${u.rolle==='verwalter'?'selected':''}>Verbandsverwalter</option><option value="kreisverwalter" ${u.rolle==='kreisverwalter'?'selected':''}>Kreisverwalter</option>`;
+      if(isAdmin) opts+=`<option value="admin" ${u.rolle==='admin'?'selected':''}>Admin</option>`;
+    }
     rc.innerHTML=`<select id="editUserRolle" style="width:100%;font-size:.8rem;padding:6px 8px;border:1px solid var(--sep);border-radius:var(--r8)">${opts}</select>`;
   }
 
@@ -2304,7 +2310,11 @@ async function saveEditUser(){
     const newRolle=rolleEl.value;
     if(newRolle!==u.rolle){
       // Berechtigungsprüfung
-      if(curRole==='verwalter'||curRole==='regionalverwalter'){toast('⚠️ Keine Berechtigung');return;}
+      if(curRole==='verwalter'){
+        // VV darf nur Verteiler↔RV
+        if(!(u.rolle==='verteiler'||u.rolle==='regionalverwalter')||!(newRolle==='verteiler'||newRolle==='regionalverwalter')){toast('⚠️ Keine Berechtigung');return;}
+      }
+      if(curRole==='regionalverwalter'){toast('⚠️ Keine Berechtigung');return;}
       if(newRolle==='admin'&&curRole!=='admin'){toast('⚠️ Admin-Rolle kann nur von Admins vergeben werden');return;}
       if(u.rolle==='admin'&&curRole!=='admin'){toast('⚠️ Admins können nur von Admins geändert werden');return;}
       updates.rolle=newRolle;changed=true;
@@ -3719,6 +3729,13 @@ async function sendeZuweisungAnfrage(gebietId) {
   if (selId) openDetail(selId);
 }
 
+// ── HELPER: Aktueller Verteiler-Name (live aus allUsers) ──
+function getVerteilerName(g) {
+  if (!g.verteilerId) return '';
+  const u = allUsers.find(u => u.id === g.verteilerId);
+  return u ? u.name : (g.verteiler || '');
+}
+
 // ============================================================
 // KML POLYGONS
 // ============================================================
@@ -4115,7 +4132,7 @@ async function exportGebietPDF(gebietId){
   pdf.setFontSize(12);pdf.setFont(undefined,'bold');
   pdf.text(g.name,margin,margin+4);
   pdf.setFontSize(8);pdf.setFont(undefined,'normal');
-  const verteilerInfo=g.verteilerId?(g.verteiler||'Zugewiesen'):'Nicht zugewiesen';
+  const verteilerInfo=g.verteilerId?(getVerteilerName(g)||'Zugewiesen'):'Nicht zugewiesen';
   const _pdfUser=g.verteilerId?allUsers.find(u=>u.id===g.verteilerId):null;
   const _pdfUe=_pdfUser?(_pdfUser._kampUebergabe||_pdfUser.uebergabe_info||''):'';
   let metaText=`Datum: ${new Date().toLocaleDateString('de-DE')} · Stückzahl: ${g.stueckzahl||0} · Verteiler: ${verteilerInfo}`;
@@ -4159,7 +4176,7 @@ async function bulkPrintGebiete(){
       pdf.setFontSize(12);pdf.setFont(undefined,'bold');
       pdf.text(g.name,margin,margin+4);
       pdf.setFontSize(8);pdf.setFont(undefined,'normal');
-      const verteilerInfo=g.verteilerId?(g.verteiler||'Zugewiesen'):'Nicht zugewiesen';
+      const verteilerInfo=g.verteilerId?(getVerteilerName(g)||'Zugewiesen'):'Nicht zugewiesen';
       const _bUser=g.verteilerId?allUsers.find(u=>u.id===g.verteilerId):null;
       const _bUe=_bUser?(_bUser._kampUebergabe||_bUser.uebergabe_info||''):'';
       let metaText=`Datum: ${new Date().toLocaleDateString('de-DE')} · Stückzahl: ${g.stueckzahl||0} · Verteiler: ${verteilerInfo}`;
@@ -4609,7 +4626,7 @@ async function startBulkPdfExport(){
       pdf.setFontSize(12);pdf.setFont(undefined,'bold');
       pdf.text(g.name,margin,margin+4);
       pdf.setFontSize(8);pdf.setFont(undefined,'normal');
-      const verteilerInfo=g.verteilerId?(g.verteiler||'Zugewiesen'):'Nicht zugewiesen';
+      const verteilerInfo=g.verteilerId?(getVerteilerName(g)||'Zugewiesen'):'Nicht zugewiesen';
       const metaText=`Datum: ${new Date().toLocaleDateString('de-DE')} · Stückzahl: ${g.stueckzahl||0} · Verteiler: ${verteilerInfo}`;
       pdf.text(metaText,margin,margin+8);
       const imgY=margin+10;
@@ -4843,7 +4860,8 @@ function renderList(){
 function renderGCard(g){
   const istProblemgebietFremdes = curRole==='verteiler' && !g.verteilerId;
   const statusLabel = istProblemgebietFremdes ? '🆘 Hilfe' : sl(g.status);
-  const verteilerInfo = g.verteiler?(curRole==='verteiler'?(g.verteilerId===currentUser?.id?'Du':'Zugew.'):'👤 '+g.verteiler.split(' ')[0]):'⚠️ fehlt';
+  const _vName=getVerteilerName(g);
+  const verteilerInfo = _vName?(curRole==='verteiler'?(g.verteilerId===currentUser?.id?'Du':'Zugew.'):'👤 '+_vName.split(' ')[0]):'⚠️ fehlt';
   return `<div class="g-card status-${g.status} ${selId===g.id?'sel':''}" onclick="selGebiet('${g.id}')">
     <div class="g-top"><span class="g-name">${g.name}</span><span class="s-chip c-${g.status}">${statusLabel}</span></div>
     <div class="g-meta"><span>📦 ${g.stueckzahl}</span><span>${verteilerInfo}</span>${g.whatsapp?'<span class="wa">WA</span>':''}</div>
@@ -4905,7 +4923,7 @@ function openDetail(id){
       <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
         <div><span style="font-size:.65rem;color:var(--text4);text-transform:uppercase">Stück</span> <strong style="color:var(--blue);font-size:.95rem">${g.stueckzahl}</strong></div>
         <div style="flex:1;text-align:center"><span style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:600;${g.status==='fertig'?'background:rgba(52,199,89,.15);color:var(--green)':g.status==='zugeteilt'?'background:rgba(255,149,0,.15);color:var(--orange)':'background:var(--surface3);color:var(--text3)'}">${sl(g.status)}</span></div>
-        <div style="text-align:right;font-size:.72rem;color:var(--text3)">${curRole==='verteiler'?(g.verteilerId?(g.verteilerId===currentUser?.id?'👤 Du':'Zugewiesen'):'⚠️ Frei'):(g.verteiler||'⚠️ Frei')}</div>
+        <div style="text-align:right;font-size:.72rem;color:var(--text3)">${curRole==='verteiler'?(g.verteilerId?(g.verteilerId===currentUser?.id?'👤 Du':'Zugewiesen'):'⚠️ Frei'):(getVerteilerName(g)||'⚠️ Frei')}</div>
       </div>
       ${(()=>{const _mv=g.verteilerId?allUsers.find(u=>u.id===g.verteilerId):null;const _ui=_mv?(_mv._kampUebergabe||_mv.uebergabe_info||''):'';return _ui?`<div style="margin-top:4px;font-size:.68rem;color:var(--text3);padding:3px 8px;background:var(--surface2);border-radius:6px">📦 ${_ui}</div>`:''})()}
     </div>`;
@@ -5089,7 +5107,7 @@ function openDetail(id){
     h+=`<div class="d-sec"><div class="info-g">
       <div><div class="ii-label">Stückzahl</div><div class="ii-val" style="color:var(--blue)">${g.stueckzahl}</div></div>
       <div><div class="ii-label">Status</div><div class="ii-val">${sl(g.status)}</div></div>
-      <div class="ii-full"><div class="ii-label">Verteiler${_vUser?.is_offline?' <span style="font-size:.6rem;color:var(--orange)">(Offline)</span>':''}</div><div class="ii-val">${g.verteiler||'⚠️ Verteiler fehlt'}</div></div>
+      <div class="ii-full"><div class="ii-label">Verteiler${_vUser?.is_offline?' <span style="font-size:.6rem;color:var(--orange)">(Offline)</span>':''}</div><div class="ii-val">${getVerteilerName(g)||'⚠️ Verteiler fehlt'}</div></div>
       ${_ueInfo?`<div class="ii-full"><div class="ii-label">Übergabe</div><div class="ii-val" style="font-size:.72rem;color:var(--text3)">📦 ${_ueInfo}</div></div>`:''}
     </div></div>`;
     h+=`<div class="d-sec"><div class="sec-hd">Status</div><div class="s-grid">
