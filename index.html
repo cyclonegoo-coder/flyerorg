@@ -944,6 +944,10 @@ textarea{min-height:68px}
         <div style="font-size:.65rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:2px">Übergabe-Info</div>
         <div id="profilUebergabe" style="font-size:.82rem;color:var(--text2);padding:6px 8px;background:var(--surface2);border-radius:var(--r8)">–</div>
       </div>
+      <div id="profilZustaendigWrap" style="display:none">
+        <div style="font-size:.65rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:4px">Zuständigkeit</div>
+        <div id="profilZustaendigList" style="display:flex;flex-direction:column;gap:3px"></div>
+      </div>
     </div>
     <div id="profilStatus" style="font-size:.78rem;margin-top:8px;min-height:18px"></div>
     <div class="m-actions" style="margin-top:10px">
@@ -1873,7 +1877,8 @@ async function doLogout() {
 function openProfilModal() {
   document.getElementById('profilName').textContent = currentProfile?.name || '–';
   document.getElementById('profilEmail').textContent = currentUser?.email || '–';
-  document.getElementById('profilRolle').textContent = (currentProfile?.rolle || 'verteiler').charAt(0).toUpperCase() + (currentProfile?.rolle || 'verteiler').slice(1);
+  const _rl={verteiler:'Verteiler',regionalverwalter:'Regionalverwalter',verwalter:'Verbandsverwalter',kreisverwalter:'Kreisverwalter',admin:'Admin'};
+  document.getElementById('profilRolle').textContent = _rl[currentProfile?.rolle] || currentProfile?.rolle || 'Verteiler';
   document.getElementById('profilTelefon').value = currentProfile?.telefon || '';
   document.getElementById('profilStatus').textContent = '';
   // Übergabe-Info anzeigen (readonly)
@@ -1887,6 +1892,36 @@ function openProfilModal() {
   } else {
     ueWrap.style.display='none';
   }
+
+  // Zuständigkeit anzeigen (VV: Gebietsverbände, RV: Regionen, KV: Landkreis)
+  const zWrap=document.getElementById('profilZustaendigWrap');
+  const zList=document.getElementById('profilZustaendigList');
+  const rolle=currentProfile?.rolle;
+  let zItems=[];
+  if(rolle==='verwalter'){
+    const verwGV=currentProfile?.verwaltete_gebietsverbaende||[];
+    if(verwGV.length>0){
+      zItems=verwGV.map(gvId=>{const gv=gebietsverbaende[gvId];return gv?'🏘 '+gv.name:null;}).filter(Boolean);
+    } else {
+      // Fallback alte Logik
+      const verwReg=currentProfile?.verwaltete_regionen||[];
+      const gvIds=[...new Set(verwReg.map(rId=>regionen[rId]?.gebietsverband_id).filter(Boolean))];
+      zItems=gvIds.map(gvId=>{const gv=gebietsverbaende[gvId];return gv?'🏘 '+gv.name:null;}).filter(Boolean);
+    }
+  } else if(rolle==='regionalverwalter'){
+    const verwReg=currentProfile?.verwaltete_regionen||[];
+    zItems=verwReg.map(rId=>{const r=regionen[rId];return r?'🗺 '+r.name:null;}).filter(Boolean);
+  } else if(rolle==='kreisverwalter'){
+    const lkId=currentProfile?.verwalteter_landkreis;
+    if(lkId&&landkreise[lkId]) zItems=['🏛 '+landkreise[lkId].name];
+  }
+  if(zItems.length>0){
+    zWrap.style.display='';
+    zList.innerHTML=zItems.map(t=>`<div style="font-size:.82rem;color:var(--text2);padding:4px 8px;background:var(--surface2);border-radius:var(--r8)">${t}</div>`).join('');
+  } else {
+    zWrap.style.display='none';
+  }
+
   document.getElementById('profilModalOv').classList.add('open');
 }
 function closeProfilModal() {
@@ -7202,7 +7237,7 @@ function renderStatsPlakate(){
 }
 
 // ── Plakat-Routen: Google Maps + GPX ──
-function startPlakatRoute(status){
+async function startPlakatRoute(status){
   // Sammle sichtbare Plakate mit gewünschtem Status
   let targets=getVisiblePlakate().filter(p=>status==='alle'||(status==='haengt'?(p.status==='haengt'||p.status==='ersetzt'):p.status===status));
   if(targets.length===0){toast('⚠️ Keine Plakate für Route');return;}
