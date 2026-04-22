@@ -3671,13 +3671,13 @@ async function sendeUebernahmeAnfrage(gebietId) {
   const g = getG(gebietId);
   if (!g) return;
 
-  // Prüfe ob spezielle Kampagne aktiv ist (nicht Basis/Grundzuweisung)
+  // Verteiler sieht immer eine Spezial-Kampagne (Grundzuweisung ist ausgeblendet)
+  // → Immer Auswahl: nur für diese Kampagne ODER grundsätzlich
   const istSpezialKampagne = curKampagne && !curKampagne.ist_basis && !curKampagne._local;
   let kampagneId = null; // null = grundsätzlich (Grundzuweisung)
   let grundText = 'Möchte dieses Gebiet grundsätzlich übernehmen';
 
   if (istSpezialKampagne) {
-    // Verteiler sieht spezielle Kampagne → Auswahl anbieten
     const wahl = await appChoice(
       '🙋 Gebiet übernehmen',
       `Möchtest du „${g.name}" übernehmen?`,
@@ -3686,13 +3686,13 @@ async function sendeUebernahmeAnfrage(gebietId) {
         { label: 'Grundsätzlich (alle Kampagnen)', value: 'grundsaetzlich', style: 'background:var(--green);color:#fff' }
       ]
     );
-    if (!wahl) return; // Abbrechen
+    if (!wahl) return;
     if (wahl === 'kampagne') {
       kampagneId = curKampagne.id;
       grundText = `Möchte dieses Gebiet für „${curKampagne.name}" übernehmen`;
     }
   } else {
-    // Basis-Kampagne oder keine → einfache Bestätigung
+    // Fallback: falls doch Basis-Kampagne aktiv → einfache Bestätigung
     const ok = await appConfirm('🙋 Gebiet übernehmen',`Möchtest du „${g.name}" wirklich übernehmen? Dadurch wird eine Anfrage an den zuständigen Verbandsverwalter gesendet.`,'Ja, übernehmen','Abbrechen');
     if (!ok) return;
   }
