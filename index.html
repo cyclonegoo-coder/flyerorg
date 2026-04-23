@@ -697,7 +697,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v131 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v132 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -3438,7 +3438,7 @@ function renderAnfragenList() {
       const zielUser = a.ziel_user_id ? allUsers.find(u => u.id === a.ziel_user_id) : null;
       // Kampagne-Info für Übernahme-Anfragen
       const anfrageKamp = a.kampagne_id ? kampagnen.find(k=>k.id===a.kampagne_id) : null;
-      const kampBadge = a.typ === 'uebernahme' ? (anfrageKamp ? `<span style="font-size:.65rem;background:var(--primary);color:#fff;padding:1px 5px;border-radius:4px;margin-left:4px">📋 ${anfrageKamp.name}</span>` : `<span style="font-size:.65rem;background:var(--green);color:#fff;padding:1px 5px;border-radius:4px;margin-left:4px">🌍 Grundsätzlich</span>`) : '';
+      const kampBadge = a.typ === 'uebernahme' ? (anfrageKamp ? `<span style="font-size:.65rem;background:var(--blue);color:#fff;padding:1px 5px;border-radius:4px;margin-left:4px">📋 ${anfrageKamp.name}</span>` : `<span style="font-size:.65rem;background:var(--green);color:#fff;padding:1px 5px;border-radius:4px;margin-left:4px">🌍 Grundsätzlich</span>`) : '';
       const beschreibung = a.typ === 'uebernahme'
         ? `🙋 ${userName} möchte dieses Gebiet übernehmen${kampBadge}`
         : a.typ === 'abgabe'
@@ -3683,7 +3683,7 @@ async function sendeUebernahmeAnfrage(gebietId) {
       '🙋 Gebiet übernehmen',
       `Möchtest du „${g.name}" übernehmen?`,
       [
-        { label: `Nur für „${curKampagne.name}"`, value: 'kampagne', style: 'background:var(--primary);color:#fff' },
+        { label: `Nur für „${curKampagne.name}"`, value: 'kampagne', style: 'background:var(--blue);color:#fff' },
         { label: 'Grundsätzlich (alle Kampagnen)', value: 'grundsaetzlich', style: 'background:var(--green);color:#fff' }
       ]
     );
@@ -5110,7 +5110,7 @@ function openDetail(id){
           const _eigene=a.user_id===currentUser?.id&&(a.typ==='zuweisung_anfrage');
           const zielU=a.ziel_user_id?allUsers.find(u=>u.id===a.ziel_user_id):null;
           const _anfrKamp=a.kampagne_id?kampagnen.find(k=>k.id===a.kampagne_id):null;
-          const _kBadge2=a.typ==='uebernahme'?(_anfrKamp?` <span style="font-size:.6rem;background:var(--primary);color:#fff;padding:0 4px;border-radius:3px">📋 ${_anfrKamp.name}</span>`:' <span style="font-size:.6rem;background:var(--green);color:#fff;padding:0 4px;border-radius:3px">🌍 Grundsätzl.</span>'):'';
+          const _kBadge2=a.typ==='uebernahme'?(_anfrKamp?` <span style="font-size:.6rem;background:var(--blue);color:#fff;padding:0 4px;border-radius:3px">📋 ${_anfrKamp.name}</span>`:' <span style="font-size:.6rem;background:var(--green);color:#fff;padding:0 4px;border-radius:3px">🌍 Grundsätzl.</span>'):'';
           const _desc=a.typ==='uebernahme'?`🙋 ${userName} möchte übernehmen${_kBadge2}`:a.typ==='zuweisung_anfrage'?`👤 Anfrage an ${zielU?.name||'Verteiler'}`:`👤 ${userName} → <strong>${a.neue_stueckzahl}</strong> Stk.`;
           const _genBtn=a.typ==='uebernahme'
             ?`<button onclick="handleUebernahmeAnfrage('${a.id}','genehmigt','${a.gebiet_id}','${a.user_id}')" style="flex:1;padding:4px;border:none;border-radius:var(--r8);background:var(--green);color:#fff;font-size:.68rem;font-weight:600;cursor:pointer">✓</button>`
@@ -5233,7 +5233,7 @@ function openDetail(id){
           const _eig2=a.user_id===currentUser?.id&&(a.typ==='zuweisung_anfrage');
           const _zu2=a.ziel_user_id?allUsers.find(u=>u.id===a.ziel_user_id):null;
           const _anfrK2=a.kampagne_id?kampagnen.find(k=>k.id===a.kampagne_id):null;
-          const _kB3=a.typ==='uebernahme'?(_anfrK2?` <span style="font-size:.6rem;background:var(--primary);color:#fff;padding:0 4px;border-radius:3px">📋 ${_anfrK2.name}</span>`:' <span style="font-size:.6rem;background:var(--green);color:#fff;padding:0 4px;border-radius:3px">🌍 Grundsätzl.</span>'):'';
+          const _kB3=a.typ==='uebernahme'?(_anfrK2?` <span style="font-size:.6rem;background:var(--blue);color:#fff;padding:0 4px;border-radius:3px">📋 ${_anfrK2.name}</span>`:' <span style="font-size:.6rem;background:var(--green);color:#fff;padding:0 4px;border-radius:3px">🌍 Grundsätzl.</span>'):'';
           const _dsc2=a.typ==='uebernahme'?`🙋 ${userName} möchte übernehmen${_kB3}`:a.typ==='zuweisung_anfrage'?`👤 Anfrage an ${_zu2?.name||'Verteiler'}`:`👤 ${userName} → 📦 <strong>${a.neue_stueckzahl}</strong> Stück`;
           const _gBtn2=a.typ==='uebernahme'
             ?`<button onclick="handleUebernahmeAnfrage('${a.id}','genehmigt','${a.gebiet_id}','${a.user_id}')" style="flex:1;padding:4px;border:none;border-radius:var(--r8);background:var(--green);color:#fff;font-size:.7rem;font-weight:600;cursor:pointer">✓ Genehmigen</button>`
@@ -6692,7 +6692,7 @@ function appChoice(title, msg, options=[]){
     ov.id='appChoiceOv';
     ov.className='modal-ov open';
     const btns=options.map((o,i)=>
-      `<button id="appChoiceBtn${i}" class="btn" style="width:100%;padding:10px 8px;border:none;border-radius:var(--r8);font-size:.8rem;font-weight:600;cursor:pointer;${o.style||'background:var(--primary);color:#fff'}">${o.label}</button>`
+      `<button id="appChoiceBtn${i}" class="btn" style="width:100%;padding:10px 8px;border:none;border-radius:var(--r8);font-size:.8rem;font-weight:600;cursor:pointer;${o.style||'background:var(--blue);color:#fff'}">${o.label}</button>`
     ).join('');
     ov.innerHTML=`<div class="modal" style="max-width:360px;text-align:center">
       <div class="m-handle"></div>
