@@ -2258,6 +2258,43 @@ function getManagerIdsForGebiet(gebietId) {
   return adminIds;
 }
 
+// Prüft ob der aktuelle Nutzer auf der zuständigen Ebene für dieses Gebiet ist
+// Anfragen sollen nur auf der niedrigsten zuständigen Ebene sichtbar sein
+function binIchZustaendigFuerGebiet(gebietId) {
+  const me = currentUser?.id;
+  if (!me) return false;
+  const g = getG(gebietId);
+  if (!g) return false;
+  const reg = regionen[g.region_id];
+  if (!reg) return curRole === 'admin'; // Fallback: Admin sieht alles ohne Region
+  const gvId = reg.gebietsverband_id;
+  const gv = gebietsverbaende[gvId];
+  const lkId = gv?.landkreis_id;
+
+  // Stufe 1: Gibt es RVs für diese Region?
+  const rvIds = allUsers.filter(u => u.rolle === 'regionalverwalter' && (u.verwaltete_regionen || []).includes(g.region_id)).map(u => u.id);
+  if (rvIds.length > 0) {
+    return curRole === 'regionalverwalter' && rvIds.includes(me);
+  }
+  // Stufe 2: Gibt es VVs für diesen GV?
+  const vvIds = allUsers.filter(u => {
+    if (u.rolle !== 'verwalter') return false;
+    const verwGV = u.verwaltete_gebietsverbaende || [];
+    if (verwGV.length > 0) return verwGV.includes(gvId);
+    return (u.verwaltete_regionen || []).includes(g.region_id);
+  }).map(u => u.id);
+  if (vvIds.length > 0) {
+    return curRole === 'verwalter' && vvIds.includes(me);
+  }
+  // Stufe 3: Gibt es KVs für diesen Landkreis?
+  const kvIds = allUsers.filter(u => u.rolle === 'kreisverwalter' && u.verwalteter_landkreis === lkId).map(u => u.id);
+  if (kvIds.length > 0) {
+    return curRole === 'kreisverwalter' && kvIds.includes(me);
+  }
+  // Stufe 4: Admin ist Fallback
+  return curRole === 'admin';
+}
+
 // ============================================================
 // NUTZER EINLADEN (nur Admin)
 // ============================================================
@@ -3628,10 +3665,8 @@ function updateAnfragenBadge() {
   const badge = document.getElementById('anfragenBadge');
   if (!badge) return;
   let count = 0;
-  if (curRole === 'admin') {
-    count = alleAnfragen.length;
-  } else if (istVerwalterOderKreisverwalter()) {
-    count = alleAnfragen.filter(a => verwalterHatGebietZugriff(a.gebiet_id)).length;
+  if (curRole === 'admin' || istVerwalterOderKreisverwalter()) {
+    count = alleAnfragen.filter(a => binIchZustaendigFuerGebiet(a.gebiet_id)).length;
   }
   // Verteiler (und alle Rollen): eigene Rückmeldungen + Zuweisungs-Anfragen zählen
   count += meineRueckmeldungen.length;
@@ -3707,12 +3742,10 @@ function renderAnfragenList() {
     }).join('');
   }
 
-  // 3) Offene Anfragen (für Admin/Verwalter)
+  // 3) Offene Anfragen (nur auf der zuständigen Ebene sichtbar)
   let sichtbar = [];
-  if (curRole === 'admin') {
-    sichtbar = alleAnfragen;
-  } else if (istVerwalterOderKreisverwalter()) {
-    sichtbar = alleAnfragen.filter(a => verwalterHatGebietZugriff(a.gebiet_id));
+  if (curRole === 'admin' || istVerwalterOderKreisverwalter()) {
+    sichtbar = alleAnfragen.filter(a => binIchZustaendigFuerGebiet(a.gebiet_id));
   }
 
   if (sichtbar.length > 0) {
@@ -5427,8 +5460,8 @@ function openDetail(id){
         }
       }
       h+=`</div></div>`;
-      // Offene Anfragen (immer sichtbar, da wichtig)
-      const gebietAnfragen = alleAnfragen.filter(a => a.gebiet_id === g.id);
+      // Offene Anfragen (nur sichtbar wenn ich zuständige Ebene bin)
+      const gebietAnfragen = alleAnfragen.filter(a => a.gebiet_id === g.id && binIchZustaendigFuerGebiet(a.gebiet_id));
       if(gebietAnfragen.length>0){
         h+=`<div class="d-sec" style="padding:6px 12px"><div class="sec-hd" style="color:var(--orange)">📦 Anfragen (${gebietAnfragen.length})</div><div class="f-stack">`;
         gebietAnfragen.forEach(a=>{
@@ -5552,7 +5585,7 @@ function openDetail(id){
       <div class="d-sec"><div class="sec-hd">Stückzahl</div><div class="f-stack">
         <input type="number" id="inpS" value="${g.stueckzahl}"><button class="btn btn-g" onclick="saveSt2('${g.id}')">Ändern</button>
       </div></div>`;
-      const gebietAnfragen=alleAnfragen.filter(a=>a.gebiet_id===g.id);
+      const gebietAnfragen=alleAnfragen.filter(a=>a.gebiet_id===g.id && binIchZustaendigFuerGebiet(a.gebiet_id));
       if(gebietAnfragen.length>0){
         h+=`<div class="d-sec"><div class="sec-hd">📦 Offene Anfragen (${gebietAnfragen.length})</div><div class="f-stack">`;
         gebietAnfragen.forEach(a=>{const user=allUsers.find(u=>u.id===a.user_id);const userName=user?user.name:'Unbekannt';
