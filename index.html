@@ -697,7 +697,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v138 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v139 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -2219,36 +2219,43 @@ async function sendPushToUsers(userIds, title, body, tag) {
 // 4. Falls kein KV → Admin
 function getManagerIdsForGebiet(gebietId) {
   const g = getG(gebietId);
-  if (!g) return [];
+  if (!g) { console.log('getManagerIds: Gebiet nicht gefunden', gebietId); return []; }
   const reg = regionen[g.region_id];
-  if (!reg) return [];
+  if (!reg) { console.log('getManagerIds: Region nicht gefunden', g.region_id); return []; }
   const gvId = reg.gebietsverband_id;
   const gv = gebietsverbaende[gvId];
   const lkId = gv?.landkreis_id;
   const me = currentUser?.id;
 
+  console.log('getManagerIds: Gebiet:', g.name, '| Region:', reg.name, '('+g.region_id+') | GV:', gv?.name, '('+gvId+') | LK:', lkId);
+
   // Stufe 1: Regionalverwalter für diese Region
-  const rvIds = allUsers.filter(u => u.id !== me && u.rolle === 'regionalverwalter'
-    && (u.verwaltete_regionen || []).includes(g.region_id)).map(u => u.id);
-  if (rvIds.length > 0) return rvIds;
+  const rvAll = allUsers.filter(u => u.rolle === 'regionalverwalter');
+  console.log('  Stufe 1 - RVs gesamt:', rvAll.length, rvAll.map(u => u.name + ' verwReg:' + JSON.stringify(u.verwaltete_regionen)));
+  const rvIds = rvAll.filter(u => u.id !== me && (u.verwaltete_regionen || []).includes(g.region_id)).map(u => u.id);
+  if (rvIds.length > 0) { console.log('  → RV gefunden:', rvIds); return rvIds; }
 
   // Stufe 2: Verbandsverwalter für diesen GV
-  const vvIds = allUsers.filter(u => {
-    if (u.id === me || u.rolle !== 'verwalter') return false;
+  const vvAll = allUsers.filter(u => u.rolle === 'verwalter');
+  console.log('  Stufe 2 - VVs gesamt:', vvAll.length, vvAll.map(u => u.name + ' verwGV:' + JSON.stringify(u.verwaltete_gebietsverbaende) + ' verwReg:' + JSON.stringify(u.verwaltete_regionen)));
+  const vvIds = vvAll.filter(u => {
+    if (u.id === me) return false;
     const verwGV = u.verwaltete_gebietsverbaende || [];
     if (verwGV.length > 0) return verwGV.includes(gvId);
-    // Fallback: alte Logik über verwaltete_regionen
     return (u.verwaltete_regionen || []).includes(g.region_id);
   }).map(u => u.id);
-  if (vvIds.length > 0) return vvIds;
+  if (vvIds.length > 0) { console.log('  → VV gefunden:', vvIds); return vvIds; }
 
   // Stufe 3: Kreisverwalter für diesen Landkreis
-  const kvIds = allUsers.filter(u => u.id !== me && u.rolle === 'kreisverwalter'
-    && u.verwalteter_landkreis === lkId).map(u => u.id);
-  if (kvIds.length > 0) return kvIds;
+  const kvAll = allUsers.filter(u => u.rolle === 'kreisverwalter');
+  console.log('  Stufe 3 - KVs gesamt:', kvAll.length, kvAll.map(u => u.name + ' verwLK:' + u.verwalteter_landkreis));
+  const kvIds = kvAll.filter(u => u.id !== me && u.verwalteter_landkreis === lkId).map(u => u.id);
+  if (kvIds.length > 0) { console.log('  → KV gefunden:', kvIds); return kvIds; }
 
   // Stufe 4: Admins
-  return allUsers.filter(u => u.id !== me && u.rolle === 'admin').map(u => u.id);
+  const adminIds = allUsers.filter(u => u.id !== me && u.rolle === 'admin').map(u => u.id);
+  console.log('  Stufe 4 - Admins:', adminIds);
+  return adminIds;
 }
 
 // ============================================================
@@ -4012,7 +4019,10 @@ async function sendeUebernahmeAnfrage(gebietId) {
   logAction('anfrage',`Übernahme-Anfrage gesendet${kampLabel}`,gebietId,g.name);
   notifyManagers(gebietId,`Übernahme-Anfrage: ${g.name}${kampLabel}`,`${currentProfile?.name||'Ein Verteiler'} möchte das Gebiet "${g.name}" übernehmen${kampLabel}.`);
   // Push-Benachrichtigung an zuständige Verwalter (Eskalationslogik)
-  sendPushToUsers(getManagerIdsForGebiet(gebietId), '🙋 Übernahme-Anfrage', `${currentProfile?.name||'Ein Verteiler'} möchte „${g.name}" übernehmen${kampLabel}`, 'anfrage-uebernahme');
+  const _pushIds = getManagerIdsForGebiet(gebietId);
+  console.log('Push-Empfänger für Übernahme:', _pushIds, 'Gebiet:', gebietId, 'Region:', g.region_id);
+  if (_pushIds.length === 0) toast('ℹ️ Kein Verwalter mit Push gefunden');
+  sendPushToUsers(_pushIds, '🙋 Übernahme-Anfrage', `${currentProfile?.name||'Ein Verteiler'} möchte „${g.name}" übernehmen${kampLabel}`, 'anfrage-uebernahme');
   toast('✅ Übernahme-Anfrage gesendet!');
   await loadAnfragen();
   if (selId) openDetail(selId);
