@@ -697,7 +697,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v139 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v140 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -5315,7 +5315,7 @@ function selGebiet(id){
   // Mobile: Sidebar schließen wenn Gebiet gewählt
   if(window.innerWidth<=768) document.getElementById('sidebar').classList.remove('open');
 }
-function getG(id){for(const r of Object.values(regionen)){const g=r.gebiete.find(g=>g.id===id);if(g)return g}}
+function getG(id){for(const [rId,r] of Object.entries(regionen)){const g=r.gebiete.find(g=>g.id===id);if(g){g.region_id=rId;return g}}}
 
 function openDetail(id){
   const g=getG(id);
