@@ -697,7 +697,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v132 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v133 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -5625,13 +5625,13 @@ function toggleOverflowMenu(e){
   const menu=document.getElementById('mobOverflowMenu');
   // Dynamisch befüllen basierend auf Rolle
   const r=curRole||'verteiler';
-  const isManager=r==='admin'||r==='kreisverwalter'||r==='verwalter';
+  const isManager=r==='admin'||r==='kreisverwalter'||r==='verwalter'||r==='regionalverwalter';
   let items='';
   if(isManager) items+=`<button class="mob-overflow-item" onclick="openKampagnenModal();closeMobMenu()">⚙ Kampagnen verwalten</button>`;
   if(isManager) items+=`<button class="mob-overflow-item" onclick="openBulkPdfModal();closeMobMenu()">📄 PDF exportieren</button>`;
-  if(r==='admin'||r==='kreisverwalter'||r==='verwalter') items+=`<button class="mob-overflow-item" onclick="openHierarchyModal();closeMobMenu()">🏗 Gebietsstruktur</button>`;
-  if(r==='admin'||r==='kreisverwalter'||r==='verwalter') items+=`<button class="mob-overflow-item" onclick="openInviteModal();closeMobMenu()">➕ Nutzer einladen</button>`;
-  if(r==='admin'||r==='kreisverwalter'||r==='verwalter') items+=`<button class="mob-overflow-item" onclick="openManageUsersModal();closeMobMenu()">👥 Nutzerverwaltung</button>`;
+  if(isManager) items+=`<button class="mob-overflow-item" onclick="openHierarchyModal();closeMobMenu()">🏗 Gebietsstruktur</button>`;
+  if(isManager) items+=`<button class="mob-overflow-item" onclick="openInviteModal();closeMobMenu()">➕ Nutzer einladen</button>`;
+  if(isManager) items+=`<button class="mob-overflow-item" onclick="openManageUsersModal();closeMobMenu()">👥 Nutzerverwaltung</button>`;
   if(isManager) items+=`<button class="mob-overflow-item" onclick="openLogbuchModal();closeMobMenu()">📋 Logbuch</button>`;
   if(isManager) items+=`<button class="mob-overflow-item" onclick="jumpToMissingVerteiler();closeMobMenu()">🆘 Verteiler fehlen</button>`;
   items+=`<button class="mob-overflow-item" onclick="openProfilModal();closeMobMenu()">👤 Mein Profil</button>`;
