@@ -697,7 +697,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v137 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v138 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -952,7 +952,8 @@ textarea{min-height:68px}
         <div style="font-size:.65rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:4px">Push-Benachrichtigungen</div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <button id="profilPushBtn" class="btn" onclick="togglePushSubscription()" style="font-size:.78rem;padding:6px 12px">🔔 Aktivieren</button>
-          <button id="profilPushTestBtn" class="btn btn-g" onclick="testPushDirect()" style="font-size:.72rem;padding:5px 10px;display:none">🧪 Test senden</button>
+          <button id="profilPushTestBtn" class="btn btn-g" onclick="testPushDirect()" style="font-size:.72rem;padding:5px 10px;display:none">🧪 Edge-Fn Test</button>
+          <button id="profilPushLocalBtn" class="btn btn-g" onclick="testLocalNotification()" style="font-size:.72rem;padding:5px 10px;display:none">📳 Lokal Test</button>
           <span id="profilPushStatus" style="font-size:.75rem;color:var(--text3)"></span>
         </div>
         <div id="profilPushLog" style="display:none;margin-top:6px;font-size:.7rem;font-family:monospace;background:var(--surface2);padding:6px 8px;border-radius:var(--r8);max-height:120px;overflow-y:auto;white-space:pre-wrap"></div>
@@ -2050,10 +2051,14 @@ async function updatePushUI() {
     status.textContent = '✅ Aktiv';
     status.style.color = 'var(--green)';
     if (testBtn) testBtn.style.display = '';
+    const localBtn = document.getElementById('profilPushLocalBtn');
+    if (localBtn) localBtn.style.display = '';
   } else {
     btn.textContent = '🔔 Aktivieren';
     btn.className = 'btn btn-p';
     if (testBtn) testBtn.style.display = 'none';
+    const localBtn = document.getElementById('profilPushLocalBtn');
+    if (localBtn) localBtn.style.display = 'none';
     status.textContent = '';
     status.style.color = 'var(--text3)';
   }
@@ -2091,6 +2096,41 @@ async function togglePushSubscription() {
     } catch (e) { toast('⚠️ Fehler: ' + e.message); }
   }
   await updatePushUI();
+}
+
+// Lokaler Notification-Test (ohne Edge Function, direkt über SW)
+async function testLocalNotification() {
+  const log = document.getElementById('profilPushLog');
+  log.style.display = '';
+  log.textContent = '';
+  const addLog = (msg) => { log.textContent += msg + '\n'; };
+
+  addLog('1. Prüfe Notification-Berechtigung...');
+  addLog('   Permission: ' + Notification.permission);
+  if (Notification.permission !== 'granted') { addLog('❌ Nicht erlaubt!'); return; }
+
+  addLog('2. Prüfe Service Worker...');
+  const reg = await navigator.serviceWorker.ready;
+  addLog('   SW aktiv: ' + (reg.active ? 'ja (' + reg.active.scriptURL + ')' : 'NEIN'));
+
+  addLog('3. Zeige Notification direkt über SW...');
+  try {
+    await reg.showNotification('🧪 FlyerOrg Test', {
+      body: 'Wenn du das siehst, funktioniert der Service Worker!',
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      vibrate: [200, 100, 200],
+      tag: 'local-test',
+      renotify: true
+    });
+    addLog('✅ Notification gesendet! Schau in deine Benachrichtigungen.');
+    addLog('\nWenn du DIESE Nachricht siehst aber NICHT den');
+    addLog('Edge-Fn Test → Problem liegt in der Verschlüsselung.');
+    addLog('Wenn du KEINE Nachricht siehst → Problem liegt');
+    addLog('im Browser/Handy (Benachrichtigungen blockiert?).');
+  } catch (e) {
+    addLog('❌ Fehler: ' + e.message);
+  }
 }
 
 // Push-Test direkt an sich selbst senden
