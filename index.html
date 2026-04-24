@@ -952,11 +952,8 @@ textarea{min-height:68px}
         <div style="font-size:.65rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:4px">Push-Benachrichtigungen</div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <button id="profilPushBtn" class="btn" onclick="togglePushSubscription()" style="font-size:.78rem;padding:6px 12px">🔔 Aktivieren</button>
-          <button id="profilPushTestBtn" class="btn btn-g" onclick="testPushDirect()" style="font-size:.72rem;padding:5px 10px;display:none">🧪 Edge-Fn Test</button>
-          <button id="profilPushLocalBtn" class="btn btn-g" onclick="testLocalNotification()" style="font-size:.72rem;padding:5px 10px;display:none">📳 Lokal Test</button>
           <span id="profilPushStatus" style="font-size:.75rem;color:var(--text3)"></span>
         </div>
-        <div id="profilPushLog" style="display:none;margin-top:6px;font-size:.7rem;font-family:monospace;background:var(--surface2);padding:6px 8px;border-radius:var(--r8);max-height:120px;overflow-y:auto;white-space:pre-wrap"></div>
       </div>
     </div>
     <div id="profilStatus" style="font-size:.78rem;margin-top:8px;min-height:18px"></div>
@@ -2043,22 +2040,15 @@ async function updatePushUI() {
     status.textContent = '⛔ Im Browser blockiert';
     return;
   }
-  const testBtn = document.getElementById('profilPushTestBtn');
   const sub = await getPushSubscription();
   if (sub) {
     btn.textContent = '🔕 Deaktivieren';
     btn.className = 'btn btn-d';
     status.textContent = '✅ Aktiv';
     status.style.color = 'var(--green)';
-    if (testBtn) testBtn.style.display = '';
-    const localBtn = document.getElementById('profilPushLocalBtn');
-    if (localBtn) localBtn.style.display = '';
   } else {
     btn.textContent = '🔔 Aktivieren';
     btn.className = 'btn btn-p';
-    if (testBtn) testBtn.style.display = 'none';
-    const localBtn = document.getElementById('profilPushLocalBtn');
-    if (localBtn) localBtn.style.display = 'none';
     status.textContent = '';
     status.style.color = 'var(--text3)';
   }
@@ -2098,104 +2088,9 @@ async function togglePushSubscription() {
   await updatePushUI();
 }
 
-// Lokaler Notification-Test (ohne Edge Function, direkt über SW)
-async function testLocalNotification() {
-  const log = document.getElementById('profilPushLog');
-  log.style.display = '';
-  log.textContent = '';
-  const addLog = (msg) => { log.textContent += msg + '\n'; };
-
-  addLog('1. Prüfe Notification-Berechtigung...');
-  addLog('   Permission: ' + Notification.permission);
-  if (Notification.permission !== 'granted') { addLog('❌ Nicht erlaubt!'); return; }
-
-  addLog('2. Prüfe Service Worker...');
-  const reg = await navigator.serviceWorker.ready;
-  addLog('   SW aktiv: ' + (reg.active ? 'ja (' + reg.active.scriptURL + ')' : 'NEIN'));
-
-  addLog('3. Zeige Notification direkt über SW...');
-  try {
-    await reg.showNotification('🧪 FlyerOrg Test', {
-      body: 'Wenn du das siehst, funktioniert der Service Worker!',
-      icon: '/icon-192.png',
-      badge: '/icon-192.png',
-      vibrate: [200, 100, 200],
-      tag: 'local-test',
-      renotify: true
-    });
-    addLog('✅ Notification gesendet! Schau in deine Benachrichtigungen.');
-    addLog('\nWenn du DIESE Nachricht siehst aber NICHT den');
-    addLog('Edge-Fn Test → Problem liegt in der Verschlüsselung.');
-    addLog('Wenn du KEINE Nachricht siehst → Problem liegt');
-    addLog('im Browser/Handy (Benachrichtigungen blockiert?).');
-  } catch (e) {
-    addLog('❌ Fehler: ' + e.message);
-  }
-}
-
-// Push-Test direkt an sich selbst senden
-async function testPushDirect() {
-  const log = document.getElementById('profilPushLog');
-  log.style.display = '';
-  log.textContent = '';
-  const addLog = (msg) => { log.textContent += msg + '\n'; log.scrollTop = log.scrollHeight; };
-
-  addLog('1. Prüfe Subscription...');
-  const sub = await getPushSubscription();
-  if (!sub) { addLog('❌ Keine Push-Subscription vorhanden!'); return; }
-  addLog('✅ Subscription vorhanden: ' + sub.endpoint.slice(0, 60) + '...');
-
-  addLog('\n2. Prüfe DB-Eintrag...');
-  const { data, error } = await sb.from('push_subscriptions').select('*').eq('user_id', currentUser.id);
-  if (error) { addLog('❌ DB-Fehler: ' + error.message); return; }
-  addLog('✅ ' + (data?.length || 0) + ' Einträge in DB');
-
-  addLog('\n3. Rufe Edge Function auf...');
-  try {
-    const session = await sb.auth.getSession();
-    const token = session?.data?.session?.access_token;
-    if (!token) { addLog('❌ Kein Auth-Token!'); return; }
-    addLog('   Token vorhanden (' + token.slice(0, 20) + '...)');
-    addLog('   URL: ' + PUSH_EDGE_FN);
-    addLog('   Sende an user_id: ' + currentUser.id);
-
-    const resp = await fetch(PUSH_EDGE_FN, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-      body: JSON.stringify({ user_ids: [currentUser.id], title: '🧪 Push-Test', body: 'Wenn du das siehst, funktioniert Push!', tag: 'push-test', url: '/' })
-    });
-    const status = resp.status;
-    const text = await resp.text();
-    addLog('   Status: ' + status);
-    addLog('   Antwort: ' + text);
-
-    if (status === 200 || status === 201) {
-      addLog('\n✅ Edge Function hat geantwortet!');
-      try {
-        const json = JSON.parse(text);
-        if (json.sent > 0) addLog('🎉 ' + json.sent + ' Push(es) gesendet! Schau auf dein Handy!');
-        else if (json.message) addLog('⚠️ ' + json.message);
-        if (json.expired > 0) addLog('⚠️ ' + json.expired + ' abgelaufene Subscriptions entfernt');
-      } catch(e) {}
-    } else if (status === 401) {
-      addLog('\n❌ Auth-Fehler (401) — prüfe ob JWT-Verify aus ist');
-    } else if (status === 404) {
-      addLog('\n❌ Function nicht gefunden (404) — Edge Function existiert nicht oder falscher Name');
-    } else if (status === 500) {
-      addLog('\n❌ Server-Fehler (500) — Code der Edge Function hat einen Fehler');
-    } else {
-      addLog('\n⚠️ Unerwarteter Status: ' + status);
-    }
-  } catch (e) {
-    addLog('\n❌ Netzwerk-Fehler: ' + e.message);
-    addLog('   Edge Function URL erreichbar? CORS konfiguriert?');
-  }
-}
-
 // Push an bestimmte Nutzer senden (über Edge Function)
 async function sendPushToUsers(userIds, title, body, tag) {
-  if (!userIds || userIds.length === 0) { console.log('Push: keine Empfänger'); return; }
-  console.log('Push senden an', userIds.length, 'Nutzer:', title);
+  if (!userIds || userIds.length === 0) return;
   try {
     const session = await sb.auth.getSession();
     const token = session?.data?.session?.access_token;
@@ -2206,7 +2101,6 @@ async function sendPushToUsers(userIds, title, body, tag) {
       body: JSON.stringify({ user_ids: userIds, title, body, tag: tag || 'flyerorg', url: '/' })
     });
     const result = await resp.text();
-    console.log('Push-Ergebnis:', resp.status, result);
     if (!resp.ok) console.warn('Push-Fehler:', resp.status, result);
   } catch (e) { console.warn('Push-Versand fehlgeschlagen:', e); }
 }
@@ -2219,43 +2113,36 @@ async function sendPushToUsers(userIds, title, body, tag) {
 // 4. Falls kein KV → Admin
 function getManagerIdsForGebiet(gebietId) {
   const g = getG(gebietId);
-  if (!g) { console.log('getManagerIds: Gebiet nicht gefunden', gebietId); return []; }
+  if (!g) return [];
   const reg = regionen[g.region_id];
-  if (!reg) { console.log('getManagerIds: Region nicht gefunden', g.region_id); return []; }
+  if (!reg) return [];
   const gvId = reg.gebietsverband_id;
   const gv = gebietsverbaende[gvId];
   const lkId = gv?.landkreis_id;
   const me = currentUser?.id;
 
-  console.log('getManagerIds: Gebiet:', g.name, '| Region:', reg.name, '('+g.region_id+') | GV:', gv?.name, '('+gvId+') | LK:', lkId);
-
   // Stufe 1: Regionalverwalter für diese Region
   const rvAll = allUsers.filter(u => u.rolle === 'regionalverwalter');
-  console.log('  Stufe 1 - RVs gesamt:', rvAll.length, rvAll.map(u => u.name + ' verwReg:' + JSON.stringify(u.verwaltete_regionen)));
   const rvIds = rvAll.filter(u => u.id !== me && (u.verwaltete_regionen || []).includes(g.region_id)).map(u => u.id);
-  if (rvIds.length > 0) { console.log('  → RV gefunden:', rvIds); return rvIds; }
+  if (rvIds.length > 0) return rvIds;
 
   // Stufe 2: Verbandsverwalter für diesen GV
   const vvAll = allUsers.filter(u => u.rolle === 'verwalter');
-  console.log('  Stufe 2 - VVs gesamt:', vvAll.length, vvAll.map(u => u.name + ' verwGV:' + JSON.stringify(u.verwaltete_gebietsverbaende) + ' verwReg:' + JSON.stringify(u.verwaltete_regionen)));
   const vvIds = vvAll.filter(u => {
     if (u.id === me) return false;
     const verwGV = u.verwaltete_gebietsverbaende || [];
     if (verwGV.length > 0) return verwGV.includes(gvId);
     return (u.verwaltete_regionen || []).includes(g.region_id);
   }).map(u => u.id);
-  if (vvIds.length > 0) { console.log('  → VV gefunden:', vvIds); return vvIds; }
+  if (vvIds.length > 0) return vvIds;
 
   // Stufe 3: Kreisverwalter für diesen Landkreis
   const kvAll = allUsers.filter(u => u.rolle === 'kreisverwalter');
-  console.log('  Stufe 3 - KVs gesamt:', kvAll.length, kvAll.map(u => u.name + ' verwLK:' + u.verwalteter_landkreis));
   const kvIds = kvAll.filter(u => u.id !== me && u.verwalteter_landkreis === lkId).map(u => u.id);
-  if (kvIds.length > 0) { console.log('  → KV gefunden:', kvIds); return kvIds; }
+  if (kvIds.length > 0) return kvIds;
 
   // Stufe 4: Admins
-  const adminIds = allUsers.filter(u => u.id !== me && u.rolle === 'admin').map(u => u.id);
-  console.log('  Stufe 4 - Admins:', adminIds);
-  return adminIds;
+  return allUsers.filter(u => u.id !== me && u.rolle === 'admin').map(u => u.id);
 }
 
 // Prüft ob der aktuelle Nutzer auf der zuständigen Ebene für dieses Gebiet ist
@@ -4053,8 +3940,6 @@ async function sendeUebernahmeAnfrage(gebietId) {
   notifyManagers(gebietId,`Übernahme-Anfrage: ${g.name}${kampLabel}`,`${currentProfile?.name||'Ein Verteiler'} möchte das Gebiet "${g.name}" übernehmen${kampLabel}.`);
   // Push-Benachrichtigung an zuständige Verwalter (Eskalationslogik)
   const _pushIds = getManagerIdsForGebiet(gebietId);
-  console.log('Push-Empfänger für Übernahme:', _pushIds, 'Gebiet:', gebietId, 'Region:', g.region_id);
-  if (_pushIds.length === 0) toast('ℹ️ Kein Verwalter mit Push gefunden');
   sendPushToUsers(_pushIds, '🙋 Übernahme-Anfrage', `${currentProfile?.name||'Ein Verteiler'} möchte „${g.name}" übernehmen${kampLabel}`, 'anfrage-uebernahme');
   toast('✅ Übernahme-Anfrage gesendet!');
   await loadAnfragen();
