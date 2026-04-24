@@ -697,7 +697,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v133 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v134 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -947,6 +947,13 @@ textarea{min-height:68px}
       <div id="profilZustaendigWrap" style="display:none">
         <div style="font-size:.65rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:4px">Zuständigkeit</div>
         <div id="profilZustaendigList" style="display:flex;flex-direction:column;gap:3px"></div>
+      </div>
+      <div id="profilPushWrap">
+        <div style="font-size:.65rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:4px">Push-Benachrichtigungen</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button id="profilPushBtn" class="btn" onclick="togglePushSubscription()" style="font-size:.78rem;padding:6px 12px">🔔 Aktivieren</button>
+          <span id="profilPushStatus" style="font-size:.75rem;color:var(--text3)"></span>
+        </div>
       </div>
     </div>
     <div id="profilStatus" style="font-size:.78rem;margin-top:8px;min-height:18px"></div>
@@ -1972,6 +1979,7 @@ function openProfilModal() {
     zWrap.style.display='none';
   }
 
+  updatePushUI();
   document.getElementById('profilModalOv').classList.add('open');
 }
 function closeProfilModal() {
@@ -1991,6 +1999,148 @@ async function saveProfilTelefon() {
   if (u) u.telefon = tel;
   document.getElementById('profilStatus').style.color = 'var(--green)';
   document.getElementById('profilStatus').textContent = '✅ Telefonnummer gespeichert';
+}
+
+// ============================================================
+// PUSH-BENACHRICHTIGUNGEN
+// ============================================================
+const VAPID_PUBLIC_KEY = 'BK7Q35lQbvFnCQ0jZEKU6Vl4LcK8r14CENBtHShTIWuv0zlb3yAf-F1cOh6DrA1BliEAuLUbO4V5UwbLwE1mLIk';
+const PUSH_EDGE_FN = 'https://mphrgrjuqulzmlsstyvk.supabase.co/functions/v1/send-push';
+
+function pushSupported() {
+  return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
+
+async function getPushSubscription() {
+  if (!pushSupported()) return null;
+  const reg = await navigator.serviceWorker.ready;
+  return reg.pushManager.getSubscription();
+}
+
+async function updatePushUI() {
+  const btn = document.getElementById('profilPushBtn');
+  const status = document.getElementById('profilPushStatus');
+  if (!btn) return;
+  if (!pushSupported()) {
+    btn.style.display = 'none';
+    status.textContent = 'Nicht unterstützt in diesem Browser';
+    return;
+  }
+  if (Notification.permission === 'denied') {
+    btn.style.display = 'none';
+    status.textContent = '⛔ Im Browser blockiert';
+    return;
+  }
+  const sub = await getPushSubscription();
+  if (sub) {
+    btn.textContent = '🔕 Deaktivieren';
+    btn.className = 'btn btn-d';
+    status.textContent = '✅ Aktiv';
+    status.style.color = 'var(--green)';
+  } else {
+    btn.textContent = '🔔 Aktivieren';
+    btn.className = 'btn btn-p';
+    status.textContent = '';
+    status.style.color = 'var(--text3)';
+  }
+}
+
+async function togglePushSubscription() {
+  if (!pushSupported()) { toast('⚠️ Push wird in diesem Browser nicht unterstützt'); return; }
+  const existing = await getPushSubscription();
+  if (existing) {
+    // Deaktivieren
+    try {
+      await sb.from('push_subscriptions').delete().eq('endpoint', existing.endpoint).eq('user_id', currentUser.id);
+      await existing.unsubscribe();
+      toast('🔕 Push-Benachrichtigungen deaktiviert');
+    } catch (e) { toast('⚠️ Fehler beim Deaktivieren: ' + e.message); }
+  } else {
+    // Aktivieren
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') { toast('⚠️ Benachrichtigungen wurden nicht erlaubt'); return; }
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+      });
+      const subJson = sub.toJSON();
+      const { error } = await sb.from('push_subscriptions').upsert({
+        user_id: currentUser.id,
+        endpoint: subJson.endpoint,
+        p256dh: subJson.keys.p256dh,
+        auth: subJson.keys.auth
+      }, { onConflict: 'user_id,endpoint' });
+      if (error) { toast('⚠️ Fehler: ' + (error.message || error.code)); return; }
+      toast('🔔 Push-Benachrichtigungen aktiviert!');
+    } catch (e) { toast('⚠️ Fehler: ' + e.message); }
+  }
+  await updatePushUI();
+}
+
+// Push an bestimmte Nutzer senden (über Edge Function)
+async function sendPushToUsers(userIds, title, body, tag) {
+  if (!userIds || userIds.length === 0) return;
+  try {
+    const session = await sb.auth.getSession();
+    const token = session?.data?.session?.access_token;
+    if (!token) return;
+    await fetch(PUSH_EDGE_FN, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ user_ids: userIds, title, body, tag: tag || 'flyerorg', url: '/' })
+    });
+  } catch (e) { console.warn('Push-Versand fehlgeschlagen:', e); }
+}
+
+// Hilfsfunktion: Manager-IDs für ein Gebiet ermitteln (Eskalationslogik)
+// Nur die NÄCHSTHÖHERE Ebene wird benachrichtigt:
+// 1. Regionalverwalter (zuständig für die Region)
+// 2. Falls kein RV → Verbandsverwalter (zuständig für den GV)
+// 3. Falls kein VV → Kreisverwalter (zuständig für den Landkreis)
+// 4. Falls kein KV → Admin
+function getManagerIdsForGebiet(gebietId) {
+  const g = getG(gebietId);
+  if (!g) return [];
+  const reg = regionen[g.region_id];
+  if (!reg) return [];
+  const gvId = reg.gebietsverband_id;
+  const gv = gebietsverbaende[gvId];
+  const lkId = gv?.landkreis_id;
+  const me = currentUser?.id;
+
+  // Stufe 1: Regionalverwalter für diese Region
+  const rvIds = allUsers.filter(u => u.id !== me && u.rolle === 'regionalverwalter'
+    && (u.verwaltete_regionen || []).includes(g.region_id)).map(u => u.id);
+  if (rvIds.length > 0) return rvIds;
+
+  // Stufe 2: Verbandsverwalter für diesen GV
+  const vvIds = allUsers.filter(u => {
+    if (u.id === me || u.rolle !== 'verwalter') return false;
+    const verwGV = u.verwaltete_gebietsverbaende || [];
+    if (verwGV.length > 0) return verwGV.includes(gvId);
+    // Fallback: alte Logik über verwaltete_regionen
+    return (u.verwaltete_regionen || []).includes(g.region_id);
+  }).map(u => u.id);
+  if (vvIds.length > 0) return vvIds;
+
+  // Stufe 3: Kreisverwalter für diesen Landkreis
+  const kvIds = allUsers.filter(u => u.id !== me && u.rolle === 'kreisverwalter'
+    && u.verwalteter_landkreis === lkId).map(u => u.id);
+  if (kvIds.length > 0) return kvIds;
+
+  // Stufe 4: Admins
+  return allUsers.filter(u => u.id !== me && u.rolle === 'admin').map(u => u.id);
 }
 
 // ============================================================
@@ -3179,6 +3329,25 @@ async function showApp() {
   await migrateUserGVs();
   // Badge für fehlende Verteiler aktualisieren
   updateMissingVerteilerBadge();
+  // Push-Subscription synchronisieren (falls bereits erlaubt)
+  syncPushSubscription();
+}
+
+// Push-Subscription bei Login automatisch re-synken
+async function syncPushSubscription() {
+  if (!pushSupported()) return;
+  if (Notification.permission !== 'granted') return;
+  try {
+    const sub = await getPushSubscription();
+    if (!sub) return;
+    const subJson = sub.toJSON();
+    await sb.from('push_subscriptions').upsert({
+      user_id: currentUser.id,
+      endpoint: subJson.endpoint,
+      p256dh: subJson.keys.p256dh,
+      auth: subJson.keys.auth
+    }, { onConflict: 'user_id,endpoint' });
+  } catch (e) { console.warn('Push-Sync fehlgeschlagen:', e); }
 }
 
 // Check if already logged in on page load
@@ -3614,6 +3783,12 @@ async function handleUebernahmeAnfrage(anfrageId, entscheidung, gebietId, vertei
   const _uv=allUsers.find(u=>u.id===verteilerId);
   const _kampLabel = anfrageKampagneId ? kampagnen.find(k=>k.id===anfrageKampagneId)?.name||'' : 'grundsätzlich';
   logAction('zuweisung',`Übernahme-Anfrage ${entscheidung}${_uv?' (Verteiler: '+_uv.name+')':''} [${_kampLabel}]`,gebietId,_ug?.name||gebietId);
+  // Push an den anfragenden Verteiler
+  if (verteilerId && verteilerId !== currentUser.id) {
+    const pushTitle = entscheidung === 'genehmigt' ? '✅ Übernahme genehmigt' : '❌ Übernahme abgelehnt';
+    const pushBody = entscheidung === 'genehmigt' ? `Deine Anfrage für „${_ug?.name||'Gebiet'}" wurde genehmigt!` : `Deine Anfrage für „${_ug?.name||'Gebiet'}" wurde leider abgelehnt.`;
+    sendPushToUsers([verteilerId], pushTitle, pushBody, 'anfrage-entscheidung');
+  }
   toast(entscheidung === 'genehmigt' ? '✅ Übernahme genehmigt – Verteiler zugewiesen' : '❌ Übernahme abgelehnt');
 }
 
@@ -3660,10 +3835,19 @@ async function handleZuweisungAnfrage(anfrageId, entscheidung, gebietId) {
       renderList(); renderStats(); drawPolygons();
     }
   }
+  // Push an den Verwalter der die Zuweisung erstellt hat
+  const zuweisAnfrage = meineZuweisungsAnfragen.find(a => a.id === anfrageId);
+  const verwalterIdPush = zuweisAnfrage?.user_id;
   meineZuweisungsAnfragen = meineZuweisungsAnfragen.filter(a => a.id !== anfrageId);
   updateAnfragenBadge();
   renderAnfragenList();
   if (selId) openDetail(selId);
+  if (verwalterIdPush && verwalterIdPush !== currentUser.id) {
+    const gName = getG(gebietId)?.name || 'Gebiet';
+    const pushTitle = entscheidung === 'genehmigt' ? '✅ Zuweisung angenommen' : '❌ Zuweisung abgelehnt';
+    const pushBody = entscheidung === 'genehmigt' ? `${currentProfile?.name||'Verteiler'} hat „${gName}" angenommen.` : `${currentProfile?.name||'Verteiler'} hat „${gName}" abgelehnt.`;
+    sendPushToUsers([verwalterIdPush], pushTitle, pushBody, 'zuweisung-antwort');
+  }
   toast(entscheidung === 'genehmigt' ? '✅ Gebiet angenommen – du bist jetzt zugewiesen' : '❌ Zuweisung abgelehnt');
 }
 
@@ -3711,6 +3895,8 @@ async function sendeUebernahmeAnfrage(gebietId) {
   const kampLabel = kampagneId ? ` (${curKampagne.name})` : ' (grundsätzlich)';
   logAction('anfrage',`Übernahme-Anfrage gesendet${kampLabel}`,gebietId,g.name);
   notifyManagers(gebietId,`Übernahme-Anfrage: ${g.name}${kampLabel}`,`${currentProfile?.name||'Ein Verteiler'} möchte das Gebiet "${g.name}" übernehmen${kampLabel}.`);
+  // Push-Benachrichtigung an zuständige Verwalter (Eskalationslogik)
+  sendPushToUsers(getManagerIdsForGebiet(gebietId), '🙋 Übernahme-Anfrage', `${currentProfile?.name||'Ein Verteiler'} möchte „${g.name}" übernehmen${kampLabel}`, 'anfrage-uebernahme');
   toast('✅ Übernahme-Anfrage gesendet!');
   await loadAnfragen();
   if (selId) openDetail(selId);
@@ -3732,6 +3918,7 @@ async function sendeAbgabeAnfrage(gebietId) {
   if (error) { toast('⚠️ Fehler: ' + (error.message || error.code)); return; }
   logAction('anfrage',`Abgabe-Anfrage gesendet`,gebietId,g.name);
   notifyManagers(gebietId,`Abgabe-Anfrage: ${g.name}`,`${currentProfile?.name||'Ein Verteiler'} möchte das Gebiet "${g.name}" abgeben.`);
+  sendPushToUsers(getManagerIdsForGebiet(gebietId), '🔄 Abgabe-Anfrage', `${currentProfile?.name||'Ein Verteiler'} möchte „${g.name}" abgeben`, 'anfrage-abgabe');
   toast('✅ Abgabe-Anfrage gesendet!');
   await loadAnfragen();
   if (selId) openDetail(selId);
@@ -3781,10 +3968,19 @@ async function handleAbgabeAnfrage(anfrageId, entscheidung, gebietId) {
       renderList(); renderStats(); drawPolygons();
     }
   }
+  // Push-User-ID VOR dem Löschen aus dem Array holen
+  const anfrUserId = alleAnfragen.find(a => a.id === anfrageId)?.user_id;
   alleAnfragen = alleAnfragen.filter(a => a.id !== anfrageId);
   updateAnfragenBadge();
   renderAnfragenList();
   if (selId) openDetail(selId);
+  // Push an den anfragenden Verteiler senden
+  if (anfrUserId && anfrUserId !== currentUser.id) {
+    const gName = getG(gebietId)?.name || 'Gebiet';
+    const pushTitle = entscheidung === 'genehmigt' ? '✅ Abgabe genehmigt' : '❌ Abgabe abgelehnt';
+    const pushBody = entscheidung === 'genehmigt' ? `Deine Abgabe von „${gName}" wurde genehmigt.` : `Deine Abgabe von „${gName}" wurde abgelehnt.`;
+    sendPushToUsers([anfrUserId], pushTitle, pushBody, 'anfrage-entscheidung');
+  }
   toast(entscheidung === 'genehmigt' ? '✅ Abgabe genehmigt – Verteiler entfernt' : '❌ Abgabe abgelehnt');
 }
 
@@ -3809,6 +4005,10 @@ async function sendeZuweisungAnfrage(gebietId) {
   const { error } = await sb.from('anfragen').insert(insertData);
   if (error) { toast('⚠️ Fehler: ' + (error.message || error.code)); return; }
   logAction('anfrage',`Zuweisungs-Anfrage an ${zielUser?.name||'Verteiler'} gesendet`,gebietId,g.name);
+  // Push an den Ziel-Verteiler
+  if (zielUserId !== currentUser.id) {
+    sendPushToUsers([zielUserId], '📋 Neue Zuweisung', `Dir wurde das Gebiet „${g.name}" zugewiesen.${istSpezialK?' ('+curKampagne.name+')':''}`, 'zuweisung');
+  }
   toast(`✅ Anfrage an ${zielUser?.name || 'Verteiler'} gesendet!`);
   await loadAnfragen();
   if (selId) openDetail(selId);
