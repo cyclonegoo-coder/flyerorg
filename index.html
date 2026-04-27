@@ -289,7 +289,8 @@ textarea{min-height:68px}
   .mob-nav:not(.mob-hidden){display:flex!important}
   .mob-nav.mob-hidden{display:none!important}
   .role-sw{display:none}
-  .draw-toolbar{display:none!important}
+  .draw-toolbar{top:auto;bottom:80px;right:10px}
+  .draw-toolbar .draw-btn{width:40px;height:40px;font-size:1.1rem}
   .draw-info{left:10px;right:10px;transform:none;white-space:normal;font-size:.72rem;padding:6px 10px;top:auto;bottom:10px;z-index:701}
   /* Step 1: Header overflow menu */
   .mob-overflow{display:block}
@@ -954,6 +955,14 @@ textarea{min-height:68px}
           <button id="profilPushBtn" class="btn" onclick="togglePushSubscription()" style="font-size:.78rem;padding:6px 12px">🔔 Aktivieren</button>
           <span id="profilPushStatus" style="font-size:.75rem;color:var(--text3)"></span>
         </div>
+      </div>
+      <div>
+        <div style="font-size:.65rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:4px">App am Desktop nutzen</div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <input id="profilAppUrl" type="text" readonly style="flex:1;font-size:.72rem;padding:5px 8px;border:1px solid var(--surface3);border-radius:var(--r8);background:var(--surface2);color:var(--text1);min-width:0" />
+          <button class="btn btn-g" onclick="copyAppUrl()" style="font-size:.72rem;padding:5px 10px;white-space:nowrap">📋 Kopieren</button>
+        </div>
+        <div style="font-size:.65rem;color:var(--text3);margin-top:3px">Diesen Link im Browser am PC öffnen, um die App dort zu nutzen.</div>
       </div>
     </div>
     <div id="profilStatus" style="font-size:.78rem;margin-top:8px;min-height:18px"></div>
@@ -1980,7 +1989,22 @@ function openProfilModal() {
   }
 
   updatePushUI();
+  // App-URL ins Feld setzen
+  const urlField = document.getElementById('profilAppUrl');
+  if (urlField) urlField.value = window.location.origin + window.location.pathname;
   document.getElementById('profilModalOv').classList.add('open');
+}
+function copyAppUrl() {
+  const url = document.getElementById('profilAppUrl')?.value;
+  if (!url) return;
+  navigator.clipboard.writeText(url).then(() => {
+    toast('✅ Link kopiert! Öffne ihn im Browser am PC.');
+  }).catch(() => {
+    // Fallback für ältere Browser
+    const inp = document.getElementById('profilAppUrl');
+    inp.select(); document.execCommand('copy');
+    toast('✅ Link kopiert!');
+  });
 }
 function closeProfilModal() {
   document.getElementById('profilModalOv').classList.remove('open');
@@ -6520,7 +6544,7 @@ function toggleDraw(){
   drawPoints=[];drawMarkers=[];
   document.getElementById('drawStartBtn').classList.add('active');
   document.getElementById('drawCancelBtn').disabled=false;
-  setDrawInfo('Klicke auf die Karte um Punkte zu setzen');
+  setDrawInfo(window.innerWidth<=768?'Tippe auf die Karte um Punkte zu setzen':'Klicke auf die Karte um Punkte zu setzen');
   map.getContainer().style.cursor='crosshair';
   map.on('click',onDrawClick);
   map.on('mousemove',onDrawMouseMove);
