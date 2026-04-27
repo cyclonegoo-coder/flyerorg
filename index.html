@@ -6391,7 +6391,7 @@ function showDrawToolbar(){
   const hatZugriff = curRole === 'admin'
     || (istVerwalterOderKreisverwalter() && reg && verwalterHatGebietsverbandZugriff(reg.gebietsverband_id))
     || (curRole === 'verteiler' && currentProfile?.kann_polygon_bearbeiten);
-  if(hatZugriff && window.innerWidth >= 768){
+  if(hatZugriff){
     document.getElementById('drawToolbar').classList.add('visible');
   } else {
     document.getElementById('drawToolbar').classList.remove('visible');
