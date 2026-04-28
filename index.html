@@ -616,10 +616,35 @@ textarea{min-height:68px}
     <div style="display:grid;gap:10px;margin-bottom:14px">
       <div style="font-size:.75rem;color:var(--text3)">📍 Gebiet: <strong id="plakatGebietName" style="color:var(--text)">–</strong></div>
       <div style="font-size:.7rem;color:var(--text4)" id="plakatCoordInfo">–</div>
+      <div style="display:grid;gap:6px">
+        <label style="font-size:.72rem;font-weight:600;color:var(--text2)">Kategorie</label>
+        <div style="display:flex;gap:6px">
+          <label style="flex:1;display:flex;align-items:center;gap:4px;padding:6px 8px;border:1.5px solid var(--sep);border-radius:var(--r8);font-size:.75rem;cursor:pointer;background:var(--surface2)"><input type="radio" name="plakatKat" value="wahlplakat" checked style="margin:0"> 📄 Wahlplakat</label>
+          <label style="flex:1;display:flex;align-items:center;gap:4px;padding:6px 8px;border:1.5px solid var(--sep);border-radius:var(--r8);font-size:.75rem;cursor:pointer;background:var(--surface2)"><input type="radio" name="plakatKat" value="banner" style="margin:0"> 🏳️ Banner</label>
+        </div>
+      </div>
+      <div style="display:grid;gap:6px">
+        <label style="font-size:.72rem;font-weight:600;color:var(--text2)">Standort</label>
+        <div style="display:flex;gap:6px">
+          <label style="flex:1;display:flex;align-items:center;gap:4px;padding:6px 8px;border:1.5px solid var(--sep);border-radius:var(--r8);font-size:.75rem;cursor:pointer;background:var(--surface2)"><input type="radio" name="plakatOrt" value="oeffentlich" checked style="margin:0"> 🏛️ Öffentlich</label>
+          <label style="flex:1;display:flex;align-items:center;gap:4px;padding:6px 8px;border:1.5px solid var(--sep);border-radius:var(--r8);font-size:.75rem;cursor:pointer;background:var(--surface2)"><input type="radio" name="plakatOrt" value="privat" style="margin:0"> 🏠 Privatgrundstück</label>
+        </div>
+      </div>
+      <div style="display:grid;gap:6px">
+        <label style="font-size:.72rem;font-weight:600;color:var(--text2)">Foto (optional)</label>
+        <label style="display:flex;align-items:center;gap:6px;padding:8px 10px;border:1.5px dashed var(--sep);border-radius:var(--r8);cursor:pointer;font-size:.75rem;color:var(--text3);background:var(--surface2)">
+          📷 Foto auswählen…
+          <input type="file" id="plakatFoto" accept="image/*" capture="environment" onchange="previewPlakatFoto(this)" style="display:none">
+        </label>
+        <div id="plakatFotoPreview" style="display:none;position:relative">
+          <img id="plakatFotoImg" style="width:100%;max-height:160px;object-fit:cover;border-radius:var(--r8)">
+          <button onclick="clearPlakatFoto()" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,.6);color:#fff;border:none;border-radius:50%;width:24px;height:24px;font-size:.8rem;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>
+        </div>
+      </div>
     </div>
     <div class="m-foot">
       <button class="btn btn-g" onclick="closePlakatModal()">Abbrechen</button>
-      <button class="btn btn-p" onclick="savePlakatMarker()">📌 Platzieren</button>
+      <button class="btn btn-p" id="plakatSaveBtn" onclick="savePlakatMarker()">📌 Platzieren</button>
     </div>
   </div>
 </div>
@@ -7253,6 +7278,56 @@ function openPlakatModal(lat,lng,gebietId){
 
 function closePlakatModal(){
   document.getElementById('plakatModalOv').classList.remove('open');
+  clearPlakatFoto();
+}
+
+// Foto-Preview & Komprimierung
+let _plakatFotoBlob=null;
+function previewPlakatFoto(input){
+  const file=input.files?.[0];
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=function(e){
+    document.getElementById('plakatFotoImg').src=e.target.result;
+    document.getElementById('plakatFotoPreview').style.display='block';
+    // Komprimieren: max 800px, JPEG 50%
+    compressPlakatFoto(e.target.result);
+  };
+  reader.readAsDataURL(file);
+}
+function compressPlakatFoto(dataUrl){
+  const img=new Image();
+  img.onload=function(){
+    const MAX=800;
+    let w=img.width, h=img.height;
+    if(w>MAX||h>MAX){
+      if(w>h){h=Math.round(h*MAX/w);w=MAX;}
+      else{w=Math.round(w*MAX/h);h=MAX;}
+    }
+    const c=document.createElement('canvas');
+    c.width=w;c.height=h;
+    c.getContext('2d').drawImage(img,0,0,w,h);
+    c.toBlob(blob=>{_plakatFotoBlob=blob;},'image/jpeg',0.5);
+  };
+  img.src=dataUrl;
+}
+function clearPlakatFoto(){
+  _plakatFotoBlob=null;
+  const inp=document.getElementById('plakatFoto');
+  if(inp)inp.value='';
+  const prev=document.getElementById('plakatFotoPreview');
+  if(prev)prev.style.display='none';
+}
+
+async function uploadPlakatFoto(plakatId){
+  if(!_plakatFotoBlob) return null;
+  const path=`${curKampagne.id}/${plakatId}.jpg`;
+  // Bucket erstellen falls nicht vorhanden (ignoriert Fehler wenn existiert)
+  await sb.storage.createBucket('plakat-fotos',{public:true}).catch(()=>{});
+  const {error}=await sb.storage.from('plakat-fotos').upload(path,_plakatFotoBlob,{contentType:'image/jpeg',upsert:true});
+  if(error){console.warn('Foto-Upload:',error.message);return null;}
+  const {data:urlData}=sb.storage.from('plakat-fotos').getPublicUrl(path);
+  return urlData?.publicUrl||null;
 }
 
 async function savePlakatMarker(){
@@ -7260,17 +7335,31 @@ async function savePlakatMarker(){
   const lng=parseFloat(document.getElementById('plakatLng').value);
   const gebietId=document.getElementById('plakatGebietId').value||null;
   if(!curKampagne?.id){toast('⚠️ Keine Kampagne ausgewählt');return;}
+  const kat=document.querySelector('input[name="plakatKat"]:checked')?.value||'wahlplakat';
+  const ort=document.querySelector('input[name="plakatOrt"]:checked')?.value||'oeffentlich';
+  const btn=document.getElementById('plakatSaveBtn');
+  if(btn){btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Speichern…';}
   const obj={
     kampagne_id:curKampagne.id,
     lat, lng,
     gebiet_id:gebietId,
     status:'haengt',
+    kategorie:kat,
+    ort_typ:ort,
     aufhaenger_id:currentUser.id,
     aufhaenger_name:currentProfile?.name||currentUser.email.split('@')[0],
     aufgehaengt_am:new Date().toISOString()
   };
   const {data,error}=await sb.from('plakate').insert([obj]).select().single();
   if(!error&&data){
+    // Foto hochladen falls vorhanden
+    if(_plakatFotoBlob){
+      const fotoUrl=await uploadPlakatFoto(data.id);
+      if(fotoUrl){
+        await sb.from('plakate').update({foto_url:fotoUrl}).eq('id',data.id);
+        data.foto_url=fotoUrl;
+      }
+    }
     plakate.unshift(data);
     drawPlakatMarkers();
     renderList();renderStats();
@@ -7279,15 +7368,30 @@ async function savePlakatMarker(){
   } else {
     toast('⚠️ Fehler: '+(error?.message||'unbekannt'));
   }
+  if(btn){btn.disabled=false;btn.textContent='📌 Platzieren';}
 }
 
 // ── Marker rendern ──
 function getPlakatIcon(status, plakatId){
+  const p = plakatId ? plakate.find(x=>x.id===plakatId) : null;
   const hatHilfe = plakatId && alleAnfragen.some(a=>a.typ==='plakat_abhaengen'&&a.plakat_id===plakatId&&a.status==='offen');
+  const isBanner = p?.kategorie==='banner';
+  const isPrivat = p?.ort_typ==='privat';
   const colors={haengt:'#34c759',abgehaengt:'#aeaeb2',zerstoert:'#ff3b30',ersetzt:'#42a5f5'};
   const c = hatHilfe ? '#ff3b30' : (colors[status]||'#8e8e93');
-  const ring = hatHilfe ? `<circle cx="14" cy="14" r="13" fill="none" stroke="#ff3b30" stroke-width="2" opacity=".5"><animate attributeName="r" from="11" to="16" dur="1.2s" repeatCount="indefinite"/><animate attributeName="opacity" from=".6" to="0" dur="1.2s" repeatCount="indefinite"/></circle>` : '';
-  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32">${ring}<circle cx="14" cy="14" r="11" fill="${c}" stroke="#fff" stroke-width="2.5"/>${hatHilfe?'<text x="14" y="18" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">!</text>':''}</svg>`;
+  const ring = hatHilfe ? `<circle cx="16" cy="16" r="15" fill="none" stroke="#ff3b30" stroke-width="2" opacity=".5"><animate attributeName="r" from="13" to="18" dur="1.2s" repeatCount="indefinite"/><animate attributeName="opacity" from=".6" to="0" dur="1.2s" repeatCount="indefinite"/></circle>` : '';
+  const privatRing = isPrivat && !hatHilfe ? `<circle cx="16" cy="16" r="14" fill="none" stroke="#ff9500" stroke-width="1.5" stroke-dasharray="3,2"/>` : '';
+  let shape;
+  if(isBanner){
+    // Rechteck für Banner
+    shape=`<rect x="4" y="7" width="24" height="18" rx="4" fill="${c}" stroke="#fff" stroke-width="2.5"/>`;
+    const inner = hatHilfe ? `<text x="16" y="20" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">!</text>` : `<text x="16" y="19" text-anchor="middle" fill="#fff" font-size="8" font-weight="600">B</text>`;
+    shape += inner;
+  } else {
+    shape=`<circle cx="16" cy="16" r="11" fill="${c}" stroke="#fff" stroke-width="2.5"/>`;
+    if(hatHilfe) shape+=`<text x="16" y="20" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">!</text>`;
+  }
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32">${ring}${privatRing}${shape}</svg>`;
   return L.icon({iconUrl:'data:image/svg+xml,'+encodeURIComponent(svg),iconSize:[32,32],iconAnchor:[16,16],popupAnchor:[0,-16]});
 }
 
@@ -7385,9 +7489,29 @@ function openPlakatDetailModal(plakatId){
   // Navigation-Button
   let naviBtn=`<button class="btn" style="width:100%;margin-top:6px;background:var(--surface3);color:var(--text);font-size:.75rem" onclick="openNavToPoint(${p.lat},${p.lng})">🧭 Navigation starten</button>`;
 
+  const katLabels={wahlplakat:'📄 Wahlplakat',banner:'🏳️ Banner'};
+  const ortLabels={oeffentlich:'🏛️ Öffentlich',privat:'🏠 Privatgrundstück'};
+  const katLabel=katLabels[p.kategorie]||katLabels.wahlplakat;
+  const ortLabel=ortLabels[p.ort_typ]||ortLabels.oeffentlich;
+
+  let fotoHtml='';
+  if(p.foto_url){
+    fotoHtml=`<div style="margin-bottom:10px"><img src="${p.foto_url}" style="width:100%;max-height:200px;object-fit:cover;border-radius:var(--r8);cursor:pointer" onclick="window.open('${p.foto_url}','_blank')"></div>`;
+  }
+  // Nachträglicher Foto-Upload (wenn noch kein Foto)
+  let fotoUploadBtn='';
+  if(!p.foto_url && (canManage || p.aufhaenger_id===currentUser?.id)){
+    fotoUploadBtn=`<label style="display:flex;align-items:center;justify-content:center;gap:6px;padding:6px;border:1.5px dashed var(--sep);border-radius:var(--r8);cursor:pointer;font-size:.72rem;color:var(--text3);margin-top:6px;background:var(--surface2)">
+      📷 Foto hinzufügen
+      <input type="file" accept="image/*" capture="environment" onchange="uploadFotoNachtraeglich('${p.id}',this)" style="display:none">
+    </label>`;
+  }
+
   document.getElementById('plakatDetailBody').innerHTML=`
+    ${fotoHtml}
     <div style="display:grid;gap:8px;font-size:.8rem;margin-bottom:14px">
       <div><strong>Status:</strong> ${sl}${p.ersetzt_count>0?' <span style="font-size:.7rem;color:var(--text3)">('+p.ersetzt_count+'× ersetzt)</span>':''}</div>
+      <div><strong>Typ:</strong> ${katLabel} · ${ortLabel}</div>
       <div><strong>Gebiet:</strong> ${gName}</div>
       <div><strong>Aufgehängt:</strong> ${aufh} am ${new Date(p.aufgehaengt_am||p.created_at).toLocaleDateString('de')}</div>
       ${p.abgehaengt_am?'<div><strong>Abgehängt:</strong> '+abh+' am '+new Date(p.abgehaengt_am).toLocaleDateString('de')+'</div>':''}
@@ -7396,10 +7520,46 @@ function openPlakatDetailModal(plakatId){
     ${btns?'<div style="display:flex;gap:6px;margin-bottom:6px">'+btns+'</div>':''}
     ${hilfeBtn}
     ${naviBtn}
+    ${fotoUploadBtn}
     ${vorlageBtn}
     ${deleteBtn}
   `;
   document.getElementById('plakatDetailOv').classList.add('open');
+}
+
+async function uploadFotoNachtraeglich(plakatId,input){
+  const file=input.files?.[0];
+  if(!file) return;
+  toast('📷 Foto wird komprimiert und hochgeladen…');
+  const reader=new FileReader();
+  reader.onload=async function(e){
+    const img=new Image();
+    img.onload=async function(){
+      const MAX=800;
+      let w=img.width,h=img.height;
+      if(w>MAX||h>MAX){if(w>h){h=Math.round(h*MAX/w);w=MAX;}else{w=Math.round(w*MAX/h);h=MAX;}}
+      const c=document.createElement('canvas');c.width=w;c.height=h;
+      c.getContext('2d').drawImage(img,0,0,w,h);
+      c.toBlob(async blob=>{
+        if(!blob){toast('⚠️ Komprimierung fehlgeschlagen');return;}
+        const path=`${curKampagne.id}/${plakatId}.jpg`;
+        await sb.storage.createBucket('plakat-fotos',{public:true}).catch(()=>{});
+        const {error}=await sb.storage.from('plakat-fotos').upload(path,blob,{contentType:'image/jpeg',upsert:true});
+        if(error){toast('⚠️ Upload fehlgeschlagen: '+error.message);return;}
+        const {data:urlData}=sb.storage.from('plakat-fotos').getPublicUrl(path);
+        const fotoUrl=urlData?.publicUrl||null;
+        if(fotoUrl){
+          await sb.from('plakate').update({foto_url:fotoUrl}).eq('id',plakatId);
+          const p=plakate.find(x=>x.id===plakatId);
+          if(p)p.foto_url=fotoUrl;
+          toast('✅ Foto hochgeladen');
+          openPlakatDetailModal(plakatId);
+        }
+      },'image/jpeg',0.5);
+    };
+    img.src=e.target.result;
+  };
+  reader.readAsDataURL(file);
 }
 
 function closePlakatDetail(){
@@ -7550,7 +7710,7 @@ function renderListPlakate(){
     const vorlageIcon=p.ist_vorlage?'📍 ':'';
     return `<div class="g-card ${selPlakatId===p.id?'sel':''}" onclick="selectPlakat('${p.id}')" style="border-left:3px solid ${({haengt:'#34c759',abgehaengt:'#aeaeb2',zerstoert:'#ff3b30',ersetzt:'#42a5f5'})[p.status]||'#ccc'}">
       <div class="g-top"><span class="g-name">${vorlageIcon}${gName}</span><span class="plakat-chip c-${p.status}">${statusLabels[p.status]||p.status}</span></div>
-      <div class="g-meta"><span>👤 ${p.aufhaenger_name||'?'}</span><span>${new Date(p.created_at).toLocaleDateString('de')}</span>${p.ersetzt_count>0?'<span>🔄'+p.ersetzt_count+'</span>':''}</div>
+      <div class="g-meta"><span>👤 ${p.aufhaenger_name||'?'}</span><span>${new Date(p.created_at).toLocaleDateString('de')}</span>${p.kategorie==='banner'?'<span>🏳️</span>':''}${p.ort_typ==='privat'?'<span>🏠</span>':''}${p.ersetzt_count>0?'<span>🔄'+p.ersetzt_count+'</span>':''}${p.foto_url?'<span>📷</span>':''}</div>
     </div>`;
   }).join('');
 }
