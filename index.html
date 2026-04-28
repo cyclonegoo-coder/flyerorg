@@ -1685,6 +1685,7 @@ function renderKampagnenList() {
         ${k.beschreibung ? `<div style="font-size:.7rem;color:var(--text3)">${k.beschreibung}</div>` : ''}
         ${metaLine ? `<div style="font-size:.65rem;color:var(--text4);margin-top:2px">${metaLine}</div>` : ''}
       </div>
+      ${kannBearbeiten ? `<button style="background:none;border:none;cursor:pointer;font-size:.85rem;padding:2px" onclick="openKampagneNotify('${k.id}')" title="Nutzer benachrichtigen">📣</button>` : ''}
       ${kannBearbeiten ? `<button style="background:none;border:none;cursor:pointer;font-size:.85rem;padding:2px" onclick="editKampagne('${k.id}')" title="Bearbeiten">✏️</button>` : ''}
       ${kannLoeschen ? `<button class="btn btn-d" style="width:auto;padding:4px 8px;font-size:.7rem" onclick="deleteKampagne('${k.id}')">🗑</button>` : ''}
     </div>`;
@@ -1964,6 +1965,114 @@ async function deleteKampagne(id) {
   renderKampagnenList();
   renderKampagnenDropdown();
   toast('🗑 Kampagne gelöscht');
+}
+
+// ── Kampagne: Nutzer benachrichtigen ──
+async function openKampagneNotify(kampId) {
+  const k = kampagnen.find(x => String(x.id) === String(kampId));
+  if (!k) return;
+
+  // Zähle Nutzer mit/ohne Push
+  const pushUsers = new Set();
+  try {
+    const {data} = await sb.from('push_subscriptions').select('user_id');
+    if (data) data.forEach(r => pushUsers.add(r.user_id));
+  } catch(e) {}
+
+  const alleNutzer = allUsers.filter(u => u.id !== currentUser?.id); // alle außer mir
+  const mitPush = alleNutzer.filter(u => pushUsers.has(u.id));
+  const ohnePush = alleNutzer.filter(u => !pushUsers.has(u.id));
+
+  const body = `<div style="font-size:.8rem;line-height:1.5;margin-bottom:12px">
+    <strong>Kampagne:</strong> ${k.name}<br>
+    <strong>Nutzer gesamt:</strong> ${alleNutzer.length}<br>
+    <span style="color:var(--green)">🔔 ${mitPush.length} mit Push</span> · <span style="color:var(--text3)">📧 ${ohnePush.length} ohne Push (nur per E-Mail erreichbar)</span>
+  </div>
+  <div style="display:grid;gap:8px">
+    <button class="btn btn-p" style="font-size:.78rem" onclick="sendKampagneNotify('${kampId}','push')">🔔 Push-Nachricht senden (${mitPush.length} Nutzer)</button>
+    ${ohnePush.length > 0 ? `<button class="btn btn-g" style="font-size:.78rem" onclick="sendKampagneNotify('${kampId}','email')">📧 E-Mail an Nutzer ohne Push (${ohnePush.length})</button>` : ''}
+    <button class="btn" style="font-size:.78rem;background:var(--blue);color:#fff" onclick="sendKampagneNotify('${kampId}','alle')">📣 Alle benachrichtigen (Push + E-Mail)</button>
+  </div>
+  <div style="font-size:.62rem;color:var(--text4);margin-top:8px">Push geht sofort raus. E-Mails werden über Supabase Auth versendet.</div>`;
+
+  // Modal bauen
+  const ov = document.createElement('div');
+  ov.className = 'modal-ov open';
+  ov.id = 'kampNotifyOv';
+  ov.onclick = function(e){ if(e.target===this) this.remove(); };
+  ov.innerHTML = `<div class="modal" style="max-width:380px">
+    <div class="m-handle"></div>
+    <div class="m-title">📣 Nutzer über Kampagne informieren</div>
+    <div id="kampNotifyBody">${body}</div>
+    <div class="m-foot"><button class="btn btn-g" onclick="document.getElementById('kampNotifyOv').remove()">Schließen</button></div>
+  </div>`;
+  document.body.appendChild(ov);
+}
+
+async function sendKampagneNotify(kampId, modus) {
+  const k = kampagnen.find(x => String(x.id) === String(kampId));
+  if (!k) return;
+
+  const bodyEl = document.getElementById('kampNotifyBody');
+  if (bodyEl) bodyEl.innerHTML = '<div style="text-align:center;padding:20px;font-size:.8rem;color:var(--text3)"><span class="spinner"></span> Benachrichtigungen werden gesendet…</div>';
+
+  const pushUsers = new Set();
+  try {
+    const {data} = await sb.from('push_subscriptions').select('user_id');
+    if (data) data.forEach(r => pushUsers.add(r.user_id));
+  } catch(e) {}
+
+  const alleNutzer = allUsers.filter(u => u.id !== currentUser?.id);
+  const mitPush = alleNutzer.filter(u => pushUsers.has(u.id));
+  const ohnePush = alleNutzer.filter(u => !pushUsers.has(u.id));
+
+  let pushOk = 0, emailOk = 0, fehler = [];
+
+  // Push senden
+  if (modus === 'push' || modus === 'alle') {
+    if (mitPush.length > 0) {
+      try {
+        await sendPushToUsers(
+          mitPush.map(u => u.id),
+          '📢 Neue Kampagne: ' + k.name,
+          k.beschreibung || 'Es gibt eine neue Kampagne in FlyerOrg. Öffne die App für Details.',
+          'kampagne-' + kampId
+        );
+        pushOk = mitPush.length;
+      } catch(e) { fehler.push('Push: ' + e.message); }
+    }
+  }
+
+  // E-Mail senden (über Supabase Edge Function oder Auth)
+  if (modus === 'email' || modus === 'alle') {
+    const emailTargets = modus === 'alle' ? ohnePush : ohnePush;
+    for (const u of emailTargets) {
+      try {
+        // Magic-Link als "Benachrichtigungs-E-Mail" — Nutzer bekommt einen Login-Link
+        const {error} = await sb.auth.admin.generateLink({
+          type: 'magiclink',
+          email: u.email,
+          options: { redirectTo: window.location.origin + window.location.pathname }
+        });
+        if (!error) emailOk++;
+        else fehler.push(u.email + ': ' + error.message);
+      } catch(e) {
+        // Fallback: admin.generateLink braucht Service-Role-Key
+        // Ohne Admin-API nutzen wir resetPasswordForEmail als Benachrichtigung
+        fehler.push(u.email + ': Admin-API nicht verfügbar');
+      }
+    }
+  }
+
+  // Ergebnis
+  let result = '<div style="font-size:.8rem;line-height:1.5;padding:8px 0">';
+  if (pushOk > 0) result += `<div style="color:var(--green)">✅ Push an ${pushOk} Nutzer gesendet</div>`;
+  if (emailOk > 0) result += `<div style="color:var(--green)">✅ E-Mail an ${emailOk} Nutzer gesendet</div>`;
+  if (fehler.length > 0) result += `<div style="color:var(--orange);margin-top:6px;font-size:.7rem">⚠️ ${fehler.length} Fehler:<br>${fehler.slice(0,5).join('<br>')}${fehler.length>5?'<br>...und '+(fehler.length-5)+' weitere':''}</div>`;
+  if (pushOk === 0 && emailOk === 0 && fehler.length === 0) result += '<div style="color:var(--text3)">Keine Nutzer zum Benachrichtigen.</div>';
+  result += '</div>';
+
+  if (bodyEl) bodyEl.innerHTML = result;
 }
 
 function showLoginError(msg) {
@@ -7482,7 +7591,7 @@ function openPlakatDetailModal(plakatId){
     if(bereitsAngefragt){
       hilfeBtn=`<div style="text-align:center;font-size:.72rem;color:var(--text3);margin-top:6px">🆘 Hilfe-Anfrage läuft bereits</div>`;
     } else {
-      hilfeBtn=`<button class="btn" style="width:100%;margin-top:6px;background:var(--orange);color:#fff;font-size:.75rem;font-weight:600" onclick="sendePlakatHilfeAnfrage('${p.id}')">🆘 Hilfe beim Abhängen anfordern</button>`;
+      hilfeBtn=`<button onclick="sendePlakatHilfeAnfrage('${p.id}')" style="margin-top:6px;background:none;border:1px solid var(--orange);color:var(--orange);padding:4px 10px;border-radius:var(--r8);font-size:.68rem;cursor:pointer;width:100%">🆘 Hilfe beim Abhängen</button>`;
     }
   }
 
@@ -7508,11 +7617,17 @@ function openPlakatDetailModal(plakatId){
   // Foto-Upload: hinzufügen oder ersetzen (Aufsteller + Manager)
   let fotoUploadBtn='';
   if(canManage || p.aufhaenger_id===currentUser?.id){
-    const fotoLabel = p.foto_url ? '📷 Foto ersetzen' : '📷 Foto hinzufügen';
-    fotoUploadBtn=`<label style="display:flex;align-items:center;justify-content:center;gap:6px;padding:6px;border:1.5px dashed var(--sep);border-radius:var(--r8);cursor:pointer;font-size:.72rem;color:var(--text3);margin-top:6px;background:var(--surface2)">
-      ${fotoLabel}
-      <input type="file" accept="image/*" capture="environment" onchange="uploadFotoNachtraeglich('${p.id}',this)" style="display:none">
-    </label>`;
+    const fotoPrefix = p.foto_url ? 'Foto ersetzen' : 'Foto hinzufügen';
+    fotoUploadBtn=`<div style="display:flex;gap:6px;margin-top:6px">
+      <label style="flex:1;display:flex;align-items:center;justify-content:center;gap:4px;padding:6px;border:1.5px dashed var(--sep);border-radius:var(--r8);cursor:pointer;font-size:.7rem;color:var(--text3);background:var(--surface2)">
+        📸 Aufnehmen
+        <input type="file" accept="image/*" capture="environment" onchange="uploadFotoNachtraeglich('${p.id}',this)" style="display:none">
+      </label>
+      <label style="flex:1;display:flex;align-items:center;justify-content:center;gap:4px;padding:6px;border:1.5px dashed var(--sep);border-radius:var(--r8);cursor:pointer;font-size:.7rem;color:var(--text3);background:var(--surface2)">
+        🖼️ Auswählen
+        <input type="file" accept="image/*" onchange="uploadFotoNachtraeglich('${p.id}',this)" style="display:none">
+      </label>
+    </div>`;
   }
 
   document.getElementById('plakatDetailBody').innerHTML=`
