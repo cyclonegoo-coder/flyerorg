@@ -632,10 +632,17 @@ textarea{min-height:68px}
       </div>
       <div style="display:grid;gap:6px">
         <label style="font-size:.72rem;font-weight:600;color:var(--text2)">Foto (optional)</label>
-        <label style="display:flex;align-items:center;gap:6px;padding:8px 10px;border:1.5px dashed var(--sep);border-radius:var(--r8);cursor:pointer;font-size:.75rem;color:var(--text3);background:var(--surface2)">
-          📷 Foto auswählen…
-          <input type="file" id="plakatFoto" accept="image/*" capture="environment" onchange="previewPlakatFoto(this)" style="display:none">
-        </label>
+        <div style="display:flex;gap:6px">
+          <label style="flex:1;display:flex;align-items:center;justify-content:center;gap:5px;padding:8px 6px;border:1.5px dashed var(--sep);border-radius:var(--r8);cursor:pointer;font-size:.73rem;color:var(--text3);background:var(--surface2)">
+            📸 Foto aufnehmen
+            <input type="file" accept="image/*" capture="environment" onchange="previewPlakatFoto(this)" style="display:none">
+          </label>
+          <label style="flex:1;display:flex;align-items:center;justify-content:center;gap:5px;padding:8px 6px;border:1.5px dashed var(--sep);border-radius:var(--r8);cursor:pointer;font-size:.73rem;color:var(--text3);background:var(--surface2)">
+            🖼️ Bild auswählen
+            <input type="file" id="plakatFoto" accept="image/*" onchange="previewPlakatFoto(this)" style="display:none">
+          </label>
+        </div>
+        <div style="font-size:.62rem;color:var(--text4);line-height:1.4;padding:2px 0">⚠️ Bitte keine Personen oder erkennbare Kfz-Kennzeichen fotografieren. Bei Privatgrundstücken nur mit Einverständnis des Eigentümers.</div>
         <div id="plakatFotoPreview" style="display:none;position:relative">
           <img id="plakatFotoImg" style="width:100%;max-height:160px;object-fit:cover;border-radius:var(--r8)">
           <button onclick="clearPlakatFoto()" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,.6);color:#fff;border:none;border-radius:50%;width:24px;height:24px;font-size:.8rem;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>
