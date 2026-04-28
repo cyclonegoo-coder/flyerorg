@@ -7468,9 +7468,9 @@ function openPlakatDetailModal(plakatId){
     </label>`;
   }
 
-  // Hilfe-Anfrage Button (wenn haengt/ersetzt und Deadline naht)
+  // Hilfe-Anfrage Button (wenn haengt/ersetzt und Deadline naht, NICHT bei Privatgrundstück)
   let hilfeBtn='';
-  if((p.status==='haengt'||p.status==='ersetzt')&&curKampagne?.abhaenge_deadline){
+  if((p.status==='haengt'||p.status==='ersetzt')&&curKampagne?.abhaenge_deadline&&p.ort_typ!=='privat'){
     const bereitsAngefragt=alleAnfragen.some(a=>a.typ==='plakat_abhaengen'&&a.plakat_id===p.id&&a.status==='offen');
     if(bereitsAngefragt){
       hilfeBtn=`<div style="text-align:center;font-size:.72rem;color:var(--text3);margin-top:6px">🆘 Hilfe-Anfrage läuft bereits</div>`;
@@ -7498,11 +7498,12 @@ function openPlakatDetailModal(plakatId){
   if(p.foto_url){
     fotoHtml=`<div style="margin-bottom:10px"><img src="${p.foto_url}" style="width:100%;max-height:200px;object-fit:cover;border-radius:var(--r8);cursor:pointer" onclick="window.open('${p.foto_url}','_blank')"></div>`;
   }
-  // Nachträglicher Foto-Upload (wenn noch kein Foto)
+  // Foto-Upload: hinzufügen oder ersetzen (Aufsteller + Manager)
   let fotoUploadBtn='';
-  if(!p.foto_url && (canManage || p.aufhaenger_id===currentUser?.id)){
+  if(canManage || p.aufhaenger_id===currentUser?.id){
+    const fotoLabel = p.foto_url ? '📷 Foto ersetzen' : '📷 Foto hinzufügen';
     fotoUploadBtn=`<label style="display:flex;align-items:center;justify-content:center;gap:6px;padding:6px;border:1.5px dashed var(--sep);border-radius:var(--r8);cursor:pointer;font-size:.72rem;color:var(--text3);margin-top:6px;background:var(--surface2)">
-      📷 Foto hinzufügen
+      ${fotoLabel}
       <input type="file" accept="image/*" capture="environment" onchange="uploadFotoNachtraeglich('${p.id}',this)" style="display:none">
     </label>`;
   }
@@ -7756,7 +7757,7 @@ function renderStatsPlakate(){
 // ── Plakat-Routen: Google Maps + GPX ──
 async function startPlakatRoute(status){
   // Sammle sichtbare Plakate mit gewünschtem Status
-  let targets=getVisiblePlakate().filter(p=>status==='alle'||(status==='haengt'?(p.status==='haengt'||p.status==='ersetzt'):p.status===status));
+  let targets=getVisiblePlakate().filter(p=>p.ort_typ!=='privat'&&(status==='alle'||(status==='haengt'?(p.status==='haengt'||p.status==='ersetzt'):p.status===status)));
   if(targets.length===0){toast('⚠️ Keine Plakate für Route');return;}
   if(targets.length<=10){
     // Google Maps direkt (max 10 Wegpunkte)
@@ -7781,7 +7782,7 @@ async function startPlakatRoute(status){
 }
 
 function exportPlakatGPX(targets){
-  if(!targets) targets=getVisiblePlakate().filter(p=>p.status==='haengt'||p.status==='ersetzt');
+  if(!targets) targets=getVisiblePlakate().filter(p=>p.ort_typ!=='privat'&&(p.status==='haengt'||p.status==='ersetzt'));
   if(targets.length===0){toast('⚠️ Keine Plakate');return;}
   const kampName=(curKampagne?.name||'Plakate').replace(/[^a-zA-Z0-9äöüÄÖÜß ]/g,'');
   let gpx=`<?xml version="1.0" encoding="UTF-8"?>
