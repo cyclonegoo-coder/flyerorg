@@ -477,6 +477,7 @@ textarea{min-height:68px}
     <span class="mob-stat" id="mobStatGesamt" style="color:var(--blue)">–</span>
     <span class="mob-stat" id="mobStatVerteilt" style="color:var(--green)">–</span>
     <span class="mob-stat" id="mobStatOffen" style="color:var(--orange)">–</span>
+    <span class="mob-stat" id="mobStatFehlt" style="color:var(--red);display:none" onclick="jumpToMissingVerteiler()">–</span>
   </div>
 </div>
 
@@ -1231,6 +1232,11 @@ async function doRegister() {
         }
         // Invite aus DB löschen (verbraucht)
         await sb.from('pending_invites').delete().eq('email', email.toLowerCase());
+        // Push an den Einladenden: Einladung wurde angenommen
+        if (invite.eingeladen_von) {
+          const rolleLabel = {verteiler:'Verteiler',regionalverwalter:'Regionalverwalter',verwalter:'Verbandsverwalter',kreisverwalter:'Kreisverwalter',admin:'Admin'}[invite.rolle] || invite.rolle;
+          sendPushToUsers([invite.eingeladen_von], '✅ Einladung angenommen', `${invite.name || name} (${rolleLabel}) hat die Einladung angenommen.`, 'invite-accepted');
+        }
       }
       const { error: upErr } = await sb.from('user_profiles').upsert(profileData, { onConflict: 'id' });
       if (upErr) console.warn('Profil bei Registrierung nicht erstellt (wird bei E-Mail-Bestätigung nachgeholt):', upErr.message);
@@ -1334,6 +1340,9 @@ async function doSetPassword() {
   await loadProfile();
   showApp();
   toast('✅ Passwort erfolgreich gesetzt!');
+
+  // Push-Benachrichtigungen anbieten (nach kurzer Verzögerung)
+  setTimeout(() => promptPushAfterSetup(), 1500);
 }
 
 async function loadProfile() {
@@ -2110,6 +2119,20 @@ async function togglePushSubscription() {
     } catch (e) { toast('⚠️ Fehler: ' + e.message); }
   }
   await updatePushUI();
+}
+
+// Nach Passwortvergabe: Push-Benachrichtigungen anbieten
+async function promptPushAfterSetup() {
+  if (!pushSupported()) return;
+  if (Notification.permission === 'granted') return; // Bereits erlaubt
+  if (Notification.permission === 'denied') return;  // Bereits blockiert
+  const ok = await appConfirm(
+    '🔔 Benachrichtigungen aktivieren?',
+    'Möchtest du Push-Benachrichtigungen erhalten? So wirst du informiert, wenn dir ein Gebiet zugewiesen wird oder es Neuigkeiten gibt.',
+    'Ja, aktivieren',
+    'Später'
+  );
+  if (ok) await togglePushSubscription();
 }
 
 // Push an bestimmte Nutzer senden (über Edge Function)
@@ -3492,6 +3515,12 @@ async function checkSession() {
           }
           if (invite) {
             await sb.from('pending_invites').delete().eq('email', session.user.email.toLowerCase());
+            // Push an den Einladenden: Einladung wurde angenommen
+            if (invite.eingeladen_von) {
+              const invName = invite.name || session.user.email.split('@')[0];
+              const rolleLabel = {verteiler:'Verteiler',regionalverwalter:'Regionalverwalter',verwalter:'Verbandsverwalter',kreisverwalter:'Kreisverwalter',admin:'Admin'}[invite.rolle] || invite.rolle;
+              sendPushToUsers([invite.eingeladen_von], '✅ Einladung angenommen', `${invName} (${rolleLabel}) hat die Einladung angenommen.`, 'invite-accepted');
+            }
           }
         } catch(e) { console.warn('Pending invite apply failed:', e); }
 
@@ -5214,7 +5243,7 @@ function renderGCard(g){
   const istProblemgebietFremdes = curRole==='verteiler' && !g.verteilerId;
   const statusLabel = istProblemgebietFremdes ? '🆘 Hilfe' : sl(g.status);
   const _vName=getVerteilerName(g);
-  const verteilerInfo = _vName?(curRole==='verteiler'?(g.verteilerId===currentUser?.id?'Du':'Zugew.'):'👤 '+_vName.split(' ')[0]):'⚠️ fehlt';
+  const verteilerInfo = _vName?(g.verteilerId===currentUser?.id?'Du':'👤 '+_vName.split(' ')[0]):'⚠️ fehlt';
   return `<div class="g-card status-${g.status} ${selId===g.id?'sel':''}" onclick="selGebiet('${g.id}')">
     <div class="g-top"><span class="g-name">${g.name}</span><span class="s-chip c-${g.status}">${statusLabel}</span></div>
     <div class="g-meta"><span>📦 ${g.stueckzahl}</span><span>${verteilerInfo}</span>${g.whatsapp?'<span class="wa">WA</span>':''}</div>
@@ -5241,6 +5270,16 @@ function renderStats(){
   if(mG)mG.textContent=tot.toLocaleString('de')+' Ges.';
   if(mV)mV.textContent=vert.toLocaleString('de')+' Vert.';
   if(mO)mO.textContent=(tot-vert).toLocaleString('de')+' Offen';
+  // Fehlende Verteiler (nur Manager)
+  const mF=document.getElementById('mobStatFehlt');
+  if(mF){
+    const isManager=curRole==='admin'||curRole==='kreisverwalter'||curRole==='verwalter'||curRole==='regionalverwalter';
+    if(isManager){
+      const missing=countMissingVerteiler();
+      mF.textContent=missing+' ohne Vt.';
+      mF.style.display=missing>0?'inline':'none';
+    } else { mF.style.display='none'; }
+  }
 }
 
 // ============================================================
@@ -5276,7 +5315,7 @@ function openDetail(id){
       <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
         <div><span style="font-size:.65rem;color:var(--text4);text-transform:uppercase">Stück</span> <strong style="color:var(--blue);font-size:.95rem">${g.stueckzahl}</strong></div>
         <div style="flex:1;text-align:center"><span style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:600;${g.status==='fertig'?'background:rgba(52,199,89,.15);color:var(--green)':g.status==='zugeteilt'?'background:rgba(255,149,0,.15);color:var(--orange)':'background:var(--surface3);color:var(--text3)'}">${sl(g.status)}</span></div>
-        <div style="text-align:right;font-size:.72rem;color:var(--text3)">${curRole==='verteiler'?(g.verteilerId?(g.verteilerId===currentUser?.id?'👤 Du':'Zugewiesen'):'⚠️ Frei'):(getVerteilerName(g)||'⚠️ Frei')}</div>
+        <div style="text-align:right;font-size:.72rem;color:var(--text3)">${g.verteilerId?(g.verteilerId===currentUser?.id?'👤 Du':'👤 '+(getVerteilerName(g)||'Zugewiesen')):'⚠️ Frei'}</div>
       </div>
       ${(()=>{const _mv=g.verteilerId?allUsers.find(u=>u.id===g.verteilerId):null;const _ui=_mv?(_mv._kampUebergabe||_mv.uebergabe_info||''):'';return _ui?`<div style="margin-top:4px;font-size:.68rem;color:var(--text3);padding:3px 8px;background:var(--surface2);border-radius:6px">📦 ${_ui}</div>`:''})()}
     </div>`;
@@ -7243,11 +7282,13 @@ async function savePlakatMarker(){
 }
 
 // ── Marker rendern ──
-function getPlakatIcon(status){
+function getPlakatIcon(status, plakatId){
+  const hatHilfe = plakatId && alleAnfragen.some(a=>a.typ==='plakat_abhaengen'&&a.plakat_id===plakatId&&a.status==='offen');
   const colors={haengt:'#34c759',abgehaengt:'#aeaeb2',zerstoert:'#ff3b30',ersetzt:'#42a5f5'};
-  const c=colors[status]||'#8e8e93';
-  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28"><circle cx="14" cy="14" r="11" fill="${c}" stroke="#fff" stroke-width="2.5"/></svg>`;
-  return L.icon({iconUrl:'data:image/svg+xml,'+encodeURIComponent(svg),iconSize:[28,28],iconAnchor:[14,14],popupAnchor:[0,-14]});
+  const c = hatHilfe ? '#ff3b30' : (colors[status]||'#8e8e93');
+  const ring = hatHilfe ? `<circle cx="14" cy="14" r="13" fill="none" stroke="#ff3b30" stroke-width="2" opacity=".5"><animate attributeName="r" from="11" to="16" dur="1.2s" repeatCount="indefinite"/><animate attributeName="opacity" from=".6" to="0" dur="1.2s" repeatCount="indefinite"/></circle>` : '';
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32">${ring}<circle cx="14" cy="14" r="11" fill="${c}" stroke="#fff" stroke-width="2.5"/>${hatHilfe?'<text x="14" y="18" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">!</text>':''}</svg>`;
+  return L.icon({iconUrl:'data:image/svg+xml,'+encodeURIComponent(svg),iconSize:[32,32],iconAnchor:[16,16],popupAnchor:[0,-16]});
 }
 
 function drawPlakatMarkers(){
@@ -7255,7 +7296,7 @@ function drawPlakatMarkers(){
   if(curMode!=='plakate') return;
   const visible=getVisiblePlakate();
   visible.forEach(p=>{
-    const marker=L.marker([p.lat,p.lng],{icon:getPlakatIcon(p.status)}).addTo(map);
+    const marker=L.marker([p.lat,p.lng],{icon:getPlakatIcon(p.status,p.id)}).addTo(map);
     marker.on('click',function(e){
       L.DomEvent.stopPropagation(e);
       if(tourPickStartMode){onPlakatPickedAsStart(p.id);return;}
@@ -7547,6 +7588,9 @@ function renderStatsPlakate(){
   if(mG)mG.textContent=tot+' Ges.';
   if(mV)mV.textContent=haengt+' Hängen';
   if(mO)mO.textContent=(abgeh+zerst)+' Erledigt';
+  // Im Plakat-Modus fehlende Verteiler ausblenden
+  const mF=document.getElementById('mobStatFehlt');
+  if(mF) mF.style.display='none';
 }
 
 // ── Plakat-Routen: Google Maps + GPX ──
