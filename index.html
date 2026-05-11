@@ -187,6 +187,7 @@ header{min-height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturat
 .leaflet-control-zoom a:hover{background:var(--surface3)!important}
 .map-legend{position:absolute;bottom:22px;left:10px;z-index:400;background:rgba(255,255,255,.92);backdrop-filter:blur(12px);border-radius:var(--r12);padding:9px 13px;box-shadow:var(--sh);font-size:.7rem}
 .grenzen-tooltip{background:rgba(255,255,255,.9);border:1px solid #999;border-radius:4px;padding:2px 6px;font-size:.7rem;font-weight:500;color:#333;box-shadow:0 1px 4px rgba(0,0,0,.15)}
+.ot-label{background:none!important;border:none!important}.ot-label span{display:inline-block;background:rgba(123,31,162,.12);color:#7b1fa2;font-size:.6rem;font-weight:600;padding:1px 4px;border-radius:3px;border:1px solid rgba(123,31,162,.3);white-space:nowrap;pointer-events:auto;text-shadow:0 0 2px #fff}
 .leg-title{font-size:.58rem;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
 .leg-row{display:flex;align-items:center;gap:7px;margin-bottom:3px;color:var(--text2)}
 .leg-row:last-child{margin-bottom:0}
@@ -732,7 +733,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v143 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v144 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -4321,7 +4322,7 @@ function initMap(){
 // ============================================================
 // VERWALTUNGSGRENZEN (Gemeindegrenzen via Overpass API)
 // ============================================================
-let grenzenLayer=null, grenzenData=null, grenzenLoading=false;
+let grenzenLayer=null, grenzenData=null, grenzenLoading=false, ortsteileNodes=null;
 
 async function toggleVerwaltungsgrenzen(show){
   if(!map)return;
@@ -4333,6 +4334,7 @@ async function toggleVerwaltungsgrenzen(show){
   if(grenzenData){
     renderGrenzen();return;
   }
+  ortsteileNodes=null;
   // Fetch from Overpass API
   if(grenzenLoading)return;
   grenzenLoading=true;
@@ -4420,8 +4422,68 @@ async function toggleVerwaltungsgrenzen(show){
         });
       });
 
+      // Prüfen ob Ortsteile als Polygone vorhanden sind
+      const hatOrtsteilePolygone=grenzenData.some(g=>g.level==='9'||g.level==='10');
+
+      // Falls keine Ortsteil-Polygone: place-Nodes als Fallback laden
+      if(!hatOrtsteilePolygone){
+        try{
+          // Area-Namen für Overpass ableiten
+          let areaNames=[];
+          if(curRole==='kreisverwalter'&&currentProfile?.verwalteter_landkreis){
+            const lk=landkreise[currentProfile.verwalteter_landkreis];
+            if(lk?.name){areaNames.push(lk.name);areaNames.push(osmName(lk.name));}
+          } else if(curRole==='verteiler'){
+            const lkId=ermittleVerteilerLandkreis();
+            if(lkId&&landkreise[lkId]){areaNames.push(landkreise[lkId].name);areaNames.push(osmName(landkreise[lkId].name));}
+          }
+          // Deduplizieren
+          areaNames=[...new Set(areaNames.filter(Boolean))];
+
+          if(areaNames.length>0){
+            // Place-Nodes (suburb, village, quarter) innerhalb der Stadt/Landkreis-Area laden
+            const areaFilters=areaNames.map(n=>`area["name"="${n}"]["admin_level"="6"]->.a${areaNames.indexOf(n)};`).join('');
+            const nodeFilters=areaNames.map((_,i)=>`node["place"~"^(suburb|quarter|village)$"](area.a${i});`).join('');
+            const placeQuery=`[out:json][timeout:60];${areaFilters}(${nodeFilters});out;`;
+            const placeResp=await fetch('https://overpass-api.de/api/interpreter?data='+encodeURIComponent(placeQuery));
+            if(placeResp.ok){
+              const placeJson=await placeResp.json();
+              ortsteileNodes=placeJson.elements.filter(e=>e.type==='node'&&e.tags?.name).map(e=>({
+                name:e.tags.name,
+                lat:e.lat,
+                lon:e.lon,
+                place:e.tags.place||'suburb'
+              }));
+            }
+          } else if(curRole==='verwalter'||curRole==='regionalverwalter'){
+            // Für VV/RV: BoundingBox-basiert prüfen
+            const verwGV=currentProfile?.verwaltete_gebietsverbaende||[];
+            const verwReg=currentProfile?.verwaltete_regionen||[];
+            let erstGvId=verwGV.length>0?verwGV[0]:null;
+            if(!erstGvId&&verwReg.length>0){const erstRegObj=regionen[verwReg[0]];erstGvId=erstRegObj?.gebietsverband_id;}
+            if(erstGvId&&gebietsverbaende[erstGvId]){
+              const gv=gebietsverbaende[erstGvId];
+              const lat=gv.center_lat||50.94, lng=gv.center_lng||12.10;
+              const d=0.15;
+              const placeQuery=`[out:json][timeout:60];node["place"~"^(suburb|quarter|village)$"](${lat-d},${lng-d},${lat+d},${lng+d});out;`;
+              const placeResp=await fetch('https://overpass-api.de/api/interpreter?data='+encodeURIComponent(placeQuery));
+              if(placeResp.ok){
+                const placeJson=await placeResp.json();
+                ortsteileNodes=placeJson.elements.filter(e=>e.type==='node'&&e.tags?.name).map(e=>({
+                  name:e.tags.name,lat:e.lat,lon:e.lon,place:e.tags.place||'suburb'
+                }));
+              }
+            }
+          }
+          // Für Admin (Thüringen-weit) laden wir keine place-Nodes — das wären zu viele
+        }catch(placeErr){
+          console.warn('Ortsteil-Nodes laden fehlgeschlagen:',placeErr);
+        }
+      }
+
       renderGrenzen();
-      toast('✅ '+grenzenData.length+' Verwaltungsgrenzen geladen');
+      const ortsteileInfo=ortsteileNodes?.length ? ` + ${ortsteileNodes.length} Ortsteile` : '';
+      toast('✅ '+grenzenData.length+' Verwaltungsgrenzen geladen'+ortsteileInfo);
       lastErr=null;
       break; // Erfolg → Schleife verlassen
     }catch(e){
@@ -4549,6 +4611,21 @@ function renderGrenzen(){
     if(g.name)poly.bindTooltip(g.name,{sticky:true,className:'grenzen-tooltip',permanent:false});
     layerGroup.addLayer(poly);
   });
+
+  // Ortsteil-Nodes als Labels rendern (Fallback wenn keine Polygone)
+  if(ortsteileNodes&&ortsteileNodes.length>0){
+    ortsteileNodes.forEach(ot=>{
+      const icon=L.divIcon({
+        className:'ot-label',
+        html:`<span>${ot.name}</span>`,
+        iconSize:[0,0],
+        iconAnchor:[0,0]
+      });
+      const marker=L.marker([ot.lat,ot.lon],{icon,interactive:true,zIndexOffset:-1000});
+      marker.bindTooltip(`${ot.name} (${ot.place==='suburb'?'Stadtteil':'Ortsteil'})`,{sticky:true,className:'grenzen-tooltip'});
+      layerGroup.addLayer(marker);
+    });
+  }
 
   grenzenLayer=layerGroup;
   grenzenLayer.addTo(map);
