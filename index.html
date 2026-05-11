@@ -186,9 +186,7 @@ header{min-height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturat
 .leaflet-control-zoom a{background:var(--surface)!important;color:var(--text)!important;border:none!important;font-size:.95rem!important;line-height:30px!important;width:32px!important;height:32px!important}
 .leaflet-control-zoom a:hover{background:var(--surface3)!important}
 .map-legend{position:absolute;bottom:22px;left:10px;z-index:400;background:rgba(255,255,255,.92);backdrop-filter:blur(12px);border-radius:var(--r12);padding:9px 13px;box-shadow:var(--sh);font-size:.7rem}
-.grenzen-tooltip{background:rgba(255,255,255,.9);border:1px solid #999;border-radius:4px;padding:2px 6px;font-size:.7rem;font-weight:500;color:#333;box-shadow:0 1px 4px rgba(0,0,0,.15)}
-.ot-label{background:none!important;border:none!important}.ot-label span{display:inline-block;background:rgba(123,31,162,.18);color:#6a1b9a;font-size:.72rem;font-weight:700;padding:2px 6px;border-radius:4px;border:1.5px solid rgba(123,31,162,.45);white-space:nowrap;pointer-events:auto;text-shadow:0 0 3px #fff,0 0 3px #fff;box-shadow:0 1px 3px rgba(0,0,0,.15)}.ot-dot{width:8px;height:8px;background:#7b1fa2;border-radius:50%;border:1.5px solid #fff;box-shadow:0 0 3px rgba(0,0,0,.3)}
-.leg-title{font-size:.58rem;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+.grenzen-tooltip{background:rgba(255,255,255,.9);border:1px solid #999;border-radius:4px;padding:2px 6px;font-size:.7rem;font-weight:500;color:#333;box-shadow:0 1px 4px rgba(0,0,0,.15)}.leg-title{font-size:.58rem;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
 .leg-row{display:flex;align-items:center;gap:7px;margin-bottom:3px;color:var(--text2)}
 .leg-row:last-child{margin-bottom:0}
 .leg-dot{width:9px;height:9px;border-radius:2px;flex-shrink:0}
@@ -733,7 +731,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v147 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v149 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -4322,7 +4320,7 @@ function initMap(){
 // ============================================================
 // VERWALTUNGSGRENZEN (Gemeindegrenzen via Overpass API)
 // ============================================================
-let grenzenLayer=null, grenzenData=null, grenzenLoading=false, ortsteileNodes=null;
+let grenzenLayer=null, grenzenData=null, grenzenLoading=false;
 
 async function toggleVerwaltungsgrenzen(show){
   if(!map)return;
@@ -4334,7 +4332,6 @@ async function toggleVerwaltungsgrenzen(show){
   if(grenzenData){
     renderGrenzen();return;
   }
-  ortsteileNodes=null;
   // Fetch from Overpass API
   if(grenzenLoading)return;
   grenzenLoading=true;
@@ -4422,35 +4419,8 @@ async function toggleVerwaltungsgrenzen(show){
         });
       });
 
-      // Ortsteil-Punkte laden für alle Level-6-Gebiete
-      // (place=suburb/village/quarter Nodes als Ergänzung zu Polygon-Grenzen)
-      try{
-        const lk6Names=[...new Set(grenzenData.filter(g=>g.level==='6').map(g=>g.name).filter(Boolean))];
-        if(lk6Names.length>0&&lk6Names.length<=25){
-          // Alle LK-Namen + bereinigte Varianten sammeln
-          const allNames=[...new Set(lk6Names.flatMap(n=>[n,osmName(n)]).filter(Boolean))];
-          const areaFilters=allNames.map((n,i)=>`area["name"="${n}"]["admin_level"="6"]->.a${i};`).join('');
-          const nodeFilters=allNames.map((_,i)=>`node["place"~"^(suburb|quarter)$"](area.a${i});`).join('');
-          const placeQuery=`[out:json][timeout:90];${areaFilters}(${nodeFilters});out;`;
-          console.log('Lade Ortsteil-Nodes für',allNames.length,'Gebiete:',allNames.join(', '));
-          const placeResp=await fetch('https://overpass-api.de/api/interpreter?data='+encodeURIComponent(placeQuery));
-          if(placeResp.ok){
-            const placeJson=await placeResp.json();
-            ortsteileNodes=placeJson.elements.filter(e=>e.type==='node'&&e.tags?.name).map(e=>({
-              name:e.tags.name,lat:e.lat,lon:e.lon,place:e.tags.place||'suburb'
-            }));
-            console.log('Ortsteil-Nodes geladen:',ortsteileNodes.length);
-          } else {
-            console.warn('Place-Nodes Antwort:',placeResp.status);
-          }
-        }
-      }catch(placeErr){
-        console.warn('Ortsteil-Nodes laden fehlgeschlagen:',placeErr);
-      }
-
       renderGrenzen();
-      const ortsteileInfo=ortsteileNodes?.length ? ` + ${ortsteileNodes.length} Ortsteile` : '';
-      toast('✅ '+grenzenData.length+' Verwaltungsgrenzen geladen'+ortsteileInfo);
+      toast('✅ '+grenzenData.length+' Verwaltungsgrenzen geladen');
       lastErr=null;
       break; // Erfolg → Schleife verlassen
     }catch(e){
@@ -4578,27 +4548,6 @@ function renderGrenzen(){
     if(g.name)poly.bindTooltip(g.name,{sticky:true,className:'grenzen-tooltip',permanent:false});
     layerGroup.addLayer(poly);
   });
-
-  // Ortsteil-Nodes als Labels + Punkte rendern (Fallback wenn keine Polygone)
-  if(ortsteileNodes&&ortsteileNodes.length>0){
-    ortsteileNodes.forEach(ot=>{
-      // Farbiger Punkt
-      const dot=L.circleMarker([ot.lat,ot.lon],{
-        radius:5,color:'#fff',weight:1.5,fillColor:'#7b1fa2',fillOpacity:.85,interactive:true
-      });
-      dot.bindTooltip(`${ot.name} (${ot.place==='suburb'?'Stadtteil':'Ortsteil'})`,{sticky:true,className:'grenzen-tooltip'});
-      layerGroup.addLayer(dot);
-      // Text-Label
-      const icon=L.divIcon({
-        className:'ot-label',
-        html:`<span>${ot.name}</span>`,
-        iconSize:[0,0],
-        iconAnchor:[-10,8]
-      });
-      const marker=L.marker([ot.lat,ot.lon],{icon,interactive:false,zIndexOffset:-1000});
-      layerGroup.addLayer(marker);
-    });
-  }
 
   grenzenLayer=layerGroup;
   grenzenLayer.addTo(map);
