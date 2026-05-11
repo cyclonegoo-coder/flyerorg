@@ -732,7 +732,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v140 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v143 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -4341,12 +4341,19 @@ async function toggleVerwaltungsgrenzen(show){
   // Level 6=Landkreis/kreisfreie Stadt, 7=Verwaltungsgemeinschaft, 8=Gemeinde,
   // 9=Ortsteil (mit Ortschaftsrat), 10=Ortsteil (ohne Selbstverwaltung)
   const adminLevels='6|7|8|9|10';
+  // OSM-Name bereinigen: "Stadt Gera" → "Gera", "Landkreis Greiz" → "Greiz" etc.
+  function osmName(n){return (n||'').replace(/^(Kreisfreie Stadt |Stadt |Landkreis |Kreis )/i,'').trim();}
+  function lkQuery(name){
+    const n=osmName(name);
+    // Versuche exakten Match, falls der DB-Name Präfixe hat
+    return `[out:json][timeout:90];(area["name"="${name}"]["admin_level"="6"]->.lk;area["name"="${n}"]["admin_level"="6"]->.lk2;);(relation["boundary"="administrative"]["admin_level"~"^(${adminLevels})$"](area.lk);relation["boundary"="administrative"]["admin_level"~"^(${adminLevels})$"](area.lk2););out geom;`;
+  }
   let query, bereichName;
   if(curRole==='kreisverwalter' && currentProfile?.verwalteter_landkreis){
     const lk=landkreise[currentProfile.verwalteter_landkreis];
     const lkName=lk?.name||'';
     bereichName=lkName||'Landkreis';
-    query=`[out:json][timeout:90];area["name"="${lkName}"]["admin_level"="6"]->.lk;(relation["boundary"="administrative"]["admin_level"~"^(${adminLevels})$"](area.lk);relation["name"="${lkName}"]["boundary"="administrative"]["admin_level"="6"];);out geom;`;
+    query=lkQuery(lkName);
   } else if(curRole==='verwalter'||curRole==='regionalverwalter'){
     const verwGV=currentProfile?.verwaltete_gebietsverbaende||[];
     const verwReg=currentProfile?.verwaltete_regionen||[];
@@ -4367,7 +4374,7 @@ async function toggleVerwaltungsgrenzen(show){
     if(lkId && landkreise[lkId]){
       const lkName=landkreise[lkId].name;
       bereichName=lkName;
-      query=`[out:json][timeout:90];area["name"="${lkName}"]["admin_level"="6"]->.lk;(relation["boundary"="administrative"]["admin_level"~"^(${adminLevels})$"](area.lk);relation["name"="${lkName}"]["boundary"="administrative"]["admin_level"="6"];);out geom;`;
+      query=lkQuery(lkName);
     } else {
       bereichName='Bereich';
       const b=map.getBounds();
