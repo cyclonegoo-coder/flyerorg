@@ -733,7 +733,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v146 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v147 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -4422,48 +4422,26 @@ async function toggleVerwaltungsgrenzen(show){
         });
       });
 
-      // Ermittle Level-6-Gebiete, die KEINE Unter-Grenzen (Level 7-10) haben
-      // Für diese laden wir place-Nodes als Ortsteil-Fallback (z.B. Gera)
+      // Ortsteil-Punkte laden für alle Level-6-Gebiete
+      // (place=suburb/village/quarter Nodes als Ergänzung zu Polygon-Grenzen)
       try{
-        const lk6Names=grenzenData.filter(g=>g.level==='6').map(g=>g.name).filter(Boolean);
-        const subNames=grenzenData.filter(g=>g.level!=='6').map(g=>g.name).filter(Boolean);
-        // Level-6 Gebiete ohne Unter-Grenzen ermitteln
-        // Heuristik: Ein LK hat Unter-Grenzen, wenn es mind. 3 Level-7/8/9/10 Einträge gibt
-        // (da wir keinen Geo-Containment-Check machen, laden wir für ALLE Level-6 ohne Subs)
-        const ohneOrtsteile=lk6Names.filter(lkName=>{
-          // Prüfe ob es Level-9/10 Grenzen gibt, deren Centroid im LK-Bounding-Box liegt
-          const lkRings=grenzenData.filter(g=>g.level==='6'&&g.name===lkName);
-          if(lkRings.length===0)return true;
-          // Bounding-Box des LK ermitteln
-          let minLat=90,maxLat=-90,minLon=180,maxLon=-180;
-          lkRings.forEach(r=>r.coords.forEach(c=>{
-            if(c[0]<minLat)minLat=c[0];if(c[0]>maxLat)maxLat=c[0];
-            if(c[1]<minLon)minLon=c[1];if(c[1]>maxLon)maxLon=c[1];
-          }));
-          // Zähle wie viele Level-7+ Grenzen ihren Schwerpunkt in dieser BBox haben
-          const innerCount=grenzenData.filter(g=>{
-            if(g.level==='6'||!g.coords||g.coords.length<3)return false;
-            // Centroid der Sub-Grenze
-            let sLat=0,sLon=0;
-            g.coords.forEach(c=>{sLat+=c[0];sLon+=c[1];});
-            sLat/=g.coords.length;sLon/=g.coords.length;
-            return sLat>=minLat&&sLat<=maxLat&&sLon>=minLon&&sLon<=maxLon;
-          }).length;
-          return innerCount<2; // Weniger als 2 innere Grenzen = braucht Fallback
-        });
-
-        if(ohneOrtsteile.length>0){
-          // Place-Nodes für diese Gebiete laden
-          const areaNames=[...new Set(ohneOrtsteile.flatMap(n=>[n,osmName(n)]).filter(Boolean))];
-          const areaFilters=areaNames.map((n,i)=>`area["name"="${n}"]["admin_level"="6"]->.a${i};`).join('');
-          const nodeFilters=areaNames.map((_,i)=>`node["place"~"^(suburb|quarter|village)$"](area.a${i});`).join('');
-          const placeQuery=`[out:json][timeout:60];${areaFilters}(${nodeFilters});out;`;
+        const lk6Names=[...new Set(grenzenData.filter(g=>g.level==='6').map(g=>g.name).filter(Boolean))];
+        if(lk6Names.length>0&&lk6Names.length<=25){
+          // Alle LK-Namen + bereinigte Varianten sammeln
+          const allNames=[...new Set(lk6Names.flatMap(n=>[n,osmName(n)]).filter(Boolean))];
+          const areaFilters=allNames.map((n,i)=>`area["name"="${n}"]["admin_level"="6"]->.a${i};`).join('');
+          const nodeFilters=allNames.map((_,i)=>`node["place"~"^(suburb|quarter)$"](area.a${i});`).join('');
+          const placeQuery=`[out:json][timeout:90];${areaFilters}(${nodeFilters});out;`;
+          console.log('Lade Ortsteil-Nodes für',allNames.length,'Gebiete:',allNames.join(', '));
           const placeResp=await fetch('https://overpass-api.de/api/interpreter?data='+encodeURIComponent(placeQuery));
           if(placeResp.ok){
             const placeJson=await placeResp.json();
             ortsteileNodes=placeJson.elements.filter(e=>e.type==='node'&&e.tags?.name).map(e=>({
               name:e.tags.name,lat:e.lat,lon:e.lon,place:e.tags.place||'suburb'
             }));
+            console.log('Ortsteil-Nodes geladen:',ortsteileNodes.length);
+          } else {
+            console.warn('Place-Nodes Antwort:',placeResp.status);
           }
         }
       }catch(placeErr){
