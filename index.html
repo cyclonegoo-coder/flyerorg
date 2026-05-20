@@ -751,7 +751,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v154 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v156 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -4258,6 +4258,11 @@ async function sendeZuweisungAnfrage(gebietId) {
   const g = getG(gebietId);
   if (!g) return;
   const zielUser = allUsers.find(u => u.id === zielUserId);
+  // Offline-Nutzer: Kein DB-Anfrage, direkt Kontakt-Sheet
+  if(zielUser?.is_offline){
+    showKontaktSheet(zielUserId, gebietId, 'anfrage');
+    return;
+  }
   // Kampagne mitspeichern (spezifisch oder Grundzuweisung)
   const istSpezialK = curKampagne && !curKampagne.ist_basis && !curKampagne._local;
   const insertData = {
@@ -4277,6 +4282,11 @@ async function sendeZuweisungAnfrage(gebietId) {
     sendPushToUsers([zielUserId], '📋 Neue Zuweisung', `Dir wurde das Gebiet „${g.name}" zugewiesen.${istSpezialK?' ('+curKampagne.name+')':''}`, 'zuweisung');
   }
   toast(`✅ Anfrage an ${zielUser?.name || 'Verteiler'} gesendet!`);
+  // Prüfe ob Nutzer Push hat, wenn nicht → Kontakt-Sheet anbieten
+  const hasPush = await hatUserPush(zielUserId);
+  if(!hasPush && zielUser?.telefon){
+    showKontaktSheet(zielUserId, gebietId, 'push_hint');
+  }
   await loadAnfragen();
   if (selId) openDetail(selId);
 }
@@ -5583,14 +5593,12 @@ function openDetail(id){
         </div>`;
       // Verteiler anfragen (wenn kein Verteiler)
       if(!g.verteilerId){
-        const verteilerListe = allUsers.filter(u => u.rolle==='verteiler' && u.id!==g.verteilerId);
-        if(verteilerListe.length>0){
-          h+=`<div style="background:var(--surface2);border-radius:var(--r8);padding:8px 10px">
-            <div style="font-size:.7rem;font-weight:600;color:var(--text2);margin-bottom:5px">🔍 Verteiler anfragen</div>
-            <div style="display:flex;gap:6px"><select id="inpAnfrageVerteiler" style="flex:1;font-size:.78rem;padding:7px 8px"><option value="">— wählen —</option>${verteilerListe.map(u=>`<option value="${u.id}">${u.name}</option>`).join('')}</select>
-            <button class="btn btn-p" onclick="sendeZuweisungAnfrage('${g.id}')" style="padding:7px 14px;font-size:.75rem;white-space:nowrap">Anfragen</button></div>
-          </div>`;
-        }
+        h+=`<div style="background:var(--surface2);border-radius:var(--r8);padding:8px 10px">
+          <div style="font-size:.7rem;font-weight:600;color:var(--text2);margin-bottom:5px">🔍 Verteiler anfragen</div>
+          <input type="hidden" id="inpAnfrageVerteiler" value="">
+          <div style="display:flex;gap:6px"><button id="vpAnfrageDisplay" onclick="openVerteilerPicker('${g.id}',{title:'Verteiler anfragen',showNone:false,callback:function(id,name){document.getElementById('inpAnfrageVerteiler').value=id;var d=document.getElementById('vpAnfrageDisplay');d.textContent=name||'— wählen —';d.style.color=name?'var(--text1)':'var(--text4)';}})" style="flex:1;font-size:.78rem;padding:7px 10px;text-align:left;border:1.5px solid var(--sep);border-radius:var(--r8);background:var(--surface2);color:var(--text4);cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">— wählen —</button>
+          <button class="btn btn-p" onclick="sendeZuweisungAnfrage('${g.id}')" style="padding:7px 14px;font-size:.75rem;white-space:nowrap">Anfragen</button></div>
+        </div>`;
       }
       h+=`</div></div>`;
       // Offene Anfragen (nur sichtbar wenn ich zuständige Ebene bin)
@@ -5758,13 +5766,11 @@ function openDetail(id){
       </div></div>`;
     }
     if(isM&&!g.verteilerId){
-      const verteilerListe=allUsers.filter(u=>u.rolle==='verteiler'&&u.id!==g.verteilerId);
-      if(verteilerListe.length>0){
-        h+=`<div class="d-sec"><div class="sec-hd">Verteiler anfragen</div><div class="f-stack">
-          <select id="inpAnfrageVerteiler"><option value="">— Verteiler wählen —</option>${verteilerListe.map(u=>`<option value="${u.id}">${u.name}</option>`).join('')}</select>
-          <button class="btn btn-p" onclick="sendeZuweisungAnfrage('${g.id}')">👤 Verteiler anfragen</button>
-        </div></div>`;
-      }
+      h+=`<div class="d-sec"><div class="sec-hd">Verteiler anfragen</div><div class="f-stack">
+        <input type="hidden" id="inpAnfrageVerteiler" value="">
+        <button id="vpAnfrageDisplay" onclick="openVerteilerPicker('${g.id}',{title:'Verteiler anfragen',showNone:false,callback:function(id,name){document.getElementById('inpAnfrageVerteiler').value=id;var d=document.getElementById('vpAnfrageDisplay');d.textContent=name||'— Verteiler wählen —';d.style.color=name?'var(--text1)':'var(--text4)';}})" style="flex:1;font-size:.8rem;padding:8px 10px;text-align:left;border:1.5px solid var(--sep);border-radius:var(--r8);background:var(--surface2);color:var(--text4);cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">— Verteiler wählen —</button>
+        <button class="btn btn-p" onclick="sendeZuweisungAnfrage('${g.id}')">👤 Verteiler anfragen</button>
+      </div></div>`;
     }
     if(darfHinweis){
       h+=`<div class="d-sec"><div class="sec-hd">Hinweis schreiben</div><div class="f-stack">
@@ -5904,7 +5910,6 @@ async function saveZ(id){
     kampId = await ensureKampagneInDB();
   }
   if (kampId) {
-    // Upsert in gebiet_status (composite PK: gebiet_id + kampagne_id)
     const { error } = await sb.from('gebiet_status').upsert({
       gebiet_id: id,
       kampagne_id: kampId,
@@ -5916,9 +5921,10 @@ async function saveZ(id){
   }, { onConflict: 'gebiet_id,kampagne_id' });
     if (error) console.error('saveZ gebiet_status error:', JSON.stringify(error));
     toast(error ? `⚠️ DB-Fehler: ${error.message||error.code||'unbekannt'}` : `✅ Verteiler ${userName?'zugewiesen':'entfernt'}`);
+    if(!error && userId) await _saveZKontaktCheck(userId, id);
+    updateMissingVerteilerBadge();
     return;
   }
-  // Fallback: Direkt in gebiete-Tabelle speichern (falls Kampagnen-System nicht verfügbar)
   try {
     const { error } = await sb.from('gebiete').update({
       verteiler_id: userId||null,
@@ -5936,7 +5942,19 @@ async function saveZ(id){
     console.warn('saveZ gebiete-Fallback Exception:', e);
     toast(`✅ Verteiler ${userName?'zugewiesen':'entfernt'} (lokal)`);
   }
+  if(userId) await _saveZKontaktCheck(userId, id);
   updateMissingVerteilerBadge();
+}
+// Nach Zuweisung: Kontakt-Sheet bei Offline oder fehlendem Push
+async function _saveZKontaktCheck(userId, gebietId){
+  const user = allUsers.find(u=>u.id===userId);
+  if(!user) return;
+  if(user.is_offline){
+    showKontaktSheet(userId, gebietId, 'zuweisung');
+  } else if(user.telefon){
+    const hasPush = await hatUserPush(userId);
+    if(!hasPush) showKontaktSheet(userId, gebietId, 'push_hint');
+  }
 }
 
 function getVerteilerFuerGebiet(gebietId){
@@ -5977,10 +5995,15 @@ function getVerteilerFuerGebiet(gebietId){
 }
 
 // Searchable Verteiler-Picker (Drill-Down: Kreis → GV → Verteiler)
-let _vpGebietId=null, _vpAllV=[], _vpGrouped={};
-function openVerteilerPicker(gebietId){
+let _vpGebietId=null, _vpAllV=[], _vpGrouped={}, _vpCallback=null;
+function openVerteilerPicker(gebietId,opts){
+  // opts: {callback:fn(id,name), title:string, showNone:bool}
+  opts=opts||{};
   _vpGebietId=gebietId;
+  _vpCallback=opts.callback||null;
   const g=getG(gebietId);
+  const pickerTitle=opts.title||'Verteiler wählen';
+  const showNone=opts.showNone!==false;
   _vpAllV=getVerteilerFuerGebiet(gebietId);
   // Gruppierung: LK → GV → Users
   _vpGrouped={};
@@ -6002,18 +6025,18 @@ function openVerteilerPicker(gebietId){
     <div class="vp-header">
       <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:0">
         <span id="vpBack" style="display:none;cursor:pointer;font-size:1rem;padding:2px 4px" onclick="vpGoBack()">‹</span>
-        <span id="vpTitle" style="font-weight:600;font-size:.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Kreis wählen</span>
+        <span id="vpTitle" style="font-weight:600;font-size:.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${pickerTitle}</span>
       </div>
       <button onclick="closeVerteilerPicker()" style="background:none;border:none;font-size:1.1rem;cursor:pointer;padding:0 4px;color:var(--text3)">✕</button>
     </div>
     <div class="vp-search-wrap">
       <input type="text" id="vpSearch" placeholder="Name suchen..." oninput="vpGlobalSearch(this.value)" autocomplete="off" style="width:100%;padding:8px 10px;border:1.5px solid var(--sep);border-radius:var(--r8);font-size:.8rem;background:var(--surface2);color:var(--text1)">
     </div>
-    <div class="vp-none-btn">
+    ${showNone?`<div class="vp-none-btn">
       <div class="vp-item" onclick="vpSelect('','')">
         <span style="color:var(--text4)">— Kein Verteiler —</span>
       </div>
-    </div>
+    </div>`:''}
     <div class="vp-list" id="vpList"></div>
   </div>`;
   document.body.appendChild(ov);
@@ -6167,12 +6190,16 @@ function vpGoBack(){
 
 function vpSelect(userId,userName){
   if(!_vpGebietId)return;
-  const hid=document.getElementById('inpV');
-  if(hid){hid.value=userId;hid.dataset.name=userName;}
-  const disp=document.getElementById('vpDisplay');
-  if(disp){
-    disp.textContent=userName||'— Verteiler fehlt';
-    disp.style.color=userName?'var(--text1)':'var(--text4)';
+  if(_vpCallback){
+    _vpCallback(userId,userName);
+  } else {
+    const hid=document.getElementById('inpV');
+    if(hid){hid.value=userId;hid.dataset.name=userName;}
+    const disp=document.getElementById('vpDisplay');
+    if(disp){
+      disp.textContent=userName||'— Verteiler fehlt';
+      disp.style.color=userName?'var(--text1)':'var(--text4)';
+    }
   }
   closeVerteilerPicker();
 }
@@ -6184,6 +6211,68 @@ function closeVerteilerPicker(){
     if(panel)panel.classList.remove('vp-open');
     setTimeout(()=>ov.remove(),200);
   }
+}
+
+// ── Kontakt-Sheet: WhatsApp / Anruf nach Zuweisung/Anfrage ──
+function showKontaktSheet(userId, gebietId, context){
+  // context: 'zuweisung' | 'anfrage'
+  const user = allUsers.find(u=>u.id===userId);
+  if(!user) return;
+  const tel = user.telefon||'';
+  if(!tel){ toast('⚠️ Keine Telefonnummer hinterlegt'); return; }
+  const g = getG(gebietId);
+  const gName = g?.name||'Gebiet';
+  const stueck = g?.stueckzahl||'';
+  const kampName = curKampagne?.name||'';
+  // WhatsApp-Text je nach Kontext
+  let waText = '';
+  if(user.is_offline){
+    waText = `Hallo ${user.name}, kannst du die Flyer für "${gName}"${stueck?' ('+stueck+' Stück)':''} verteilen?${kampName?' Kampagne: '+kampName:''} Melde dich kurz bei mir.`;
+  } else if(context==='zuweisung'){
+    waText = `Hallo ${user.name}, ich habe dir das Gebiet "${gName}"${stueck?' ('+stueck+' Stück)':''} zugewiesen.${kampName?' Kampagne: '+kampName:''} Schau bitte in die App.`;
+  } else {
+    waText = `Hallo ${user.name}, ich würde dir gern das Gebiet "${gName}"${stueck?' ('+stueck+' Stück)':''} zuweisen.${kampName?' Kampagne: '+kampName:''} Kannst du das übernehmen? Schau bitte in die App.`;
+  }
+  const waNum = tel.replace(/[^0-9+]/g,'').replace(/^0/,'+49');
+  const waUrl = `https://wa.me/${waNum}?text=${encodeURIComponent(waText)}`;
+  const telUrl = `tel:${tel}`;
+  // Sheet anzeigen
+  const ov = document.createElement('div');
+  ov.id='ksOverlay';
+  ov.className='modal-ov';
+  ov.style.cssText='z-index:3300;display:flex;align-items:flex-end;justify-content:center';
+  ov.onmousedown=function(e){this._mdOnOverlay=e.target===this;};
+  ov.onclick=function(e){if(e.target===this&&this._mdOnOverlay)closeKontaktSheet();};
+  const hinweis = user.is_offline
+    ? '<div style="font-size:.72rem;color:var(--orange);margin-bottom:10px">⚠️ Offline-Nutzer – kein App-Zugang, nur telefonisch erreichbar</div>'
+    : context==='push_hint'
+      ? '<div style="font-size:.72rem;color:var(--text3);margin-bottom:10px">ℹ️ Push-Benachrichtigungen nicht aktiv – ggf. direkt kontaktieren</div>'
+      : '';
+  ov.innerHTML=`<div class="vp-panel" onclick="event.stopPropagation()" style="padding:18px 16px 28px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <span style="font-weight:600;font-size:.85rem">📞 ${user.name} kontaktieren</span>
+      <button onclick="closeKontaktSheet()" style="background:none;border:none;font-size:1.1rem;cursor:pointer;padding:0 4px;color:var(--text3)">✕</button>
+    </div>
+    ${hinweis}
+    <div style="background:var(--surface2);border-radius:var(--r8);padding:10px 12px;margin-bottom:12px;font-size:.75rem;color:var(--text2);line-height:1.5;white-space:pre-wrap">${waText}</div>
+    <div style="display:flex;gap:8px">
+      <a href="${waUrl}" target="_blank" onclick="setTimeout(closeKontaktSheet,300)" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:12px;border-radius:var(--r8);background:#25D366;color:#fff;font-size:.82rem;font-weight:600;text-decoration:none">💬 WhatsApp</a>
+      <a href="${telUrl}" onclick="setTimeout(closeKontaktSheet,300)" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:12px;border-radius:var(--r8);background:var(--blue);color:#fff;font-size:.82rem;font-weight:600;text-decoration:none">📞 Anrufen</a>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+  setTimeout(()=>ov.querySelector('.vp-panel').classList.add('vp-open'),20);
+}
+function closeKontaktSheet(){
+  const ov=document.getElementById('ksOverlay');
+  if(ov){const p=ov.querySelector('.vp-panel');if(p)p.classList.remove('vp-open');setTimeout(()=>ov.remove(),200);}
+}
+// Prüfen ob ein User Push-Subscriptions hat
+async function hatUserPush(userId){
+  try{
+    const {data}=await sb.from('push_subscriptions').select('id').eq('user_id',userId).limit(1);
+    return data&&data.length>0;
+  }catch(e){return false;}
 }
 
 async function saveSt2(id){
