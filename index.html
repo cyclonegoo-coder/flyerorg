@@ -751,7 +751,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v156 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v157 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -943,6 +943,11 @@ textarea{min-height:68px}
       <div id="editUserGVWrap" style="display:none">
         <div style="font-size:.65rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:2px">Gebietsverband</div>
         <select id="editUserGV" style="width:100%;font-size:.8rem;padding:6px 8px;border:1px solid var(--sep);border-radius:var(--r8)"></select>
+      </div>
+      <!-- Telefon -->
+      <div id="editUserTelWrap" style="display:none">
+        <div style="font-size:.65rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:2px">Telefon</div>
+        <input type="tel" id="editUserTelefon" placeholder="z.B. 0176 12345678" style="width:100%;font-size:.85rem;padding:8px 10px;border:1px solid var(--sep);border-radius:var(--r8);font-family:inherit">
       </div>
       <!-- Übergabe-Info -->
       <div id="editUserUeWrap" style="display:none">
@@ -2744,6 +2749,14 @@ function openEditUserModal(userId){
     gvSel.innerHTML=gvOpts;
   }else{ gvWrap.style.display='none'; }
 
+  // Telefon (für alle Nutzer editierbar, besonders wichtig für Offline-User)
+  const telWrap=document.getElementById('editUserTelWrap');
+  const canEditTel=!isSelf&&(isAdmin||isKV||isGV||isRV);
+  if(canEditTel){
+    telWrap.style.display='block';
+    document.getElementById('editUserTelefon').value=u.telefon||'';
+  }else{ telWrap.style.display='none'; }
+
   // Übergabe-Info (KV = wie Admin in seinem LK, nur nicht für Admins)
   const ueWrap=document.getElementById('editUserUeWrap');
   const canEditUe=!isSelf&&(isAdmin||(isKV&&!istAdmin)||((isGV||isRV)&&u.rolle==='verteiler'));
@@ -2823,6 +2836,13 @@ async function saveEditUser(){
   if(ueWrap.style.display!=='none'){
     const newUe=document.getElementById('editUserUebergabe').value.trim();
     if(newUe!==(u.uebergabe_info||'')){updates.uebergabe_info=newUe;changed=true;}
+  }
+
+  // Telefon
+  const telWrap=document.getElementById('editUserTelWrap');
+  if(telWrap.style.display!=='none'){
+    const newTel=document.getElementById('editUserTelefon').value.trim();
+    if(newTel!==(u.telefon||'')){updates.telefon=newTel||null;changed=true;}
   }
 
   // Polygon-Recht
