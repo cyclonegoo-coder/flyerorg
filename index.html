@@ -751,7 +751,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v157 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v159 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -5605,7 +5605,8 @@ function openDetail(id){
         <div style="background:var(--surface2);border-radius:var(--r8);padding:8px 10px">
           <div style="font-size:.7rem;font-weight:600;color:var(--text2);margin-bottom:5px">👤 Verteiler zuweisen</div>
           <input type="hidden" id="inpV" value="${g.verteilerId||''}" data-name="${_curVName!=='— Verteiler fehlt'?_curVName:''}">
-          <div style="display:flex;gap:6px"><button id="vpDisplay" onclick="openVerteilerPicker('${g.id}')" style="flex:1;font-size:.78rem;padding:7px 10px;text-align:left;border:1.5px solid var(--sep);border-radius:var(--r8);background:var(--surface2);color:${g.verteilerId?'var(--text1)':'var(--text4)'};cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_curVName}</button><button class="btn btn-p" onclick="saveZ('${g.id}')" style="padding:7px 14px;font-size:.75rem;white-space:nowrap">Speichern</button></div>
+          <button id="vpDisplay" onclick="openVerteilerPicker('${g.id}')" style="width:100%;font-size:.8rem;padding:9px 10px;text-align:left;border:1.5px solid var(--sep);border-radius:var(--r8);background:#fff;color:${g.verteilerId?'var(--text1)':'var(--text4)'};cursor:pointer;margin-bottom:6px">${_curVName}</button>
+          <button class="btn btn-p" onclick="saveZ('${g.id}')" style="width:100%;padding:9px 14px;font-size:.78rem">Speichern</button>
         </div>
         <div style="background:var(--surface2);border-radius:var(--r8);padding:8px 10px">
           <div style="font-size:.7rem;font-weight:600;color:var(--text2);margin-bottom:5px">📦 Stückzahl ändern</div>
@@ -5616,8 +5617,8 @@ function openDetail(id){
         h+=`<div style="background:var(--surface2);border-radius:var(--r8);padding:8px 10px">
           <div style="font-size:.7rem;font-weight:600;color:var(--text2);margin-bottom:5px">🔍 Verteiler anfragen</div>
           <input type="hidden" id="inpAnfrageVerteiler" value="">
-          <div style="display:flex;gap:6px"><button id="vpAnfrageDisplay" onclick="openVerteilerPicker('${g.id}',{title:'Verteiler anfragen',showNone:false,callback:function(id,name){document.getElementById('inpAnfrageVerteiler').value=id;var d=document.getElementById('vpAnfrageDisplay');d.textContent=name||'— wählen —';d.style.color=name?'var(--text1)':'var(--text4)';}})" style="flex:1;font-size:.78rem;padding:7px 10px;text-align:left;border:1.5px solid var(--sep);border-radius:var(--r8);background:var(--surface2);color:var(--text4);cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">— wählen —</button>
-          <button class="btn btn-p" onclick="sendeZuweisungAnfrage('${g.id}')" style="padding:7px 14px;font-size:.75rem;white-space:nowrap">Anfragen</button></div>
+          <button id="vpAnfrageDisplay" onclick="openVerteilerPicker('${g.id}',{title:'Verteiler anfragen',showNone:false,callback:function(id,name){document.getElementById('inpAnfrageVerteiler').value=id;var d=document.getElementById('vpAnfrageDisplay');d.textContent=name||'— wählen —';d.style.color=name?'var(--text1)':'var(--text4)';}})" style="width:100%;font-size:.8rem;padding:9px 10px;text-align:left;border:1.5px solid var(--sep);border-radius:var(--r8);background:#fff;color:var(--text4);cursor:pointer;margin-bottom:6px">— wählen —</button>
+          <button class="btn btn-p" onclick="sendeZuweisungAnfrage('${g.id}')" style="width:100%;padding:9px 14px;font-size:.78rem">Anfragen</button>
         </div>`;
       }
       h+=`</div></div>`;
@@ -7289,10 +7290,12 @@ function rebuildEditMarkers(){
       function attachTouch(){
       const el=marker.getElement?marker.getElement():marker._path;
       if(!el){setTimeout(attachTouch,50);return;}
+      var _touchStartX=0,_touchStartY=0;
       el.addEventListener('touchstart',function(e){
         if(e.touches.length!==1)return;
         e.preventDefault();e.stopPropagation();
         touchMoved=false;touchDragging=false;
+        _touchStartX=e.touches[0].clientX;_touchStartY=e.touches[0].clientY;
         longPressTimer=setTimeout(function(){
           if(!touchMoved&&coords.length>3){
             coords.splice(idx,1);
@@ -7309,9 +7312,11 @@ function rebuildEditMarkers(){
       el.addEventListener('touchmove',function(e){
         if(!touchDragging||e.touches.length!==1)return;
         e.preventDefault();e.stopPropagation();
+        const touch=e.touches[0];
+        const dx=touch.clientX-_touchStartX,dy=touch.clientY-_touchStartY;
+        if(!touchMoved&&Math.sqrt(dx*dx+dy*dy)<10)return; // Toleranz: <10px = kein Drag
         touchMoved=true;
         if(longPressTimer){clearTimeout(longPressTimer);longPressTimer=null;}
-        const touch=e.touches[0];
         const rect=map.getContainer().getBoundingClientRect();
         const pt=L.point(touch.clientX-rect.left,touch.clientY-rect.top);
         const ll=map.containerPointToLatLng(pt);
