@@ -764,7 +764,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v167 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v168 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -1641,18 +1641,18 @@ function renderKampagnenDropdown() {
       curKampagne = selected;
       toast(`📋 ${selected.name}`);
       updateModeForKampagne();
-      await loadGebieteForKampagne(selected.id);
+      await loadGebieteForKampagne(selected.id, true);
     }
   };
 }
 
 // Gebiete kampagnenspezifisch aus DB laden und lokal überschreiben
-async function loadGebieteForKampagne(kampagneId) {
+async function loadGebieteForKampagne(kampagneId, autoNavigate) {
   // Bei lokaler Kampagne: Daten aus gebiete-Tabelle wurden schon beim Laden übernommen, nicht überschreiben
   if (curKampagne?._local) {
     console.log('loadGebieteForKampagne: Lokale Kampagne, überspringe gebiet_status Abfrage');
     closeDetail();
-    renderBreadcrumb(); renderList(); renderStats(); drawPolygons(); showDrawToolbar();
+    if(autoNavigate) vmNavigateToMyGebiete(); else { renderBreadcrumb(); renderList(); renderStats(); drawPolygons(); showDrawToolbar(); }
     return;
   }
   try {
@@ -1686,7 +1686,8 @@ async function loadGebieteForKampagne(kampagneId) {
     console.warn('loadGebieteForKampagne failed:', e);
   }
   closeDetail();
-  renderBreadcrumb(); renderList(); renderStats(); drawPolygons(); showDrawToolbar();
+  if(autoNavigate) vmNavigateToMyGebiete();
+  else { renderBreadcrumb(); renderList(); renderStats(); drawPolygons(); showDrawToolbar(); }
 }
 
 // ============================================================
@@ -3577,6 +3578,72 @@ function setRollenbasierterFilter() {
     }
   }
   // Admin: keine Einschränkung, bleibt auf 'alle'
+}
+
+// Nach Kampagnenwechsel: Breadcrumb-Filter auf die Gebiete des Users setzen
+// Findet Gebiete wo der aktuelle User Verteiler ist und navigiert dorthin
+function vmNavigateToMyGebiete(){
+  if(curRole==='admin') return; // Admin sieht alles, kein Auto-Filter
+  // Sammle alle Gebiete, wo der User Verteiler ist (in der aktuellen Kampagne)
+  const meineGebiete=[];
+  for(const [rKey,r] of Object.entries(regionen)){
+    for(const g of r.gebiete){
+      if(g.verteilerId===currentUser?.id){
+        meineGebiete.push({gebiet:g, regionKey:rKey});
+      }
+    }
+  }
+  if(meineGebiete.length===0){
+    // Keine eigenen Gebiete → Verwalter-Logik: zeige alles was zur Kampagne gehört
+    // Finde Gebiete mit Status != offen oder mit Verteiler (= aktiv in dieser Kampagne)
+    const aktiveGebiete=[];
+    for(const [rKey,r] of Object.entries(regionen)){
+      for(const g of r.gebiete){
+        if(g.verteilerId || g.status!=='offen'){
+          aktiveGebiete.push({regionKey:rKey});
+        }
+      }
+    }
+    if(aktiveGebiete.length===0) return; // Keine aktiven Gebiete, Filter nicht ändern
+    const regionKeys=[...new Set(aktiveGebiete.map(m=>m.regionKey))];
+    const gvKeys=[...new Set(regionKeys.map(rk=>regionen[rk]?.gebietsverband_id).filter(Boolean))];
+    const lkKeys=[...new Set(gvKeys.map(gk=>gebietsverbaende[gk]?.landkreis_id).filter(Boolean))];
+    if(lkKeys.length===1){
+      curLK=lkKeys[0]; curGV='alle'; curReg='alle';
+      if(gvKeys.length===1){curGV=gvKeys[0]; if(regionKeys.length===1) curReg=regionKeys[0];}
+    } else {
+      curLK='alle'; curGV='alle'; curReg='alle';
+    }
+  } else {
+    // Eigene Gebiete gefunden → dorthin navigieren
+    const regionKeys=[...new Set(meineGebiete.map(m=>m.regionKey))];
+    if(regionKeys.length===1){
+      // Alle in einer Region
+      const rKey=regionKeys[0];
+      curReg=rKey;
+      const reg=regionen[rKey];
+      if(reg){
+        curGV=reg.gebietsverband_id;
+        const gv=gebietsverbaende[reg.gebietsverband_id];
+        if(gv) curLK=gv.landkreis_id;
+      }
+    } else {
+      // Mehrere Regionen → auf GV-Ebene
+      const gvKeys=[...new Set(regionKeys.map(rk=>regionen[rk]?.gebietsverband_id).filter(Boolean))];
+      if(gvKeys.length===1){
+        curGV=gvKeys[0]; curReg='alle';
+        const gv=gebietsverbaende[gvKeys[0]];
+        if(gv) curLK=gv.landkreis_id;
+      } else {
+        // Mehrere GVs → auf LK-Ebene
+        const lkKeys=[...new Set(gvKeys.map(gk=>gebietsverbaende[gk]?.landkreis_id).filter(Boolean))];
+        curGV='alle'; curReg='alle';
+        if(lkKeys.length===1) curLK=lkKeys[0];
+        else curLK='alle';
+      }
+    }
+  }
+  renderBreadcrumb(); renderList(); renderStats(); drawPolygons(); showDrawToolbar();
 }
 
 async function showApp() {
