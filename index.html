@@ -113,7 +113,7 @@ header{min-height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturat
 .mob-nav-stats{display:flex;gap:8px;font-size:.68rem;font-weight:600}
 .mob-stat::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:currentColor;margin-right:3px;vertical-align:middle}
 .mob-acc{max-height:0;overflow:hidden;transition:max-height .25s ease;padding-top:0!important;padding-bottom:0!important}
-.mob-acc.mob-open{max-height:600px;padding-top:6px!important;padding-bottom:2px!important}
+.mob-acc.mob-open{max-height:45vh;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-top:6px!important;padding-bottom:2px!important}
 .mob-action-btn{width:44px;height:44px;border-radius:var(--r12);border:1px solid var(--sep);background:var(--surface);font-size:1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s}
 .mob-action-btn:active{background:var(--surface3)}
 
@@ -751,7 +751,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v162 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v163 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -5588,7 +5588,7 @@ function openDetail(id){
       if(u.rolle==='regionalverwalter') return (u.verwaltete_regionen||[]).includes(gebietRegion);
       if(u.rolle==='kreisverwalter') return true; // KVs immer anzeigen
       return false;
-    }).forEach(u => kontakte.push({ ...u, label: u.rolle==='verwalter'?'VV':u.rolle==='regionalverwalter'?'RV':'KV' }));
+    }).forEach(u => kontakte.push({ ...u, label: u.rolle==='verwalter'?'Verbandsverwalter':u.rolle==='regionalverwalter'?'Regionalverwalter':'Kreisverwalter' }));
   } else if (curRole === 'verwalter' || curRole === 'kreisverwalter' || curRole === 'regionalverwalter') {
     if (g.verteilerId) { const vt = allUsers.find(u => u.id === g.verteilerId); if (vt) kontakte.push({ ...vt, label: 'Verteiler' }); }
     allUsers.filter(u => u.rolle === 'admin').forEach(u => kontakte.push({ ...u, label: 'Admin' }));
@@ -5599,7 +5599,7 @@ function openDetail(id){
       if(u.rolle==='regionalverwalter') return (u.verwaltete_regionen||[]).includes(gebietRegion);
       if(u.rolle==='kreisverwalter') return true;
       return false;
-    }).forEach(u => kontakte.push({ ...u, label: u.rolle==='verwalter'?'VV':u.rolle==='regionalverwalter'?'RV':'KV' }));
+    }).forEach(u => kontakte.push({ ...u, label: u.rolle==='verwalter'?'Verbandsverwalter':u.rolle==='regionalverwalter'?'Regionalverwalter':'Kreisverwalter' }));
   }
   const darfHinweis = isAdmin || isM || isV;
   const hasGeo=(curRole==='admin'||(istVerwalterOderKreisverwalter()&&verwalterHatGebietZugriff(id))||(curRole==='verteiler'&&currentProfile?.kann_polygon_bearbeiten));
