@@ -751,7 +751,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v159 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v160 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -5970,11 +5970,9 @@ async function saveZ(id){
 async function _saveZKontaktCheck(userId, gebietId){
   const user = allUsers.find(u=>u.id===userId);
   if(!user) return;
+  // Nur bei Offline-Nutzern: die sehen die Zuweisung nie in der App
   if(user.is_offline){
     showKontaktSheet(userId, gebietId, 'zuweisung');
-  } else if(user.telefon){
-    const hasPush = await hatUserPush(userId);
-    if(!hasPush) showKontaktSheet(userId, gebietId, 'push_hint');
   }
 }
 
