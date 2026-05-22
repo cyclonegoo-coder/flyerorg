@@ -751,7 +751,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v160 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v162 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -1406,8 +1406,30 @@ async function doSetPassword() {
   showApp();
   toast('✅ Passwort erfolgreich gesetzt!');
 
+  // Willkommens-E-Mail mit App-Link senden (Nutzer kann bei Handywechsel danach suchen)
+  sendWelcomeEmail();
+
   // Push-Benachrichtigungen anbieten (nach kurzer Verzögerung)
   setTimeout(() => promptPushAfterSetup(), 1500);
+}
+
+// Willkommens-E-Mail mit App-URL an den Nutzer senden
+// Nutzt Supabase OTP-Mail als Träger – die E-Mail enthält den App-Link
+// Wichtig bei Handywechsel: Nutzer kann im Postfach nach "FlyerOrg" suchen
+async function sendWelcomeEmail(){
+  try{
+    const APP_URL = window.location.origin + window.location.pathname;
+    const email = currentUser?.email;
+    if(!email) return;
+    // OTP-Mail senden (erstellt keinen neuen User, sendet nur E-Mail mit App-Link)
+    await sb.auth.signInWithOtp({
+      email,
+      options: { shouldCreateUser: false, emailRedirectTo: APP_URL }
+    });
+    console.log('Welcome-Email (OTP) gesendet an', email);
+  }catch(e){
+    console.warn('Welcome-Email konnte nicht gesendet werden:', e);
+  }
 }
 
 async function loadProfile() {
@@ -5968,12 +5990,7 @@ async function saveZ(id){
 }
 // Nach Zuweisung: Kontakt-Sheet bei Offline oder fehlendem Push
 async function _saveZKontaktCheck(userId, gebietId){
-  const user = allUsers.find(u=>u.id===userId);
-  if(!user) return;
-  // Nur bei Offline-Nutzern: die sehen die Zuweisung nie in der App
-  if(user.is_offline){
-    showKontaktSheet(userId, gebietId, 'zuweisung');
-  }
+  // Kontakt-Sheet bei Zuweisung deaktiviert – Zuweisung ist immer abgesprochen
 }
 
 function getVerteilerFuerGebiet(gebietId){
@@ -6234,7 +6251,7 @@ function closeVerteilerPicker(){
 
 // ── Kontakt-Sheet: WhatsApp / Anruf nach Zuweisung/Anfrage ──
 function showKontaktSheet(userId, gebietId, context){
-  // context: 'zuweisung' | 'anfrage'
+  // context: 'zuweisung' | 'anfrage' | 'push_hint'
   const user = allUsers.find(u=>u.id===userId);
   if(!user) return;
   const tel = user.telefon||'';
@@ -6243,10 +6260,14 @@ function showKontaktSheet(userId, gebietId, context){
   const gName = g?.name||'Gebiet';
   const stueck = g?.stueckzahl||'';
   const kampName = curKampagne?.name||'';
+  const coords = kmlP[gebietId];
+  const hasPolygon = coords && coords.length >= 3;
   // WhatsApp-Text je nach Kontext
   let waText = '';
   if(user.is_offline){
-    waText = `Hallo ${user.name}, kannst du die Flyer für "${gName}"${stueck?' ('+stueck+' Stück)':''} verteilen?${kampName?' Kampagne: '+kampName:''} Melde dich kurz bei mir.`;
+    waText = `Hallo ${user.name}, kannst du die Flyer für "${gName}"${stueck?' ('+stueck+' Stück)':''} verteilen?${kampName?' Kampagne: '+kampName:''}`;
+    if(hasPolygon) waText += ' Die Gebietskarte schicke ich dir gleich mit.';
+    else waText += ' Melde dich kurz bei mir.';
   } else if(context==='zuweisung'){
     waText = `Hallo ${user.name}, ich habe dir das Gebiet "${gName}"${stueck?' ('+stueck+' Stück)':''} zugewiesen.${kampName?' Kampagne: '+kampName:''} Schau bitte in die App.`;
   } else {
@@ -6255,6 +6276,8 @@ function showKontaktSheet(userId, gebietId, context){
   const waNum = tel.replace(/[^0-9+]/g,'').replace(/^0/,'+49');
   const waUrl = `https://wa.me/${waNum}?text=${encodeURIComponent(waText)}`;
   const telUrl = `tel:${tel}`;
+  // PDF-Button nur wenn Polygon vorhanden und Anfrage/Offline-Kontext
+  const showPdfBtn = hasPolygon && (user.is_offline || context==='anfrage');
   // Sheet anzeigen
   const ov = document.createElement('div');
   ov.id='ksOverlay';
@@ -6267,6 +6290,12 @@ function showKontaktSheet(userId, gebietId, context){
     : context==='push_hint'
       ? '<div style="font-size:.72rem;color:var(--text3);margin-bottom:10px">ℹ️ Push-Benachrichtigungen nicht aktiv – ggf. direkt kontaktieren</div>'
       : '';
+  const pdfBtnHtml = showPdfBtn
+    ? `<div style="margin-bottom:10px">
+        <button id="ksPdfBtn" onclick="ksDownloadGebietPdf('${gebietId}')" style="width:100%;display:flex;align-items:center;justify-content:center;gap:6px;padding:10px;border-radius:var(--r8);background:var(--surface2);border:1.5px solid var(--sep);color:var(--text1);font-size:.78rem;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s">📄 Gebietskarte als PDF herunterladen</button>
+        <div style="font-size:.65rem;color:var(--text4);margin-top:4px;text-align:center">Erst herunterladen, dann in WhatsApp als Anhang mitsenden</div>
+      </div>`
+    : '';
   ov.innerHTML=`<div class="vp-panel" onclick="event.stopPropagation()" style="padding:18px 16px 28px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <span style="font-weight:600;font-size:.85rem">📞 ${user.name} kontaktieren</span>
@@ -6274,6 +6303,7 @@ function showKontaktSheet(userId, gebietId, context){
     </div>
     ${hinweis}
     <div style="background:var(--surface2);border-radius:var(--r8);padding:10px 12px;margin-bottom:12px;font-size:.75rem;color:var(--text2);line-height:1.5;white-space:pre-wrap">${waText}</div>
+    ${pdfBtnHtml}
     <div style="display:flex;gap:8px">
       <a href="${waUrl}" target="_blank" onclick="setTimeout(closeKontaktSheet,300)" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:12px;border-radius:var(--r8);background:#25D366;color:#fff;font-size:.82rem;font-weight:600;text-decoration:none">💬 WhatsApp</a>
       <a href="${telUrl}" onclick="setTimeout(closeKontaktSheet,300)" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:12px;border-radius:var(--r8);background:var(--blue);color:#fff;font-size:.82rem;font-weight:600;text-decoration:none">📞 Anrufen</a>
@@ -6281,6 +6311,54 @@ function showKontaktSheet(userId, gebietId, context){
   </div>`;
   document.body.appendChild(ov);
   setTimeout(()=>ov.querySelector('.vp-panel').classList.add('vp-open'),20);
+}
+// Gebietskarte-PDF aus dem Kontakt-Sheet herunterladen
+async function ksDownloadGebietPdf(gebietId){
+  const btn=document.getElementById('ksPdfBtn');
+  if(!btn)return;
+  const origText=btn.innerHTML;
+  btn.disabled=true;
+  btn.innerHTML='⏳ Karte wird erstellt...';
+  btn.style.opacity='0.6';
+  try{
+    const g=getG(gebietId);
+    const coords=kmlP[gebietId];
+    if(!g||!coords||coords.length<3){toast('⚠️ Kein Polygon vorhanden');return;}
+    const canvas=await renderGebietCanvas(coords);
+    const {jsPDF}=window.jspdf;
+    const imgRatio=canvas.width/canvas.height;
+    const orient=imgRatio>1?'landscape':'portrait';
+    const pdf=new jsPDF({orientation:orient,unit:'mm',format:'a4'});
+    const pageW=orient==='landscape'?297:210, pageH=orient==='landscape'?210:297;
+    const margin=4;
+    const usableW=pageW-margin*2, usableH=pageH-margin*2;
+    pdf.setFontSize(12);pdf.setFont(undefined,'bold');
+    pdf.text(g.name,margin,margin+4);
+    pdf.setFontSize(8);pdf.setFont(undefined,'normal');
+    const verteilerInfo=g.verteilerId?(getVerteilerName(g)||'Zugewiesen'):'Nicht zugewiesen';
+    let metaText=`Datum: ${new Date().toLocaleDateString('de-DE')} · Stückzahl: ${g.stueckzahl||0} · Verteiler: ${verteilerInfo}`;
+    if(g.hinweise?.length) metaText+=` · Hinweise: ${g.hinweise.map(h=>h.text||h).join(', ')}`;
+    pdf.text(metaText,margin,margin+8,{maxWidth:usableW});
+    const imgY=margin+12;
+    const availH=usableH-10;
+    let imgW=usableW, imgH=usableW/imgRatio;
+    if(imgH>availH){imgH=availH;imgW=availH*imgRatio;}
+    const imgX=margin+(usableW-imgW)/2;
+    pdf.addImage(canvas.toDataURL('image/jpeg',0.92),'JPEG',imgX,imgY,imgW,imgH);
+    pdf.save(`${g.name.replace(/[^a-zA-ZäöüÄÖÜß0-9 _-]/g,'')}.pdf`);
+    btn.innerHTML='✅ PDF heruntergeladen';
+    btn.style.background='rgba(52,199,89,.1)';
+    btn.style.borderColor='rgba(52,199,89,.5)';
+    btn.style.color='#1a8a3e';
+    btn.style.opacity='1';
+    toast('✅ Gebietskarte heruntergeladen – jetzt in WhatsApp anhängen');
+  }catch(err){
+    console.error('KS PDF error:',err);
+    toast('⚠️ PDF-Erstellung fehlgeschlagen');
+    btn.innerHTML=origText;
+    btn.disabled=false;
+    btn.style.opacity='1';
+  }
 }
 function closeKontaktSheet(){
   const ov=document.getElementById('ksOverlay');
