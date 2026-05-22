@@ -116,6 +116,19 @@ header{min-height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturat
 .mob-acc.mob-open{max-height:45vh;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-top:6px!important;padding-bottom:2px!important}
 .mob-action-btn{width:44px;height:44px;border-radius:var(--r12);border:1px solid var(--sep);background:var(--surface);font-size:1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s}
 .mob-action-btn:active{background:var(--surface3)}
+/* Verteilmodus */
+#vmOverlay{position:fixed;top:0;left:0;right:0;bottom:0;z-index:2500;display:none;flex-direction:column;background:var(--bg)}
+#vmOverlay.vm-active{display:flex}
+#vmBar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--surface);border-bottom:1px solid var(--sep);z-index:2510;flex-shrink:0}
+#vmBar .vm-title{flex:1;font-size:.82rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#vmBar .vm-info{font-size:.68rem;color:var(--text3)}
+#vmMap{flex:1;width:100%}
+#vmFab{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);z-index:2520;display:flex;gap:10px;align-items:center}
+.vm-fab-btn{width:56px;height:56px;border-radius:50%;border:none;font-size:1.3rem;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.2);display:flex;align-items:center;justify-content:center;transition:transform .15s,background .15s}
+.vm-fab-btn:active{transform:scale(.92)}
+.vm-fab-main{width:64px;height:64px;background:var(--red-afd);color:#fff;font-size:1.1rem;font-weight:700}
+#vmGeofenceWarn{position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:2530;background:var(--red);color:#fff;padding:8px 18px;border-radius:var(--r12);font-size:.78rem;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.25);display:none;white-space:nowrap}
+#vmTrackInfo{position:fixed;bottom:100px;left:50%;transform:translateX(-50%);z-index:2515;background:rgba(0,0,0,.7);color:#fff;padding:6px 14px;border-radius:var(--r12);font-size:.72rem;display:none;white-space:nowrap}
 
 /* ── BODY ── */
 .app-body{display:flex;flex:1;overflow:hidden}
@@ -751,7 +764,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v163 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v166 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -1015,12 +1028,10 @@ textarea{min-height:68px}
         </div>
       </div>
       <div>
-        <div style="font-size:.65rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:4px">App am Desktop nutzen</div>
-        <div style="display:flex;align-items:center;gap:6px">
-          <input id="profilAppUrl" type="text" readonly style="flex:1;font-size:.72rem;padding:5px 8px;border:1px solid var(--surface3);border-radius:var(--r8);background:var(--surface2);color:var(--text1);min-width:0" />
-          <button class="btn btn-g" onclick="copyAppUrl()" style="font-size:.72rem;padding:5px 10px;white-space:nowrap">📋 Kopieren</button>
-        </div>
-        <div style="font-size:.65rem;color:var(--text3);margin-top:3px">Diesen Link im Browser am PC öffnen, um die App dort zu nutzen.</div>
+        <div style="font-size:.65rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:4px">App-Link</div>
+        <input id="profilAppUrl" type="hidden" />
+        <button class="btn btn-g" onclick="copyAppUrl()" style="width:100%;font-size:.78rem;padding:8px 12px">📋 App-Link kopieren</button>
+        <div style="font-size:.65rem;color:var(--text3);margin-top:3px">Link speichern oder am PC im Browser öffnen, um die App dort zu nutzen.</div>
       </div>
     </div>
     <div id="profilStatus" style="font-size:.78rem;margin-top:8px;min-height:18px"></div>
@@ -2200,15 +2211,17 @@ function openProfilModal() {
   document.getElementById('profilModalOv').classList.add('open');
 }
 function copyAppUrl() {
-  const url = document.getElementById('profilAppUrl')?.value;
+  const url = document.getElementById('profilAppUrl')?.value || (window.location.origin + window.location.pathname);
   if (!url) return;
   navigator.clipboard.writeText(url).then(() => {
-    toast('✅ Link kopiert! Öffne ihn im Browser am PC.');
+    toast('✅ App-Link kopiert!');
   }).catch(() => {
     // Fallback für ältere Browser
-    const inp = document.getElementById('profilAppUrl');
-    inp.select(); document.execCommand('copy');
-    toast('✅ Link kopiert!');
+    const tmp = document.createElement('textarea');
+    tmp.value = url; tmp.style.cssText='position:fixed;opacity:0';
+    document.body.appendChild(tmp); tmp.select(); document.execCommand('copy');
+    document.body.removeChild(tmp);
+    toast('✅ App-Link kopiert!');
   });
 }
 function closeProfilModal() {
@@ -5718,6 +5731,15 @@ function openDetail(id){
       h+=`</div></div>`;
     }
 
+    // ===== MOBILE: Verteilmodus-Button =====
+    if(kmlP[g.id]&&kmlP[g.id].length>=3){
+      const vmIsOwner=g.verteilerId===currentUser?.id;
+      const vmLabel=vmIsOwner?'🚶 Verteilen starten':'🚶 Mit verteilen';
+      h+=`<div class="d-sec" style="padding:6px 12px">
+        <button onclick="startVerteilmodus('${g.id}')" style="width:100%;padding:12px;border-radius:var(--r12);border:none;background:linear-gradient(135deg,var(--blue),var(--blue-dk));color:#fff;font-size:.85rem;font-weight:700;cursor:pointer;box-shadow:0 3px 12px rgba(0,158,224,.3)">${vmLabel}</button>
+      </div>`;
+    }
+
     // ===== MOBILE: Quick-Actions (immer sichtbar am Ende) =====
     h+=`<div class="d-sec" style="padding:6px 12px"><div style="display:flex;gap:6px;justify-content:center">`;
     h+=`<button class="mob-action-btn" onclick="exportGebietPDF('${g.id}')" title="PDF exportieren">📄</button>`;
@@ -5849,6 +5871,13 @@ function openDetail(id){
     } else if(curRole==='verteiler'&&currentProfile?.kann_polygon_bearbeiten&&kmlP[g.id]){
       h+=`<div class="d-sec"><div class="sec-hd">Geodaten</div><div class="f-stack">
         <button class="btn btn-g" onclick="editPolygon('${g.id}')">✏️ Polygon bearbeiten</button>
+      </div></div>`;
+    }
+    if(kmlP[g.id]&&kmlP[g.id].length>=3){
+      const vmIsOwnerD=g.verteilerId===currentUser?.id;
+      const vmLabelD=vmIsOwnerD?'🚶 Verteilen starten':'🚶 Mit verteilen';
+      h+=`<div class="d-sec"><div class="f-stack">
+        <button class="btn btn-p" onclick="startVerteilmodus('${g.id}')" style="font-weight:700">${vmLabelD}</button>
       </div></div>`;
     }
     h+=`<div class="d-sec"><div class="f-stack">
@@ -8846,6 +8875,291 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(err => console.log('SW:', err));
   });
 }
+
+// ═══════════════════════════════════════════════
+// VERTEILMODUS – GPS-Tracking, Geofencing, Vollbild
+// ═══════════════════════════════════════════════
+let vmActive=false, vmGebietId=null, vmMap=null, vmWatchId=null;
+let vmTrackPoints=[], vmPolyCoords=[], vmPolygonLayer=null, vmTrackLayer=null;
+let vmMarker=null, vmAccuracyCircle=null, vmWakeLock=null;
+let vmStartTime=null, vmTimerInterval=null, vmPaused=false;
+let vmInsideGebiet=true, vmGeofenceTimeout=null;
+
+// Point-in-Polygon (Ray-Casting)
+function vmPointInPoly(lat,lng,poly){
+  let inside=false;
+  for(let i=0,j=poly.length-1;i<poly.length;j=i++){
+    const xi=poly[i][1],yi=poly[i][0],xj=poly[j][1],yj=poly[j][0];
+    if((yi>lng)!==(yj>lng)&&lat<(xj-xi)*(lng-yi)/(yj-yi)+xi) inside=!inside;
+  }
+  return inside;
+}
+
+function startVerteilmodus(gebietId){
+  const g=getG(gebietId);
+  if(!g){toast('⚠️ Gebiet nicht gefunden');return;}
+  const coords=kmlP[gebietId];
+  if(!coords||coords.length<3){toast('⚠️ Kein Polygon vorhanden');return;}
+  if(!navigator.geolocation){toast('⚠️ GPS nicht verfügbar');return;}
+
+  // Erst GPS-Berechtigung prüfen bevor wir den Modus starten
+  try{
+    const perm=await navigator.permissions.query({name:'geolocation'});
+    if(perm.state==='denied'){
+      toast('⚠️ Standortzugriff ist blockiert. Bitte in den Geräte-Einstellungen aktivieren.');
+      return;
+    }
+  }catch(e){/* permissions API nicht verfügbar, weiter versuchen */}
+
+  // Test-Position holen um GPS-Dialog auszulösen BEVOR der Modus startet
+  try{
+    await new Promise((resolve,reject)=>{
+      navigator.geolocation.getCurrentPosition(resolve,reject,{enableHighAccuracy:true,timeout:10000});
+    });
+  }catch(e){
+    if(e.code===1){
+      toast('⚠️ Standortzugriff verweigert. Bitte GPS aktivieren und Berechtigung erteilen.');
+      return;
+    }
+    // Timeout/nicht verfügbar → trotzdem starten, watchPosition versucht es weiter
+  }
+
+  vmActive=true; vmGebietId=gebietId;
+  vmPolyCoords=coords; vmTrackPoints=[]; vmPaused=false;
+  vmInsideGebiet=true;
+
+  // UI aktivieren
+  document.getElementById('vmOverlay').classList.add('vm-active');
+  const isOwner=g.verteilerId===currentUser?.id;
+  document.getElementById('vmTitle').textContent=isOwner?g.name:`${g.name} (mit verteilen)`;
+  document.getElementById('vmGeofenceWarn').style.display='none';
+  document.getElementById('vmTrackInfo').style.display='block';
+  document.getElementById('vmTrackInfo').textContent='GPS wird gesucht...';
+  document.getElementById('vmPauseBtn').textContent='⏸';
+
+  // Timer starten
+  vmStartTime=Date.now();
+  document.getElementById('vmTimer').textContent='00:00';
+  vmTimerInterval=setInterval(()=>{
+    if(vmPaused)return;
+    const s=Math.floor((Date.now()-vmStartTime)/1000);
+    const m=Math.floor(s/60); const ss=s%60;
+    document.getElementById('vmTimer').textContent=`${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+  },1000);
+
+  // Leaflet-Karte im Overlay initialisieren
+  if(!vmMap){
+    vmMap=L.map('vmMap',{zoomControl:false,attributionControl:false});
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(vmMap);
+  }
+  // Alte Layer entfernen
+  if(vmPolygonLayer){vmMap.removeLayer(vmPolygonLayer);vmPolygonLayer=null;}
+  if(vmTrackLayer){vmMap.removeLayer(vmTrackLayer);vmTrackLayer=null;}
+  if(vmMarker){vmMap.removeLayer(vmMarker);vmMarker=null;}
+  if(vmAccuracyCircle){vmMap.removeLayer(vmAccuracyCircle);vmAccuracyCircle=null;}
+
+  // Polygon zeichnen
+  const latlngs=coords.map(c=>[c[0],c[1]]);
+  vmPolygonLayer=L.polygon(latlngs,{color:'#222',weight:2.5,fillColor:'rgba(0,158,224,0.08)',fillOpacity:1}).addTo(vmMap);
+  vmMap.fitBounds(vmPolygonLayer.getBounds(),{padding:[30,30]});
+
+  // Track-Linie
+  vmTrackLayer=L.polyline([],{color:'var(--blue)',weight:3,opacity:0.8}).addTo(vmMap);
+
+  // GPS starten
+  vmWatchId=navigator.geolocation.watchPosition(vmOnPosition,vmOnGpsError,{
+    enableHighAccuracy:true, maximumAge:3000, timeout:15000
+  });
+
+  // Wake Lock (Bildschirm an halten)
+  vmRequestWakeLock();
+
+  // Detail-Panel schließen
+  closeDetail();
+}
+
+function vmOnPosition(pos){
+  if(!vmActive)return;
+  const lat=pos.coords.latitude, lng=pos.coords.longitude;
+  const acc=pos.coords.accuracy;
+
+  // Marker aktualisieren
+  if(!vmMarker){
+    vmMarker=L.circleMarker([lat,lng],{radius:8,fillColor:'#007AFF',fillOpacity:1,color:'#fff',weight:3}).addTo(vmMap);
+    vmAccuracyCircle=L.circle([lat,lng],{radius:acc,fillColor:'rgba(0,122,255,0.1)',fillOpacity:1,color:'rgba(0,122,255,0.3)',weight:1}).addTo(vmMap);
+    vmMap.setView([lat,lng],17);
+  } else {
+    vmMarker.setLatLng([lat,lng]);
+    vmAccuracyCircle.setLatLng([lat,lng]);
+    vmAccuracyCircle.setRadius(acc);
+  }
+
+  // Track aufzeichnen (nur wenn nicht pausiert und Genauigkeit < 50m)
+  if(!vmPaused && acc<50){
+    const t=Date.now();
+    vmTrackPoints.push({lat,lng,t,acc});
+    vmTrackLayer.addLatLng([lat,lng]);
+
+    // Track-Info aktualisieren
+    const dist=vmCalcDistance();
+    document.getElementById('vmTrackInfo').textContent=`📍 ${dist<1000?(Math.round(dist)+' m'):(dist/1000).toFixed(1)+' km'} · ±${Math.round(acc)}m`;
+    document.getElementById('vmTrackInfo').style.display='block';
+  }
+
+  // Geofencing
+  const inside=vmPointInPoly(lat,lng,vmPolyCoords);
+  if(!inside && vmInsideGebiet){
+    vmInsideGebiet=false;
+    document.getElementById('vmGeofenceWarn').style.display='block';
+    if(navigator.vibrate) navigator.vibrate([200,100,200]);
+    if(vmGeofenceTimeout) clearTimeout(vmGeofenceTimeout);
+    vmGeofenceTimeout=setTimeout(()=>{
+      document.getElementById('vmGeofenceWarn').style.display='none';
+    },8000);
+  } else if(inside && !vmInsideGebiet){
+    vmInsideGebiet=true;
+    document.getElementById('vmGeofenceWarn').style.display='none';
+    if(vmGeofenceTimeout){clearTimeout(vmGeofenceTimeout);vmGeofenceTimeout=null;}
+  }
+}
+
+function vmOnGpsError(err){
+  console.warn('VM GPS error:',err);
+  const info=document.getElementById('vmTrackInfo');
+  if(err.code===1){
+    // Berechtigung entzogen während Verteilmodus
+    info.textContent='⚠️ GPS blockiert – bitte Berechtigung erteilen';
+    info.style.display='block';
+    toast('⚠️ GPS-Zugriff wurde entzogen. Bitte in den Einstellungen aktivieren.');
+  } else if(err.code===2){
+    info.textContent='⚠️ GPS nicht verfügbar – Standort aktivieren';
+    info.style.display='block';
+  } else {
+    info.textContent='⚠️ GPS-Signal wird gesucht...';
+    info.style.display='block';
+  }
+}
+
+function vmCalcDistance(){
+  let dist=0;
+  for(let i=1;i<vmTrackPoints.length;i++){
+    const a=vmTrackPoints[i-1],b=vmTrackPoints[i];
+    const R=6371000;
+    const dLat=(b.lat-a.lat)*Math.PI/180;
+    const dLon=(b.lng-a.lng)*Math.PI/180;
+    const x=Math.sin(dLat/2)**2+Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLon/2)**2;
+    dist+=R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+  }
+  return dist;
+}
+
+function vmCenterOnMe(){
+  if(vmMarker && vmMap) vmMap.setView(vmMarker.getLatLng(),17);
+}
+
+function vmTogglePause(){
+  vmPaused=!vmPaused;
+  document.getElementById('vmPauseBtn').textContent=vmPaused?'▶':'⏸';
+  document.getElementById('vmPauseBtn').title=vmPaused?'Weiter':'Pause';
+  if(vmPaused) document.getElementById('vmTrackInfo').textContent='⏸ Pausiert';
+}
+
+async function vmFinish(){
+  if(!vmActive)return;
+  const g=getG(vmGebietId);
+  const dist=vmCalcDistance();
+  const distText=dist<1000?(Math.round(dist)+' m'):(dist/1000).toFixed(1)+' km';
+  const elapsed=Math.floor((Date.now()-vmStartTime)/1000);
+  const mm=Math.floor(elapsed/60), ss=elapsed%60;
+  const timeText=`${mm} Min ${ss} Sek`;
+
+  const isOwner=g?.verteilerId===currentUser?.id;
+  const confirmText=isOwner
+    ?`Gebiet „${g.name}" als verteilt markieren?\n\n📍 ${distText} gelaufen\n⏱ ${timeText}`
+    :`Verteilung für „${g?.name||'Gebiet'}" beenden?\n\n📍 ${distText} gelaufen\n⏱ ${timeText}`;
+  const ok=await appConfirm('✅ Verteilung beenden',confirmText,'Fertig','Weiter verteilen');
+  if(!ok)return;
+
+  // Status auf "fertig" setzen (nur wenn eigenes Gebiet)
+  if(isOwner && g) await setSt(vmGebietId,'fertig');
+
+  // Track in DB speichern (falls Punkte vorhanden)
+  if(vmTrackPoints.length>2){
+    try{
+      let kampId=curKampagne?.id||null;
+      if(!kampId||curKampagne?._local) kampId=await ensureKampagneInDB();
+      await sb.from('verteil_tracks').insert({
+        gebiet_id:vmGebietId,
+        user_id:currentUser.id,
+        kampagne_id:kampId,
+        started_at:new Date(vmStartTime).toISOString(),
+        ended_at:new Date().toISOString(),
+        track_points:vmTrackPoints,
+        distance_m:Math.round(dist),
+        duration_s:elapsed
+      });
+      console.log('Track gespeichert:',vmTrackPoints.length,'Punkte,',distText);
+    }catch(e){console.warn('Track speichern fehlgeschlagen:',e);}
+  }
+
+  stopVerteilmodus();
+  toast(`✅ ${distText} in ${timeText} verteilt!`);
+}
+
+function stopVerteilmodus(){
+  vmActive=false;
+  // GPS stoppen
+  if(vmWatchId!==null){navigator.geolocation.clearWatch(vmWatchId);vmWatchId=null;}
+  // Timer stoppen
+  if(vmTimerInterval){clearInterval(vmTimerInterval);vmTimerInterval=null;}
+  // Wake Lock freigeben
+  if(vmWakeLock){try{vmWakeLock.release();}catch(e){}vmWakeLock=null;}
+  // Geofence-Warnung ausblenden
+  document.getElementById('vmGeofenceWarn').style.display='none';
+  document.getElementById('vmTrackInfo').style.display='none';
+  // Overlay ausblenden
+  document.getElementById('vmOverlay').classList.remove('vm-active');
+  // Detail-Panel zurückholen
+  if(vmGebietId) openDetail(vmGebietId);
+  vmGebietId=null;
+}
+
+async function vmRequestWakeLock(){
+  try{
+    if('wakeLock' in navigator){
+      vmWakeLock=await navigator.wakeLock.request('screen');
+      vmWakeLock.addEventListener('release',()=>{vmWakeLock=null;});
+      console.log('Wake Lock aktiv');
+    }
+  }catch(e){console.warn('Wake Lock nicht verfügbar:',e);}
+}
+// Wake Lock bei Sichtbarkeit wiederherstellen
+document.addEventListener('visibilitychange',()=>{
+  if(vmActive && document.visibilityState==='visible' && !vmWakeLock) vmRequestWakeLock();
+});
+
+// PWA: Service Worker registrieren
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(err => console.log('SW:', err));
+  });
+}
 </script>
+<!-- Verteilmodus Overlay -->
+<div id="vmOverlay">
+  <div id="vmBar">
+    <button onclick="stopVerteilmodus()" style="background:none;border:none;font-size:1.1rem;cursor:pointer;padding:4px">✕</button>
+    <div class="vm-title" id="vmTitle">Verteilmodus</div>
+    <div class="vm-info" id="vmTimer">00:00</div>
+  </div>
+  <div id="vmMap"></div>
+  <div id="vmGeofenceWarn">⚠️ Du verlässt das Gebiet!</div>
+  <div id="vmTrackInfo"></div>
+  <div id="vmFab">
+    <button class="vm-fab-btn" onclick="vmCenterOnMe()" style="background:var(--surface);color:var(--blue)" title="Auf mich zentrieren">📍</button>
+    <button class="vm-fab-btn vm-fab-main" onclick="vmFinish()" title="Verteilt – fertig!">✓ Fertig</button>
+    <button class="vm-fab-btn" onclick="vmTogglePause()" id="vmPauseBtn" style="background:var(--surface);color:var(--orange)" title="Pause">⏸</button>
+  </div>
+</div>
 </body>
 </html>
