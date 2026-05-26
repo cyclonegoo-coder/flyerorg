@@ -764,7 +764,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v168 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v171 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -1093,7 +1093,12 @@ textarea{min-height:68px}
   <div class="modal" style="max-width:460px">
     <div class="m-handle"></div>
     <div class="m-title">📋 Kampagnen verwalten</div>
+    <div style="display:flex;gap:0;margin-bottom:8px;border-bottom:2px solid var(--sep)">
+      <button type="button" id="kampTabAktiv" onclick="switchKampTab('aktiv')" style="flex:1;padding:8px;font-size:.78rem;font-weight:600;background:none;border:none;border-bottom:2px solid var(--blue);margin-bottom:-2px;color:var(--blue);cursor:pointer">Aktiv</button>
+      <button type="button" id="kampTabArchiv" onclick="switchKampTab('archiv')" style="flex:1;padding:8px;font-size:.78rem;font-weight:600;background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;color:var(--text3);cursor:pointer">Archiv <span id="archivCount" style="font-size:.65rem;background:var(--text4);color:#fff;border-radius:8px;padding:0 5px;margin-left:3px"></span></button>
+    </div>
     <div id="kampagnenList" style="max-height:200px;overflow-y:auto;margin-bottom:12px"></div>
+    <div id="kampFormSection">
     <input type="hidden" id="editKampagneId" value="">
     <div id="kampFormTitle" style="font-size:.6rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:6px">Neue Kampagne</div>
     <div style="display:flex;flex-direction:column;gap:7px">
@@ -1134,6 +1139,7 @@ textarea{min-height:68px}
     <div class="m-actions" style="margin-top:12px">
       <button class="btn btn-g" onclick="resetKampForm();closeKampagnenModal()">Schließen</button>
       <button class="btn btn-p" id="kampSaveBtn" onclick="saveKampagne()">Erstellen</button>
+    </div>
     </div>
   </div>
 </div>
@@ -1527,24 +1533,34 @@ async function loadAllUsers() {
 let kampagnen = [];
 let curKampagne = null;
 
+let kampagnenArchiv=[];
 async function loadKampagnen() {
   try {
     const { data, error } = await sb.from('kampagnen').select('*').order('created_at', { ascending: false });
     if (!error && data && data.length > 0) {
-      kampagnen = data;
-      console.log('loadKampagnen: '+data.length+' Kampagne(n) geladen:', data.map(k=>k.name+' ('+k.id+')').join(', '));
+      kampagnen = data.filter(k=>!k.archiviert);
+      kampagnenArchiv = data.filter(k=>k.archiviert);
+      console.log('loadKampagnen: '+kampagnen.length+' aktiv, '+kampagnenArchiv.length+' archiviert');
     } else {
       kampagnen = [];
+      kampagnenArchiv = [];
       console.warn('loadKampagnen: Keine Kampagnen geladen', error ? JSON.stringify(error) : '');
     }
   } catch(e) {
     console.warn('loadKampagnen failed:', e);
     kampagnen = [];
+    kampagnenArchiv = [];
   }
-  // Sicherstellen dass eine Basis-Kampagne existiert
   await sichereBasisKampagne();
-  // Basis-Kampagne immer an erste Stelle
-  kampagnen.sort((a,b) => (b.ist_basis?1:0) - (a.ist_basis?1:0));
+  // Sortierung: Basis zuerst, dann nach Deadline (dringendste oben), ohne Deadline danach nach Name
+  kampagnen.sort((a,b) => {
+    if(a.ist_basis&&!b.ist_basis) return -1;
+    if(!a.ist_basis&&b.ist_basis) return 1;
+    const dlA=a.deadline?new Date(a.deadline).getTime():Infinity;
+    const dlB=b.deadline?new Date(b.deadline).getTime():Infinity;
+    if(dlA!==dlB) return dlA-dlB;
+    return (a.name||'').localeCompare(b.name||'');
+  });
   renderKampagnenDropdown();
 }
 
@@ -1615,9 +1631,11 @@ function renderKampagnenDropdown() {
 
   // Verteiler sehen keine Basis-Kampagne (Grundzuweisung)
   const sichtbar = (curRole==='verteiler') ? kampagnen.filter(k=>!k.ist_basis) : kampagnen;
-  sel.innerHTML = sichtbar.map((k, i) =>
-    `<option value="${k.id}" ${i === 0 ? 'selected' : ''}>${k.name}</option>`
-  ).join('');
+  const heute=new Date().toISOString().slice(0,10);
+  sel.innerHTML = sichtbar.map((k, i) => {
+    const abgelaufen=k.deadline&&k.deadline<heute&&!k.ist_basis;
+    return `<option value="${k.id}" ${i === 0 ? 'selected' : ''}>${k.name}${abgelaufen?' (abgelaufen)':''}</option>`;
+  }).join('');
   // Falls keine Kampagne sichtbar, trotzdem curKampagne auf Basis setzen
   if(sichtbar.length===0 && kampagnen.length>0){
     sel.innerHTML=`<option value="${kampagnen[0].id}" selected>${kampagnen[0].name}</option>`;
@@ -1688,26 +1706,95 @@ async function loadGebieteForKampagne(kampagneId, autoNavigate) {
   closeDetail();
   if(autoNavigate) vmNavigateToMyGebiete();
   else { renderBreadcrumb(); renderList(); renderStats(); drawPolygons(); showDrawToolbar(); }
+  updateMissingVerteilerBadge();
 }
 
 // ============================================================
 // KAMPAGNEN VERWALTEN MODAL (Admin + Verwalter)
 // ============================================================
+let kampModalTab='aktiv';
 function openKampagnenModal() {
-  renderKampagnenList();
+  kampModalTab='aktiv';
+  switchKampTab('aktiv');
   document.getElementById('kampagnenModalOv').classList.add('open');
 }
 function closeKampagnenModal() {
   document.getElementById('kampagnenModalOv').classList.remove('open');
 }
+function switchKampTab(tab){
+  kampModalTab=tab;
+  const btnA=document.getElementById('kampTabAktiv');
+  const btnB=document.getElementById('kampTabArchiv');
+  const formEl=document.getElementById('kampFormSection');
+  if(tab==='aktiv'){
+    btnA.style.borderBottomColor='var(--blue)';btnA.style.color='var(--blue)';
+    btnB.style.borderBottomColor='transparent';btnB.style.color='var(--text3)';
+    if(formEl)formEl.style.display='';
+  } else {
+    btnB.style.borderBottomColor='var(--blue)';btnB.style.color='var(--blue)';
+    btnA.style.borderBottomColor='transparent';btnA.style.color='var(--text3)';
+    if(formEl)formEl.style.display='none';
+  }
+  const badge=document.getElementById('archivCount');
+  if(badge)badge.textContent=kampagnenArchiv.length>0?kampagnenArchiv.length:'';
+  renderKampagnenList();
+}
 
+function kampagneMetaLine(k){
+  let zeitInfo='';
+  if(k.verteil_von||k.verteil_bis){
+    const von=k.verteil_von?new Date(k.verteil_von).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}):'?';
+    const bis=k.verteil_bis?new Date(k.verteil_bis).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}):'?';
+    zeitInfo+=`📅 ${von} – ${bis}`;
+  }
+  if(k.deadline){
+    const dl=new Date(k.deadline).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'2-digit'});
+    zeitInfo+=(zeitInfo?' · ':'')+`⏰ bis ${dl}`;
+  }
+  let bereichInfo='';
+  const bi=k.bereich_items||[];
+  if(bi.length>0)bereichInfo=`🗺 ${bi.length} Bereich${bi.length>1?'e':''}`;
+  else if(k.bereich_typ&&k.bereich_ids?.length>0){
+    const typLabel={landkreis:'LK',gebietsverband:'GV',region:'Reg.'}[k.bereich_typ]||k.bereich_typ;
+    bereichInfo=`🗺 ${typLabel}: ${k.bereich_ids.length}`;
+  }
+  const typLabels={flyer:'📦 Flyer',plakate:'📌 Plakate',beides:'📦📌 Beides'};
+  const typBadge=k.typ&&k.typ!=='flyer'?(typLabels[k.typ]||''):'';
+  if(k.abhaenge_deadline&&(k.typ==='plakate'||k.typ==='beides')){
+    const adl=new Date(k.abhaenge_deadline).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'2-digit'});
+    zeitInfo+=(zeitInfo?' · ':'')+`📌 abhängen bis ${adl}`;
+  }
+  return [k.ist_basis?'⭐ Basis':'',typBadge,zeitInfo,bereichInfo].filter(Boolean).join(' · ');
+}
 function renderKampagnenList() {
   const isAdmin = curRole === 'admin';
   const isKV = curRole === 'kreisverwalter';
   const verwalterRegionen = currentProfile?.verwaltete_regionen || [];
   const list = document.getElementById('kampagnenList');
+  const heute=new Date().toISOString().slice(0,10);
 
-  // Admin/Kreisverwalter sieht alle, Verwalter sieht globale + eigene
+  if(kampModalTab==='archiv'){
+    // Archiv-Ansicht
+    if(kampagnenArchiv.length===0){
+      list.innerHTML='<div style="color:var(--text3);font-size:.85rem;padding:16px 0;text-align:center">Keine archivierten Kampagnen.</div>';
+      return;
+    }
+    list.innerHTML=kampagnenArchiv.map(k=>{
+      const meta=kampagneMetaLine(k);
+      const kannReaktivieren=isAdmin||isKV||(String(k.erstellt_von)===String(currentUser?.id));
+      return `<div style="display:flex;align-items:center;gap:6px;padding:8px 0;border-bottom:1px solid var(--sep);opacity:.7">
+        <div style="flex:1">
+          <div style="font-size:.85rem;font-weight:500">${esc(k.name)}</div>
+          ${k.beschreibung?`<div style="font-size:.7rem;color:var(--text3)">${esc(k.beschreibung)}</div>`:''}
+          ${meta?`<div style="font-size:.65rem;color:var(--text4);margin-top:2px">${meta}</div>`:''}
+        </div>
+        ${kannReaktivieren?`<button class="btn btn-p" style="width:auto;padding:4px 10px;font-size:.7rem" onclick="archiveKampagne('${k.id}',false)" title="Wiederherstellen">♻️ Aktivieren</button>`:''}
+      </div>`;
+    }).join('');
+    return;
+  }
+
+  // Aktiv-Ansicht
   const sichtbar = (isAdmin || isKV) ? kampagnen : kampagnen.filter(k =>
     !k.region_keys || k.region_keys.length === 0 ||
     k.region_keys.some(r => verwalterRegionen.includes(r)) ||
@@ -1717,43 +1804,17 @@ function renderKampagnenList() {
   list.innerHTML = sichtbar.map(k => {
     const kannBearbeiten = isAdmin || isKV || (String(k.erstellt_von) === String(currentUser?.id));
     const kannLoeschen = kannBearbeiten && !k.ist_basis;
-    // Zeitraum-Info zusammenbauen
-    let zeitInfo = '';
-    if (k.verteil_von || k.verteil_bis) {
-      const von = k.verteil_von ? new Date(k.verteil_von).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}) : '?';
-      const bis = k.verteil_bis ? new Date(k.verteil_bis).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}) : '?';
-      zeitInfo += `📅 ${von} – ${bis}`;
-    }
-    if (k.deadline) {
-      const dl = new Date(k.deadline).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'2-digit'});
-      zeitInfo += (zeitInfo ? ' · ' : '') + `⏰ bis ${dl}`;
-    }
-    // Bereich-Info
-    let bereichInfo = '';
-    const bi = k.bereich_items || [];
-    if (bi.length > 0) {
-      bereichInfo = `🗺 ${bi.length} Bereich${bi.length>1?'e':''}`;
-    } else if (k.bereich_typ && k.bereich_ids?.length > 0) {
-      const typLabel = {landkreis:'LK',gebietsverband:'GV',region:'Reg.'}[k.bereich_typ] || k.bereich_typ;
-      bereichInfo = `🗺 ${typLabel}: ${k.bereich_ids.length}`;
-    }
-    // Typ-Badge
-    const typLabels = {flyer:'📦 Flyer', plakate:'📌 Plakate', beides:'📦📌 Beides'};
-    const typBadge = k.typ && k.typ !== 'flyer' ? (typLabels[k.typ]||'') : '';
-    // Abhänge-Deadline
-    if (k.abhaenge_deadline && (k.typ==='plakate'||k.typ==='beides')) {
-      const adl = new Date(k.abhaenge_deadline).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'2-digit'});
-      zeitInfo += (zeitInfo ? ' · ' : '') + `📌 abhängen bis ${adl}`;
-    }
-    const metaLine = [k.ist_basis?'⭐ Basis':'', typBadge, zeitInfo, bereichInfo].filter(Boolean).join(' · ');
-    return `<div style="display:flex;align-items:center;gap:6px;padding:8px 0;border-bottom:1px solid var(--sep)">
+    const abgelaufen=k.deadline&&k.deadline<heute&&!k.ist_basis;
+    const meta=kampagneMetaLine(k);
+    return `<div style="display:flex;align-items:center;gap:6px;padding:8px 0;border-bottom:1px solid var(--sep)${abgelaufen?';opacity:.55':''}">
       <div style="flex:1">
-        <div style="font-size:.85rem;font-weight:500">${k.name}</div>
-        ${k.beschreibung ? `<div style="font-size:.7rem;color:var(--text3)">${k.beschreibung}</div>` : ''}
-        ${metaLine ? `<div style="font-size:.65rem;color:var(--text4);margin-top:2px">${metaLine}</div>` : ''}
+        <div style="font-size:.85rem;font-weight:500">${esc(k.name)}${abgelaufen?' <span style="font-size:.65rem;color:var(--orange);font-weight:600">(abgelaufen)</span>':''}</div>
+        ${k.beschreibung ? `<div style="font-size:.7rem;color:var(--text3)">${esc(k.beschreibung)}</div>` : ''}
+        ${meta ? `<div style="font-size:.65rem;color:var(--text4);margin-top:2px">${meta}</div>` : ''}
       </div>
       ${kannBearbeiten ? `<button style="background:none;border:none;cursor:pointer;font-size:.85rem;padding:2px" onclick="openKampagneNotify('${k.id}')" title="Nutzer benachrichtigen">📣</button>` : ''}
       ${kannBearbeiten ? `<button style="background:none;border:none;cursor:pointer;font-size:.85rem;padding:2px" onclick="editKampagne('${k.id}')" title="Bearbeiten">✏️</button>` : ''}
+      ${kannBearbeiten&&!k.ist_basis ? `<button style="background:none;border:none;cursor:pointer;font-size:.75rem;padding:2px" onclick="archiveKampagne('${k.id}',true)" title="Archivieren">📥</button>` : ''}
       ${kannLoeschen ? `<button class="btn btn-d" style="width:auto;padding:4px 8px;font-size:.7rem" onclick="deleteKampagne('${k.id}')">🗑</button>` : ''}
     </div>`;
   }).join('') || '<div style="color:var(--text3);font-size:.85rem;padding:8px 0">Keine Kampagnen vorhanden.</div>';
@@ -1875,6 +1936,45 @@ function toggleAbhaengeDeadline() {
   const typ = document.getElementById('newKampTyp').value;
   const row = document.getElementById('abhaengeDeadlineRow');
   row.style.display = (typ === 'plakate' || typ === 'beides') ? 'flex' : 'none';
+}
+async function archiveKampagne(id, archivieren){
+  const k=[...kampagnen,...kampagnenArchiv].find(k=>String(k.id)===String(id));
+  if(!k)return;
+  if(archivieren&&!await appConfirm('Kampagne archivieren',`„${k.name}" ins Archiv verschieben? Sie verschwindet aus dem Auswahl-Dropdown, kann aber jederzeit reaktiviert werden.`,'Archivieren','Abbrechen'))return;
+  try{
+    const {error}=await sb.from('kampagnen').update({archiviert:archivieren}).eq('id',id);
+    if(error)throw error;
+    k.archiviert=archivieren;
+    if(archivieren){
+      kampagnen=kampagnen.filter(x=>String(x.id)!==String(id));
+      kampagnenArchiv.push(k);
+      // Falls archivierte Kampagne gerade aktiv war, auf erste aktive wechseln
+      if(curKampagne&&String(curKampagne.id)===String(id)){
+        curKampagne=kampagnen[0]||null;
+        if(curKampagne)await loadGebieteForKampagne(curKampagne.id);
+      }
+    } else {
+      kampagnenArchiv=kampagnenArchiv.filter(x=>String(x.id)!==String(id));
+      kampagnen.push(k);
+      // Neu sortieren
+      kampagnen.sort((a,b)=>{
+        if(a.ist_basis&&!b.ist_basis)return -1;
+        if(!a.ist_basis&&b.ist_basis)return 1;
+        const dlA=a.deadline?new Date(a.deadline).getTime():Infinity;
+        const dlB=b.deadline?new Date(b.deadline).getTime():Infinity;
+        if(dlA!==dlB)return dlA-dlB;
+        return(a.name||'').localeCompare(b.name||'');
+      });
+    }
+    renderKampagnenList();
+    renderKampagnenDropdown();
+    const badge=document.getElementById('archivCount');
+    if(badge)badge.textContent=kampagnenArchiv.length>0?kampagnenArchiv.length:'';
+    toast(archivieren?`📥 „${k.name}" archiviert`:`♻️ „${k.name}" reaktiviert`);
+  }catch(e){
+    console.warn('archiveKampagne failed:',e);
+    toast('⚠️ Fehler beim Archivieren');
+  }
 }
 
 function editKampagne(id) {
@@ -2017,15 +2117,15 @@ async function saveKampagne() {
 }
 
 async function deleteKampagne(id) {
-  const k = kampagnen.find(k => String(k.id) === String(id));
+  const k = [...kampagnen,...kampagnenArchiv].find(k => String(k.id) === String(id));
   if (k?.ist_basis) { toast('⚠️ Die Basis-Kampagne kann nicht gelöscht werden'); return; }
   if(!await appConfirm('Kampagne löschen','Kampagne wirklich löschen? Alle zugehörigen Status-Daten gehen verloren.','Löschen','Abbrechen'))return;
   try {
-    // gebiet_status löscht sich via ON DELETE CASCADE automatisch mit
     await sb.from('kampagnen').delete().eq('id', id);
   } catch(e) { console.warn('DB delete kampagne failed:', e); }
 
   kampagnen = kampagnen.filter(k => String(k.id) !== String(id));
+  kampagnenArchiv = kampagnenArchiv.filter(k => String(k.id) !== String(id));
   if (curKampagne && String(curKampagne.id) === String(id)) {
     curKampagne = kampagnen[0] || null;
   }
@@ -3583,66 +3683,49 @@ function setRollenbasierterFilter() {
 // Nach Kampagnenwechsel: Breadcrumb-Filter auf die Gebiete des Users setzen
 // Findet Gebiete wo der aktuelle User Verteiler ist und navigiert dorthin
 function vmNavigateToMyGebiete(){
-  if(curRole==='admin') return; // Admin sieht alles, kein Auto-Filter
-  // Sammle alle Gebiete, wo der User Verteiler ist (in der aktuellen Kampagne)
-  const meineGebiete=[];
+  // Finde aktive Gebiete in der aktuellen Kampagne (mit Verteiler oder Status != offen)
+  const aktiveGebiete=[];
   for(const [rKey,r] of Object.entries(regionen)){
     for(const g of r.gebiete){
-      if(g.verteilerId===currentUser?.id){
-        meineGebiete.push({gebiet:g, regionKey:rKey});
+      if(g.verteilerId || g.status!=='offen'){
+        aktiveGebiete.push({gebiet:g, regionKey:rKey});
       }
     }
   }
-  if(meineGebiete.length===0){
-    // Keine eigenen Gebiete → Verwalter-Logik: zeige alles was zur Kampagne gehört
-    // Finde Gebiete mit Status != offen oder mit Verteiler (= aktiv in dieser Kampagne)
-    const aktiveGebiete=[];
-    for(const [rKey,r] of Object.entries(regionen)){
-      for(const g of r.gebiete){
-        if(g.verteilerId || g.status!=='offen'){
-          aktiveGebiete.push({regionKey:rKey});
-        }
-      }
-    }
-    if(aktiveGebiete.length===0) return; // Keine aktiven Gebiete, Filter nicht ändern
-    const regionKeys=[...new Set(aktiveGebiete.map(m=>m.regionKey))];
-    const gvKeys=[...new Set(regionKeys.map(rk=>regionen[rk]?.gebietsverband_id).filter(Boolean))];
-    const lkKeys=[...new Set(gvKeys.map(gk=>gebietsverbaende[gk]?.landkreis_id).filter(Boolean))];
-    if(lkKeys.length===1){
-      curLK=lkKeys[0]; curGV='alle'; curReg='alle';
-      if(gvKeys.length===1){curGV=gvKeys[0]; if(regionKeys.length===1) curReg=regionKeys[0];}
-    } else {
-      curLK='alle'; curGV='alle'; curReg='alle';
-    }
+  // Eigene Gebiete bevorzugen (wenn kein Admin/Verwalter)
+  const meineGebiete=aktiveGebiete.filter(a=>a.gebiet.verteilerId===currentUser?.id);
+  const zielGebiete=meineGebiete.length>0?meineGebiete:aktiveGebiete;
+
+  if(zielGebiete.length===0){
+    // Keine aktiven Gebiete in dieser Kampagne → Filter nicht ändern
+    renderBreadcrumb(); renderList(); renderStats(); drawPolygons(); showDrawToolbar();
+    return;
+  }
+
+  // Navigation berechnen basierend auf den Ziel-Gebieten
+  const regionKeys=[...new Set(zielGebiete.map(m=>m.regionKey))];
+  const gvKeys=[...new Set(regionKeys.map(rk=>regionen[rk]?.gebietsverband_id).filter(Boolean))];
+  const lkKeys=[...new Set(gvKeys.map(gk=>gebietsverbaende[gk]?.landkreis_id).filter(Boolean))];
+
+  if(regionKeys.length===1){
+    // Alles in einer Region → direkt dorthin
+    curReg=regionKeys[0];
+    curGV=regionen[regionKeys[0]]?.gebietsverband_id||'alle';
+    const gv=gebietsverbaende[curGV];
+    curLK=gv?.landkreis_id||'alle';
+  } else if(gvKeys.length===1){
+    // Eine GV, mehrere Regionen
+    curGV=gvKeys[0]; curReg='alle';
+    const gv=gebietsverbaende[gvKeys[0]];
+    curLK=gv?.landkreis_id||'alle';
+  } else if(lkKeys.length===1){
+    // Ein LK, mehrere GVs
+    curLK=lkKeys[0]; curGV='alle'; curReg='alle';
   } else {
-    // Eigene Gebiete gefunden → dorthin navigieren
-    const regionKeys=[...new Set(meineGebiete.map(m=>m.regionKey))];
-    if(regionKeys.length===1){
-      // Alle in einer Region
-      const rKey=regionKeys[0];
-      curReg=rKey;
-      const reg=regionen[rKey];
-      if(reg){
-        curGV=reg.gebietsverband_id;
-        const gv=gebietsverbaende[reg.gebietsverband_id];
-        if(gv) curLK=gv.landkreis_id;
-      }
-    } else {
-      // Mehrere Regionen → auf GV-Ebene
-      const gvKeys=[...new Set(regionKeys.map(rk=>regionen[rk]?.gebietsverband_id).filter(Boolean))];
-      if(gvKeys.length===1){
-        curGV=gvKeys[0]; curReg='alle';
-        const gv=gebietsverbaende[gvKeys[0]];
-        if(gv) curLK=gv.landkreis_id;
-      } else {
-        // Mehrere GVs → auf LK-Ebene
-        const lkKeys=[...new Set(gvKeys.map(gk=>gebietsverbaende[gk]?.landkreis_id).filter(Boolean))];
-        curGV='alle'; curReg='alle';
-        if(lkKeys.length===1) curLK=lkKeys[0];
-        else curLK='alle';
-      }
-    }
+    // Alles offen
+    curLK='alle'; curGV='alle'; curReg='alle';
   }
+
   renderBreadcrumb(); renderList(); renderStats(); drawPolygons(); showDrawToolbar();
 }
 
@@ -4956,15 +5039,16 @@ async function notifyManagers(gebietId, betreff, inhalt){
 }
 
 // ============================================================
-// VERTEILER FEHLEN – Badge + Navigation
+// VERTEILER FEHLEN – Kampagnenbezogen + Listen-Modal
 // ============================================================
-function countMissingVerteiler(){
+function getMissingVerteilerList(){
+  // Sammle alle Gebiete ohne Verteiler, gefiltert nach aktueller Kampagne + Rolle
   const rolle=currentProfile?.rolle||'verteiler';
-  let count=0;
-  for(const [,r] of Object.entries(regionen)){
+  const missing=[];
+  const bi=curKampagne&&!curKampagne.ist_basis?(curKampagne.bereich_items||[]):[];
+  for(const [rKey,r] of Object.entries(regionen)){
     // Sichtbarkeitsprüfung je nach Rolle
     if(rolle==='verwalter'){
-      // VV: über verwaltete_gebietsverbaende (ganzer GV)
       const verwGV=currentProfile?.verwaltete_gebietsverbaende||[];
       if(verwGV.length>0){if(!verwGV.includes(r.gebietsverband_id))continue;}
       else{const verwReg=currentProfile?.verwaltete_regionen||[];if(!verwReg.includes(r.id))continue;}
@@ -4976,73 +5060,109 @@ function countMissingVerteiler(){
       const gv=gebietsverbaende[r.gebietsverband_id];
       if(!gv||gv.landkreis_id!==kvLK)continue;
     }
-    // admin sieht alles
+    // Kampagnen-Bereichsfilter
+    if(bi.length>0){
+      const gvId=r.gebietsverband_id;
+      const lkId=gebietsverbaende[gvId]?.landkreis_id;
+      let inBereich=false;
+      for(const b of bi){
+        if(b.typ==='region'&&b.id===rKey){inBereich=true;break;}
+        if(b.typ==='gebietsverband'&&b.id===gvId){inBereich=true;break;}
+        if(b.typ==='landkreis'&&b.id===lkId){inBereich=true;break;}
+      }
+      if(!inBereich)continue;
+    }
     for(const g of r.gebiete){
-      if(!g.verteilerId && kmlP[g.id] && kmlP[g.id].length>=3) count++;
+      if(!g.verteilerId && kmlP[g.id] && kmlP[g.id].length>=3){
+        const gvObj=gebietsverbaende[r.gebietsverband_id];
+        const lkObj=gvObj?landkreise[gvObj.landkreis_id]:null;
+        missing.push({
+          gebietId:g.id, gebietName:g.name||g.id,
+          regionId:rKey, regionName:r.name||rKey,
+          gvId:r.gebietsverband_id, gvName:gvObj?.name||r.gebietsverband_id,
+          lkName:lkObj?.name||''
+        });
+      }
     }
   }
-  return count;
+  return missing;
 }
+function countMissingVerteiler(){ return getMissingVerteilerList().length; }
 function updateMissingVerteilerBadge(){
   const btn=document.getElementById('missingVerteilerBtn');
   const badge=document.getElementById('missingVerteilerBadge');
   if(!btn||!badge)return;
   const n=countMissingVerteiler();
-  if(n>0){
-    badge.textContent=n;
-    badge.style.display='flex';
-  } else {
-    badge.style.display='none';
-  }
+  if(n>0){badge.textContent=n;badge.style.display='flex';}
+  else{badge.style.display='none';}
 }
 function jumpToMissingVerteiler(){
-  // Auf LK-Ebene navigieren (oder GV je nach Rolle) und Gebiete ohne Verteiler hervorheben
-  const rolle=currentProfile?.rolle||'verteiler';
-  if(rolle==='verwalter'){
-    // VV: über verwaltete_gebietsverbaende
-    const verwGV=currentProfile?.verwaltete_gebietsverbaende||[];
-    if(verwGV.length>0&&gebietsverbaende[verwGV[0]]){
-      curGV=verwGV[0];
-      const gv=gebietsverbaende[verwGV[0]];
-      if(gv)curLK=gv.landkreis_id;
-    } else {
-      const verwReg=currentProfile?.verwaltete_regionen||[];
-      if(verwReg.length>0){const reg=regionen[verwReg[0]];if(reg){curGV=reg.gebietsverband_id;const gv=gebietsverbaende[reg.gebietsverband_id];if(gv)curLK=gv.landkreis_id;}}
-    }
-    curReg='alle';
-  } else if(rolle==='regionalverwalter'){
-    const verwReg=currentProfile?.verwaltete_regionen||[];
-    if(verwReg.length>0){
-      const reg=regionen[verwReg[0]];
-      if(reg){curGV=reg.gebietsverband_id;const gv=gebietsverbaende[reg.gebietsverband_id];if(gv)curLK=gv.landkreis_id;}
-    }
-    curReg=verwReg.length===1?verwReg[0]:'alle';
-  } else if(rolle==='kreisverwalter'){
-    curLK=currentProfile?.verwalteter_landkreis||'alle';
-    curGV='alle'; curReg='alle';
-  } else {
-    // Admin → auf 'alle' bleiben
-    curLK='alle'; curGV='alle'; curReg='alle';
+  const missing=getMissingVerteilerList();
+  const kampName=curKampagne?.name||'Basis';
+  if(missing.length===0){toast('Alle Gebiete haben Verteiler zugewiesen!','ok');return;}
+  // Nach GV gruppieren
+  const grouped={};
+  for(const m of missing){
+    const key=m.gvId;
+    if(!grouped[key])grouped[key]={gvName:m.gvName,lkName:m.lkName,regionen:{}};
+    if(!grouped[key].regionen[m.regionId])grouped[key].regionen[m.regionId]={regionName:m.regionName,gebiete:[]};
+    grouped[key].regionen[m.regionId].gebiete.push(m);
   }
-  selId=null; closeDetail();
-  renderBreadcrumb(); renderList(); renderStats(); drawPolygons(); showDrawToolbar();
-  // Gebiete ohne Verteiler orange hervorheben auf der Karte
-  if(typeof polyLayer!=='undefined' && polyLayer){
-    polyLayer.eachLayer(layer=>{
-      const gId=layer.options?.gebietId;
-      if(!gId)return;
-      // Prüfe ob Gebiet keinen Verteiler hat
-      let hatVerteiler=false;
-      for(const r of Object.values(regionen)){
-        const g=r.gebiete.find(ge=>ge.id===gId);
-        if(g){hatVerteiler=!!g.verteilerId;break;}
+  // HTML bauen
+  let html=`<div class="m-handle"></div>
+<div class="m-title">🆘 Verteiler fehlen</div>
+<div style="font-size:.8rem;color:var(--text3);margin:-6px 0 10px">Kampagne: <b>${esc(kampName)}</b> · ${missing.length} Gebiet${missing.length!==1?'e':''} ohne Verteiler</div>
+<div style="max-height:60vh;overflow-y:auto;-webkit-overflow-scrolling:touch;margin:0 -18px;padding:0 18px">`;
+  for(const [gvId,gvData] of Object.entries(grouped)){
+    const gvCount=Object.values(gvData.regionen).reduce((s,r)=>s+r.gebiete.length,0);
+    html+=`<div style="margin-bottom:12px">
+<div style="font-weight:600;font-size:.85rem;color:var(--text1);padding:6px 0;border-bottom:1px solid var(--border)">${esc(gvData.gvName)}${gvData.lkName?' · '+esc(gvData.lkName):''} <span style="color:var(--orange);font-weight:700">(${gvCount})</span></div>`;
+    for(const [rId,rData] of Object.entries(gvData.regionen)){
+      html+=`<div style="padding:4px 0 2px 8px;font-size:.78rem;color:var(--text2);font-weight:600">${esc(rData.regionName)}</div>`;
+      for(const g of rData.gebiete){
+        html+=`<div onclick="closeMissingModal();navigateToGebiet('${g.gebietId}')" style="padding:6px 8px 6px 16px;font-size:.78rem;color:var(--text2);cursor:pointer;border-radius:var(--r8);transition:background .15s" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background='transparent'">📍 ${esc(g.gebietName)}</div>`;
       }
-      if(!hatVerteiler){
-        layer.setStyle({fillColor:'#ff6600',fillOpacity:0.5,weight:3,color:'#ff6600'});
-      }
-    });
+    }
+    html+=`</div>`;
   }
-  toast('Gebiete ohne Verteiler sind orange hervorgehoben','info');
+  html+=`</div>
+<div class="m-actions" style="margin-top:10px">
+<button class="btn btn-g" onclick="closeMissingModal()">Schließen</button>
+</div>`;
+  // Modal anzeigen
+  let ov=document.getElementById('missingModalOv');
+  if(!ov){
+    ov=document.createElement('div');
+    ov.id='missingModalOv';
+    ov.className='modal-ov';
+    ov.onclick=function(e){if(e.target===this)closeMissingModal();};
+    const box=document.createElement('div');
+    box.className='modal';
+    box.id='missingModalBox';
+    ov.appendChild(box);
+    document.body.appendChild(ov);
+  }
+  document.getElementById('missingModalBox').innerHTML=html;
+  ov.classList.add('open');
+}
+function closeMissingModal(){
+  const ov=document.getElementById('missingModalOv');
+  if(ov)ov.classList.remove('open');
+}
+function navigateToGebiet(gebietId){
+  // Finde Region + GV + LK des Gebiets und navigiere dorthin
+  for(const [rKey,r] of Object.entries(regionen)){
+    const g=r.gebiete.find(ge=>ge.id===gebietId);
+    if(!g)continue;
+    const gvId=r.gebietsverband_id;
+    const gv=gebietsverbaende[gvId];
+    if(gv)curLK=gv.landkreis_id;
+    curGV=gvId; curReg=rKey;
+    selId=gebietId;
+    renderBreadcrumb(); renderList(); renderStats(); drawPolygons(); showDrawToolbar();
+    openDetail(gebietId);
+    return;
+  }
 }
 
 // ============================================================
@@ -7665,6 +7785,7 @@ function setDrawInfo(msg){
 }
 
 function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2800)}
+function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
 
 // ── appChoice: Dialog mit mehreren Optionen + Abbrechen ──
 // options = [{label, value, style?}] → gibt value zurück oder null bei Abbrechen
