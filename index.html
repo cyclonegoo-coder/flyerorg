@@ -781,7 +781,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v173 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v174 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -5903,13 +5903,15 @@ async function msBulkPdf(){
       if(!first)pdf.addPage();first=false;
       const coords=kmlP[g.id];
       if(coords&&coords.length>=3){
-        const canvas=await renderGebietCanvas(g.id,g.name,g.stueckzahl);
+        const canvas=await renderGebietCanvas(coords);
         if(canvas){
           const imgData=canvas.toDataURL('image/jpeg',0.85);
           const pw=pdf.internal.pageSize.getWidth()-20;
-          const ph=pdf.internal.pageSize.getHeight()-20;
+          const ph=pdf.internal.pageSize.getHeight()-30;
+          pdf.setFontSize(13);pdf.setFont(undefined,'bold');
+          pdf.text(`${g.name||g.id}  ·  📦 ${g.stueckzahl}  ·  ${sl(g.status)}`,pdf.internal.pageSize.getWidth()/2,12,{align:'center'});
           const ratio=Math.min(pw/canvas.width,ph/canvas.height);
-          pdf.addImage(imgData,'JPEG',10,10,canvas.width*ratio,canvas.height*ratio);
+          pdf.addImage(imgData,'JPEG',10,18,canvas.width*ratio,canvas.height*ratio);
         }
       } else {
         pdf.setFontSize(16);
