@@ -781,7 +781,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v172 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v173 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -4830,11 +4830,16 @@ function drawPolygons(){
     const poly=L.polygon(c,{color:col.s,fillColor:col.f,fillOpacity:.35,weight:2}).addTo(map);
     poly.bindPopup(`<div class="popup-name">${g.name}</div><div class="popup-meta">📦 ${g.stueckzahl} · ${sl(g.status)}</div>`);
     let _msPolyTimer=null;
-    poly.on('pointerdown',()=>{
+    poly.on('mousedown',()=>{
       if(msActive)return;
       _msPolyTimer=setTimeout(()=>{_msPolyTimer=null;msStart(g.id);if(navigator.vibrate)navigator.vibrate(50);},500);
     });
-    poly.on('pointerup',()=>{if(_msPolyTimer){clearTimeout(_msPolyTimer);_msPolyTimer=null;}});
+    poly.on('mouseup',()=>{if(_msPolyTimer){clearTimeout(_msPolyTimer);_msPolyTimer=null;}});
+    poly.on('contextmenu',(e)=>{
+      L.DomEvent.preventDefault(e);L.DomEvent.stopPropagation(e);
+      if(!msActive){msStart(g.id);if(navigator.vibrate)navigator.vibrate(50);}
+      else msToggle(g.id);
+    });
     poly.on('click',(e)=>{
       if(_msPolyTimer){clearTimeout(_msPolyTimer);_msPolyTimer=null;}
       if(curMode==='plakate'){
