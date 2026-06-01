@@ -781,7 +781,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v174 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v175 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -4829,19 +4829,20 @@ function drawPolygons(){
     const col=getGebietFarbe(g);
     const poly=L.polygon(c,{color:col.s,fillColor:col.f,fillOpacity:.35,weight:2}).addTo(map);
     poly.bindPopup(`<div class="popup-name">${g.name}</div><div class="popup-meta">📦 ${g.stueckzahl} · ${sl(g.status)}</div>`);
-    let _msPolyTimer=null;
+    let _msPolyTimer=null,_msJustStarted=false;
     poly.on('mousedown',()=>{
       if(msActive)return;
-      _msPolyTimer=setTimeout(()=>{_msPolyTimer=null;msStart(g.id);if(navigator.vibrate)navigator.vibrate(50);},500);
+      _msPolyTimer=setTimeout(()=>{_msPolyTimer=null;_msJustStarted=true;msStart(g.id);if(navigator.vibrate)navigator.vibrate(50);setTimeout(()=>{_msJustStarted=false;},300);},500);
     });
     poly.on('mouseup',()=>{if(_msPolyTimer){clearTimeout(_msPolyTimer);_msPolyTimer=null;}});
     poly.on('contextmenu',(e)=>{
       L.DomEvent.preventDefault(e);L.DomEvent.stopPropagation(e);
-      if(!msActive){msStart(g.id);if(navigator.vibrate)navigator.vibrate(50);}
+      if(!msActive){_msJustStarted=true;msStart(g.id);if(navigator.vibrate)navigator.vibrate(50);setTimeout(()=>{_msJustStarted=false;},300);}
       else msToggle(g.id);
     });
     poly.on('click',(e)=>{
       if(_msPolyTimer){clearTimeout(_msPolyTimer);_msPolyTimer=null;}
+      if(_msJustStarted)return;
       if(curMode==='plakate'){
         map.fire('click',{latlng:e.latlng,layerPoint:e.layerPoint,containerPoint:e.containerPoint});
         return;
@@ -5730,20 +5731,23 @@ function renderGCard(g){
 // ============================================================
 // MEHRFACHAUSWAHL (Multi-Select)
 // ============================================================
-let msActive=false, msSelected=[], msLongTimer=null;
+let msActive=false, msSelected=[], msLongTimer=null, msIgnoreClick=false;
 
 function msLongStart(gId,e){
-  if(msActive)return; // im MS-Modus kein Long-Press nötig
+  if(msActive)return;
   msLongTimer=setTimeout(()=>{
     msLongTimer=null;
+    msIgnoreClick=true;
     msStart(gId);
     if(navigator.vibrate)navigator.vibrate(50);
+    setTimeout(()=>{msIgnoreClick=false;},300);
   },500);
 }
 function msLongCancel(){if(msLongTimer){clearTimeout(msLongTimer);msLongTimer=null;}}
 
 function msCardClick(gId){
   if(msLongTimer){clearTimeout(msLongTimer);msLongTimer=null;}
+  if(msIgnoreClick)return;
   if(!msActive){selGebiet(gId);return;}
   msToggle(gId);
 }
