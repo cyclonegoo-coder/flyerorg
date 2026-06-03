@@ -781,7 +781,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v178 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v179 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -4555,6 +4555,9 @@ function istRegionalverwalter() { return curRole === 'regionalverwalter'; }
 function istManager() { return curRole === 'admin' || istVerwalterOderKreisverwalter(); }
 function pruefeGebietZugriff(gebietId) {
   if (istVerwalterOderKreisverwalter() && !verwalterHatGebietZugriff(gebietId)) {
+    // Trotzdem erlauben wenn man dem Gebiet als Verteiler zugewiesen ist
+    const g=getG(gebietId);
+    if(g&&g.verteilerId&&String(g.verteilerId)===String(currentUser?.id)) return true;
     toast('⚠️ Kein Zugriff auf dieses Gebiet'); return false;
   }
   return true;
