@@ -781,7 +781,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v185 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v187 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -2151,6 +2151,42 @@ async function deleteKampagne(id) {
   toast('🗑 Kampagne gelöscht');
 }
 
+// ── Kampagne: Standard-Nachricht generieren ──
+function genKampagneMsg(k){
+  const typLabel={flyer:'Flyer-Verteilung',plakate:'Plakat-Kampagne',beides:'Flyer- & Plakat-Kampagne'}[k.typ]||'Kampagne';
+  let msg=`Hallo! Es gibt eine neue ${typLabel}: "${k.name}".`;
+  // Zeitraum
+  if(k.verteil_von||k.verteil_bis){
+    const fmt=d=>d?new Date(d).toLocaleDateString('de-DE',{day:'numeric',month:'long',year:'numeric'}):'?';
+    msg+=`\nVerteilzeitraum: ${fmt(k.verteil_von)} – ${fmt(k.verteil_bis)}.`;
+  }
+  // Deadline
+  if(k.deadline){
+    const dl=new Date(k.deadline).toLocaleDateString('de-DE',{day:'numeric',month:'long',year:'numeric'});
+    msg+=`\nSpätester Zustellzeitpunkt: ${dl}.`;
+  }
+  // Abhänge-Deadline
+  if(k.abhaenge_deadline&&(k.typ==='plakate'||k.typ==='beides')){
+    const adl=new Date(k.abhaenge_deadline).toLocaleDateString('de-DE',{day:'numeric',month:'long',year:'numeric'});
+    msg+=`\nPlakate abhängen bis: ${adl}.`;
+  }
+  // Beschreibung
+  if(k.beschreibung) msg+=`\n\n${k.beschreibung}`;
+  // Bereiche
+  const bi=k.bereich_items||[];
+  if(bi.length>0){
+    const namen=bi.map(b=>{
+      if(b.typ==='landkreis')return landkreise[b.id]?.name;
+      if(b.typ==='gebietsverband')return gebietsverbaende[b.id]?.name;
+      if(b.typ==='region')return regionen[b.id]?.name;
+      return null;
+    }).filter(Boolean);
+    if(namen.length>0) msg+=`\nBetrifft: ${namen.join(', ')}.`;
+  }
+  msg+=`\n\nBitte prüfe deine Gebiete in der App.`;
+  return msg;
+}
+
 // ── Kampagne: Nutzer benachrichtigen ──
 async function openKampagneNotify(kampId) {
   const k=[...kampagnen,...kampagnenArchiv].find(x=>String(x.id)===String(kampId));
@@ -2182,32 +2218,40 @@ async function openKampagneNotify(kampId) {
   const mitWA=kampNutzer.filter(u=>u.telefon&&!pushUsers.has(u.id));
   const ohneAlles=kampNutzer.filter(u=>!pushUsers.has(u.id)&&!u.telefon);
 
-  let body=`<div style="font-size:.8rem;line-height:1.5;margin-bottom:10px">
-    <strong>Kampagne:</strong> ${esc(k.name)}<br>
-    <strong>Zugewiesene Verteiler:</strong> ${kampNutzer.length}<br>
-    <div style="margin-top:4px;font-size:.72rem;color:var(--text3)">
-      <span style="color:var(--green)">🔔 ${mitPush.length} Push</span> ·
-      <span style="color:var(--green)">💬 ${mitWA.length} WhatsApp</span>
-      ${ohneAlles.length>0?` · <span style="color:var(--orange)">⚠️ ${ohneAlles.length} nicht erreichbar</span>`:''}
-    </div>
-  </div>`;
+  // Standard-Nachricht aus Kampagnendaten generieren
+  const defaultMsg=genKampagneMsg(k);
 
-  // Nachricht anpassen
-  body+=`<div style="margin-bottom:10px">
+  // Nachricht
+  let body=`<div style="margin-bottom:10px">
     <label style="font-size:.65rem;font-weight:600;color:var(--text3)">Nachricht</label>
-    <textarea id="knMsg" style="width:100%;font-size:.78rem;padding:8px;border:1px solid var(--sep);border-radius:var(--r8);min-height:50px;resize:vertical">${esc(k.beschreibung||'Neue Kampagne: '+k.name+'. Bitte in der App prüfen.')}</textarea>
+    <textarea id="knMsg" style="width:100%;font-size:.78rem;padding:8px;border:1px solid var(--sep);border-radius:var(--r8);min-height:70px;resize:vertical">${esc(defaultMsg)}</textarea>
   </div>`;
 
-  // Kanal-Auswahl
-  body+=`<div style="display:flex;flex-direction:column;gap:8px">`;
-  if(mitPush.length>0) body+=`<button class="btn btn-p" style="font-size:.78rem" onclick="sendKampagneNotify('${kampId}','push')">🔔 Push senden (${mitPush.length})</button>`;
-  if(mitWA.length>0) body+=`<button class="btn" style="font-size:.78rem;background:#25D366;color:#fff" onclick="sendKampagneNotify('${kampId}','whatsapp')">💬 WhatsApp öffnen (${mitWA.length})</button>`;
-  if(mitPush.length>0&&mitWA.length>0) body+=`<button class="btn" style="font-size:.78rem;background:var(--blue);color:#fff" onclick="sendKampagneNotify('${kampId}','alle')">📣 Push + WhatsApp (${mitPush.length+mitWA.length})</button>`;
-  body+=`</div>`;
-
-  if(ohneAlles.length>0){
-    body+=`<div style="font-size:.62rem;color:var(--orange);margin-top:8px">⚠️ ${ohneAlles.length} Nutzer ohne Push und ohne Telefonnummer: ${ohneAlles.map(u=>u.name||u.email).join(', ')}</div>`;
+  // Empfänger-Liste mit Checkboxen
+  body+=`<div style="margin-bottom:10px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <label style="font-size:.65rem;font-weight:600;color:var(--text3)">Empfänger (${kampNutzer.length})</label>
+      <label style="font-size:.68rem;cursor:pointer;color:var(--blue)" onclick="document.querySelectorAll('.kn-cb').forEach(c=>c.checked=!c.checked);knUpdateCount()">Alle an/aus</label>
+    </div>
+    <div style="max-height:160px;overflow-y:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--sep);border-radius:var(--r8);padding:4px">`;
+  for(const u of kampNutzer){
+    const hasPush=pushUsers.has(u.id);
+    const hasWA=u.telefon&&!hasPush;
+    const noChannel=!hasPush&&!u.telefon;
+    const badge=hasPush?'<span style="font-size:.6rem;background:rgba(52,199,89,.15);color:var(--green);padding:1px 5px;border-radius:4px;margin-left:4px">🔔 Push</span>'
+      :hasWA?'<span style="font-size:.6rem;background:rgba(37,211,102,.15);color:#25D366;padding:1px 5px;border-radius:4px;margin-left:4px">💬 WA</span>'
+      :'<span style="font-size:.6rem;background:rgba(255,149,0,.15);color:var(--orange);padding:1px 5px;border-radius:4px;margin-left:4px">⚠️</span>';
+    body+=`<label style="display:flex;align-items:center;gap:6px;padding:4px 6px;font-size:.78rem;cursor:pointer">
+      <input type="checkbox" class="kn-cb" data-uid="${u.id}" data-channel="${hasPush?'push':hasWA?'whatsapp':'none'}" checked${noChannel?' disabled':''}>
+      <span style="flex:1">${esc(u.name||u.email)}</span>${badge}
+    </label>`;
   }
+  body+=`</div></div>`;
+
+  // Sende-Buttons
+  body+=`<div style="display:flex;flex-direction:column;gap:8px">
+    <button class="btn btn-p" style="font-size:.78rem" onclick="sendKampagneNotify('${kampId}','selected')">📣 Ausgewählte benachrichtigen</button>
+  </div>`;
 
   // Modal
   let ov=document.getElementById('kampNotifyOv');
@@ -2228,58 +2272,35 @@ async function sendKampagneNotify(kampId, modus) {
   const k=[...kampagnen,...kampagnenArchiv].find(x=>String(x.id)===String(kampId));
   if(!k)return;
   const msg=document.getElementById('knMsg')?.value||k.name;
-
   const bodyEl=document.getElementById('kampNotifyBody');
 
-  // Zugewiesene Verteiler ermitteln
-  const zugewiesene=new Set();
-  const bi=k.bereich_items||[];
-  for(const r of Object.values(regionen)){
-    for(const g of r.gebiete){
-      if(g.verteilerId&&String(g.verteilerId)!==String(currentUser?.id)){
-        if(bi.length>0&&!gebietInKampagnenBereich(g.id,bi))continue;
-        zugewiesene.add(g.verteilerId);
-      }
-    }
-  }
-  const kampNutzer=allUsers.filter(u=>zugewiesene.has(u.id));
+  // Ausgewählte Empfänger aus Checkboxen lesen
+  const checked=[...document.querySelectorAll('.kn-cb:checked:not(:disabled)')];
+  if(checked.length===0){toast('⚠️ Keine Empfänger ausgewählt');return;}
 
-  const pushUsers=new Set();
-  try{
-    const {data}=await sb.from('push_subscriptions').select('user_id');
-    if(data)data.forEach(r=>pushUsers.add(r.user_id));
-  }catch(e){}
+  const pushIds=checked.filter(cb=>cb.dataset.channel==='push').map(cb=>cb.dataset.uid);
+  const waIds=checked.filter(cb=>cb.dataset.channel==='whatsapp').map(cb=>cb.dataset.uid);
 
-  const mitPush=kampNutzer.filter(u=>pushUsers.has(u.id));
-  const mitWA=kampNutzer.filter(u=>u.telefon&&!pushUsers.has(u.id));
+  if(bodyEl)bodyEl.innerHTML='<div style="text-align:center;padding:20px;font-size:.8rem;color:var(--text3)">📣 Wird gesendet…</div>';
 
   let pushOk=0, waOk=0, fehler=[];
 
   // Push senden
-  if(modus==='push'||modus==='alle'){
-    if(mitPush.length>0){
-      if(bodyEl)bodyEl.innerHTML='<div style="text-align:center;padding:20px;font-size:.8rem;color:var(--text3)">🔔 Push wird gesendet…</div>';
-      try{
-        await sendPushToUsers(
-          mitPush.map(u=>u.id),
-          '📢 '+k.name,
-          msg,
-          'kampagne-'+kampId
-        );
-        pushOk=mitPush.length;
-      }catch(e){fehler.push('Push: '+e.message);}
-    }
+  if(pushIds.length>0){
+    try{
+      await sendPushToUsers(pushIds,'📢 '+k.name,msg,'kampagne-'+kampId);
+      pushOk=pushIds.length;
+    }catch(e){fehler.push('Push: '+e.message);}
   }
 
-  // WhatsApp öffnen (sequentiell, jeweils neues Fenster)
-  if(modus==='whatsapp'||modus==='alle'){
+  // WhatsApp öffnen
+  if(waIds.length>0){
     const waText=encodeURIComponent(`📋 *${k.name}*\n\n${msg}\n\n📱 Öffne die App: ${window.location.origin+window.location.pathname}`);
-    for(const u of mitWA){
+    for(const uid of waIds){
+      const u=allUsers.find(x=>x.id===uid);
+      if(!u||!u.telefon)continue;
       const tel=u.telefon.replace(/[^0-9+]/g,'');
-      if(tel){
-        window.open(`https://wa.me/${tel.replace(/^\+/,'')}?text=${waText}`,'_blank');
-        waOk++;
-      }
+      if(tel){window.open(`https://wa.me/${tel.replace(/^\+/,'')}?text=${waText}`,'_blank');waOk++;}
     }
   }
 
