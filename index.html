@@ -781,7 +781,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v175 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v178 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -4829,12 +4829,19 @@ function drawPolygons(){
     const col=getGebietFarbe(g);
     const poly=L.polygon(c,{color:col.s,fillColor:col.f,fillOpacity:.35,weight:2}).addTo(map);
     poly.bindPopup(`<div class="popup-name">${g.name}</div><div class="popup-meta">📦 ${g.stueckzahl} · ${sl(g.status)}</div>`);
-    let _msPolyTimer=null,_msJustStarted=false;
-    poly.on('mousedown',()=>{
+    let _msPolyTimer=null,_msJustStarted=false,_msDownPos=null;
+    poly.on('mousedown',(e)=>{
       if(msActive)return;
+      _msDownPos=e.containerPoint?{x:e.containerPoint.x,y:e.containerPoint.y}:null;
       _msPolyTimer=setTimeout(()=>{_msPolyTimer=null;_msJustStarted=true;msStart(g.id);if(navigator.vibrate)navigator.vibrate(50);setTimeout(()=>{_msJustStarted=false;},300);},500);
     });
-    poly.on('mouseup',()=>{if(_msPolyTimer){clearTimeout(_msPolyTimer);_msPolyTimer=null;}});
+    poly.on('mouseup',()=>{if(_msPolyTimer){clearTimeout(_msPolyTimer);_msPolyTimer=null;}_msDownPos=null;});
+    map.on('mousemove',function _msMoveCheck(e){
+      if(_msPolyTimer&&_msDownPos&&e.containerPoint){
+        const dx=e.containerPoint.x-_msDownPos.x,dy=e.containerPoint.y-_msDownPos.y;
+        if(dx*dx+dy*dy>100){clearTimeout(_msPolyTimer);_msPolyTimer=null;_msDownPos=null;}
+      }
+    });
     poly.on('contextmenu',(e)=>{
       L.DomEvent.preventDefault(e);L.DomEvent.stopPropagation(e);
       if(!msActive){_msJustStarted=true;msStart(g.id);if(navigator.vibrate)navigator.vibrate(50);setTimeout(()=>{_msJustStarted=false;},300);}
@@ -5721,7 +5728,7 @@ function renderGCard(g){
   const msSel=msSelected.includes(g.id)?' ms-sel':'';
   return `<div class="g-card status-${g.status} ${selId===g.id?'sel':''}${msSel}" id="gc_${g.id}"
     onclick="msCardClick('${g.id}')"
-    onpointerdown="msLongStart('${g.id}',event)" onpointerup="msLongCancel()" onpointerleave="msLongCancel()"
+    onpointerdown="msLongStart('${g.id}',event)" onpointerup="msLongCancel()" onpointerleave="msLongCancel()" onpointermove="msLongMove(event)"
     oncontextmenu="event.preventDefault()">
     <div class="g-top"><span class="g-name">${g.name}</span><span class="s-chip c-${g.status}">${statusLabel}</span></div>
     <div class="g-meta"><span>📦 ${g.stueckzahl}</span><span>${verteilerInfo}</span>${g.whatsapp?'<span class="wa">WA</span>':''}</div>
@@ -5731,10 +5738,11 @@ function renderGCard(g){
 // ============================================================
 // MEHRFACHAUSWAHL (Multi-Select)
 // ============================================================
-let msActive=false, msSelected=[], msLongTimer=null, msIgnoreClick=false;
+let msActive=false, msSelected=[], msLongTimer=null, msIgnoreClick=false, msDownXY=null;
 
 function msLongStart(gId,e){
   if(msActive)return;
+  msDownXY=e?(e.clientX!==undefined?{x:e.clientX,y:e.clientY}:e.touches?{x:e.touches[0].clientX,y:e.touches[0].clientY}:null):null;
   msLongTimer=setTimeout(()=>{
     msLongTimer=null;
     msIgnoreClick=true;
@@ -5743,7 +5751,14 @@ function msLongStart(gId,e){
     setTimeout(()=>{msIgnoreClick=false;},300);
   },500);
 }
-function msLongCancel(){if(msLongTimer){clearTimeout(msLongTimer);msLongTimer=null;}}
+function msLongCancel(){if(msLongTimer){clearTimeout(msLongTimer);msLongTimer=null;}msDownXY=null;}
+function msLongMove(e){
+  if(!msLongTimer||!msDownXY)return;
+  const x=e.clientX!==undefined?e.clientX:e.touches?e.touches[0].clientX:0;
+  const y=e.clientY!==undefined?e.clientY:e.touches?e.touches[0].clientY:0;
+  const dx=x-msDownXY.x,dy=y-msDownXY.y;
+  if(dx*dx+dy*dy>100)msLongCancel();
+}
 
 function msCardClick(gId){
   if(msLongTimer){clearTimeout(msLongTimer);msLongTimer=null;}
@@ -5897,36 +5912,40 @@ async function msDoVerteiler(){
 
 async function msBulkPdf(){
   if(!msSelected.length)return;
-  const gebiete=msSelected.map(id=>getG(id)).filter(Boolean);
-  if(!gebiete.length)return;
-  toast(`📄 PDF für ${gebiete.length} Gebiete wird erstellt…`);
+  const gs=msSelected.map(id=>getG(id)).filter(g=>g&&kmlP[g.id]&&kmlP[g.id].length>=3);
+  if(!gs.length){toast('⚠️ Keine Gebiete mit Polygonen');msEnd();return;}
+  toast(`📄 PDF für ${gs.length} Gebiete wird erstellt…`);
   try{
-    const pdf=new jspdf.jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
-    let first=true;
-    for(const g of gebiete){
-      if(!first)pdf.addPage();first=false;
+    const {jsPDF}=window.jspdf;
+    let pdf=null;
+    for(let i=0;i<gs.length;i++){
+      const g=gs[i];
       const coords=kmlP[g.id];
-      if(coords&&coords.length>=3){
-        const canvas=await renderGebietCanvas(coords);
-        if(canvas){
-          const imgData=canvas.toDataURL('image/jpeg',0.85);
-          const pw=pdf.internal.pageSize.getWidth()-20;
-          const ph=pdf.internal.pageSize.getHeight()-30;
-          pdf.setFontSize(13);pdf.setFont(undefined,'bold');
-          pdf.text(`${g.name||g.id}  ·  📦 ${g.stueckzahl}  ·  ${sl(g.status)}`,pdf.internal.pageSize.getWidth()/2,12,{align:'center'});
-          const ratio=Math.min(pw/canvas.width,ph/canvas.height);
-          pdf.addImage(imgData,'JPEG',10,18,canvas.width*ratio,canvas.height*ratio);
-        }
-      } else {
-        pdf.setFontSize(16);
-        pdf.text(g.name||g.id,pdf.internal.pageSize.getWidth()/2,30,{align:'center'});
-        pdf.setFontSize(11);
-        pdf.text(`Stückzahl: ${g.stueckzahl} · Status: ${sl(g.status)}`,pdf.internal.pageSize.getWidth()/2,42,{align:'center'});
-        pdf.text('Kein Polygon vorhanden',pdf.internal.pageSize.getWidth()/2,55,{align:'center'});
-      }
+      const canvas=await renderGebietCanvas(coords);
+      const imgRatio=canvas.width/canvas.height;
+      const orient=imgRatio>1?'landscape':'portrait';
+      if(i===0)pdf=new jsPDF({orientation:orient,unit:'mm',format:'a4'});
+      else pdf.addPage('a4',orient);
+      const pageW=orient==='landscape'?297:210, pageH=orient==='landscape'?210:297;
+      const margin=4;
+      const usableW=pageW-margin*2, usableH=pageH-margin*2;
+      pdf.setFontSize(12);pdf.setFont(undefined,'bold');
+      pdf.text(g.name,margin,margin+4);
+      pdf.setFontSize(8);pdf.setFont(undefined,'normal');
+      const verteilerInfo=g.verteilerId?(getVerteilerName(g)||'Zugewiesen'):'Nicht zugewiesen';
+      const metaText=`Datum: ${new Date().toLocaleDateString('de-DE')} · Stückzahl: ${g.stueckzahl||0} · Verteiler: ${verteilerInfo}`;
+      pdf.text(metaText,margin,margin+8);
+      const imgY=margin+10;
+      const availH=usableH-10;
+      let imgW=usableW, imgH=usableW/imgRatio;
+      if(imgH>availH){imgH=availH;imgW=availH*imgRatio;}
+      const imgX=margin+(usableW-imgW)/2;
+      pdf.addImage(canvas.toDataURL('image/jpeg',0.92),'JPEG',imgX,imgY,imgW,imgH);
+      if(i<gs.length-1)await new Promise(r=>setTimeout(r,300));
     }
-    pdf.save(`Gebiete_${gebiete.length}_${new Date().toISOString().slice(0,10)}.pdf`);
-    toast(`✅ PDF mit ${gebiete.length} Gebieten erstellt`);
+    const kampName=curKampagne?.name||'Gebiete';
+    pdf.save(`${kampName.trim()}_Gebiete_${new Date().toLocaleDateString('de-DE')}.pdf`);
+    toast(`✅ PDF mit ${gs.length} Gebieten erstellt!`);
   }catch(e){
     console.error('msBulkPdf error:',e);
     toast('⚠️ PDF-Fehler: '+e.message);
@@ -5987,7 +6006,7 @@ function openDetail(id){
   document.getElementById('detailTitle').textContent=g.name;
   const isAdmin=curRole==='admin';
   const isM=(istVerwalterOderKreisverwalter()&&verwalterHatGebietZugriff(id))||isAdmin;
-  const isV=g.verteilerId&&g.verteilerId===currentUser?.id;
+  const isV=g.verteilerId&&String(g.verteilerId)===String(currentUser?.id);
   const darfVerteilerStatus = isM || isV;
   const isMob=window.innerWidth<=768;
   let h='';
@@ -6341,7 +6360,7 @@ async function setSt(id,s){
   if (!pruefeGebietZugriff(id)) return;
   if (curRole === 'verteiler') {
     const g=getG(id);
-    if (!g?.verteilerId || g.verteilerId !== currentUser?.id) {
+    if (!g?.verteilerId || String(g.verteilerId) !== String(currentUser?.id)) {
       toast('⚠️ Du bist diesem Gebiet nicht zugewiesen'); return;
     }
     if (s !== 'fertig' && s !== 'offen' && s !== 'zugeteilt') {
