@@ -781,7 +781,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v187 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v188 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -1114,11 +1114,21 @@ textarea{min-height:68px}
       <button type="button" id="kampTabAktiv" onclick="switchKampTab('aktiv')" style="flex:1;padding:8px;font-size:.78rem;font-weight:600;background:none;border:none;border-bottom:2px solid var(--blue);margin-bottom:-2px;color:var(--blue);cursor:pointer">Aktiv</button>
       <button type="button" id="kampTabArchiv" onclick="switchKampTab('archiv')" style="flex:1;padding:8px;font-size:.78rem;font-weight:600;background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;color:var(--text3);cursor:pointer">Archiv <span id="archivCount" style="font-size:.65rem;background:var(--text4);color:#fff;border-radius:8px;padding:0 5px;margin-left:3px"></span></button>
     </div>
-    <div id="kampagnenList" style="max-height:200px;overflow-y:auto;margin-bottom:12px"></div>
-    <div id="kampFormSection">
+    <div id="kampagnenList" style="max-height:55vh;overflow-y:auto;margin-bottom:12px"></div>
+    <div class="m-actions">
+      <button class="btn btn-g" onclick="closeKampagnenModal()">Schließen</button>
+      <button class="btn btn-p" id="kampNewBtn" onclick="openKampFormModal()">+ Neue Kampagne</button>
+    </div>
+  </div>
+</div>
+
+<!-- KAMPAGNE ERSTELLEN/BEARBEITEN MODAL -->
+<div class="modal-ov" id="kampFormModalOv" onclick="if(event.target===this&&this._mdOnOverlay)closeKampFormModal()" style="z-index:3100">
+  <div class="modal" style="max-width:460px">
+    <div class="m-handle"></div>
+    <div class="m-title" id="kampFormTitle">📋 Neue Kampagne</div>
     <input type="hidden" id="editKampagneId" value="">
-    <div id="kampFormTitle" style="font-size:.6rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:6px">Neue Kampagne</div>
-    <div style="display:flex;flex-direction:column;gap:7px">
+    <div style="display:flex;flex-direction:column;gap:7px;max-height:55vh;overflow-y:auto;padding:2px">
       <input type="text" id="newKampName" placeholder="Name der Kampagne">
       <input type="text" id="newKampBeschr" placeholder="Beschreibung (optional)">
       <div style="display:flex;flex-direction:column;gap:2px">
@@ -1154,9 +1164,8 @@ textarea{min-height:68px}
       </div>
     </div>
     <div class="m-actions" style="margin-top:12px">
-      <button class="btn btn-g" onclick="resetKampForm();closeKampagnenModal()">Schließen</button>
+      <button class="btn btn-g" onclick="closeKampFormModal()">Abbrechen</button>
       <button class="btn btn-p" id="kampSaveBtn" onclick="saveKampagne()">Erstellen</button>
-    </div>
     </div>
   </div>
 </div>
@@ -1742,19 +1751,29 @@ function switchKampTab(tab){
   kampModalTab=tab;
   const btnA=document.getElementById('kampTabAktiv');
   const btnB=document.getElementById('kampTabArchiv');
-  const formEl=document.getElementById('kampFormSection');
+  const newBtn=document.getElementById('kampNewBtn');
   if(tab==='aktiv'){
     btnA.style.borderBottomColor='var(--blue)';btnA.style.color='var(--blue)';
     btnB.style.borderBottomColor='transparent';btnB.style.color='var(--text3)';
-    if(formEl)formEl.style.display='';
+    if(newBtn)newBtn.style.display='';
   } else {
     btnB.style.borderBottomColor='var(--blue)';btnB.style.color='var(--blue)';
     btnA.style.borderBottomColor='transparent';btnA.style.color='var(--text3)';
-    if(formEl)formEl.style.display='none';
+    if(newBtn)newBtn.style.display='none';
   }
   const badge=document.getElementById('archivCount');
   if(badge)badge.textContent=kampagnenArchiv.length>0?kampagnenArchiv.length:'';
   renderKampagnenList();
+}
+function openKampFormModal(){
+  resetKampForm();
+  document.getElementById('kampFormTitle').textContent='📋 Neue Kampagne';
+  document.getElementById('kampSaveBtn').textContent='Erstellen';
+  document.getElementById('kampFormModalOv').classList.add('open');
+}
+function closeKampFormModal(){
+  document.getElementById('kampFormModalOv').classList.remove('open');
+  resetKampForm();
 }
 
 function kampagneMetaLine(k){
@@ -2008,11 +2027,11 @@ function editKampagne(id) {
   toggleAbhaengeDeadline();
   document.getElementById('kampFormTitle').textContent = `✏️ „${k.name}" bearbeiten`;
   document.getElementById('kampSaveBtn').textContent = 'Speichern';
-  // Bereiche laden
   const container = document.getElementById('kampBereicheContainer');
   container.innerHTML = '';
   const items = k.bereich_items || [];
   items.forEach(bi => addKampBereichZeile(bi.typ, bi.id));
+  document.getElementById('kampFormModalOv').classList.add('open');
 }
 
 async function saveKampagne() {
@@ -2127,7 +2146,7 @@ async function saveKampagne() {
     }
   }
 
-  resetKampForm();
+  closeKampFormModal();
   renderKampagnenList();
   renderKampagnenDropdown();
   updateModeForKampagne();
@@ -2214,43 +2233,37 @@ async function openKampagneNotify(kampId) {
     if(data)data.forEach(r=>pushUsers.add(r.user_id));
   }catch(e){}
 
-  const mitPush=kampNutzer.filter(u=>pushUsers.has(u.id));
-  const mitWA=kampNutzer.filter(u=>u.telefon&&!pushUsers.has(u.id));
-  const ohneAlles=kampNutzer.filter(u=>!pushUsers.has(u.id)&&!u.telefon);
-
-  // Standard-Nachricht aus Kampagnendaten generieren
   const defaultMsg=genKampagneMsg(k);
 
-  // Nachricht
   let body=`<div style="margin-bottom:10px">
     <label style="font-size:.65rem;font-weight:600;color:var(--text3)">Nachricht</label>
     <textarea id="knMsg" style="width:100%;font-size:.78rem;padding:8px;border:1px solid var(--sep);border-radius:var(--r8);min-height:70px;resize:vertical">${esc(defaultMsg)}</textarea>
   </div>`;
 
-  // Empfänger-Liste mit Checkboxen
+  // Empfänger mit Kanal-Checkboxen
   body+=`<div style="margin-bottom:10px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
       <label style="font-size:.65rem;font-weight:600;color:var(--text3)">Empfänger (${kampNutzer.length})</label>
-      <label style="font-size:.68rem;cursor:pointer;color:var(--blue)" onclick="document.querySelectorAll('.kn-cb').forEach(c=>c.checked=!c.checked);knUpdateCount()">Alle an/aus</label>
+      <label style="font-size:.68rem;cursor:pointer;color:var(--blue)" onclick="document.querySelectorAll('.kn-push:not(:disabled),.kn-wa:not(:disabled)').forEach(c=>c.checked=!c.checked)">Alle an/aus</label>
     </div>
-    <div style="max-height:160px;overflow-y:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--sep);border-radius:var(--r8);padding:4px">`;
+    <div style="max-height:200px;overflow-y:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--sep);border-radius:var(--r8);padding:4px">
+    <div style="display:flex;gap:4px;padding:2px 6px 4px;border-bottom:1px solid var(--sep);font-size:.6rem;color:var(--text4);font-weight:600">
+      <span style="flex:1">Name</span><span style="width:36px;text-align:center">🔔</span><span style="width:36px;text-align:center">💬</span>
+    </div>`;
   for(const u of kampNutzer){
     const hasPush=pushUsers.has(u.id);
-    const hasWA=u.telefon&&!hasPush;
-    const noChannel=!hasPush&&!u.telefon;
-    const badge=hasPush?'<span style="font-size:.6rem;background:rgba(52,199,89,.15);color:var(--green);padding:1px 5px;border-radius:4px;margin-left:4px">🔔 Push</span>'
-      :hasWA?'<span style="font-size:.6rem;background:rgba(37,211,102,.15);color:#25D366;padding:1px 5px;border-radius:4px;margin-left:4px">💬 WA</span>'
-      :'<span style="font-size:.6rem;background:rgba(255,149,0,.15);color:var(--orange);padding:1px 5px;border-radius:4px;margin-left:4px">⚠️</span>';
-    body+=`<label style="display:flex;align-items:center;gap:6px;padding:4px 6px;font-size:.78rem;cursor:pointer">
-      <input type="checkbox" class="kn-cb" data-uid="${u.id}" data-channel="${hasPush?'push':hasWA?'whatsapp':'none'}" checked${noChannel?' disabled':''}>
-      <span style="flex:1">${esc(u.name||u.email)}</span>${badge}
-    </label>`;
+    const hasTel=!!u.telefon;
+    const noChannel=!hasPush&&!hasTel;
+    body+=`<div style="display:flex;align-items:center;gap:4px;padding:4px 6px;font-size:.78rem${noChannel?';opacity:.5':''}">
+      <span style="flex:1">${esc(u.name||u.email)}${noChannel?' <span style="font-size:.6rem;color:var(--orange)">⚠️</span>':''}</span>
+      <span style="width:36px;text-align:center"><input type="checkbox" class="kn-push" data-uid="${u.id}" ${hasPush?'checked':'disabled'}></span>
+      <span style="width:36px;text-align:center"><input type="checkbox" class="kn-wa" data-uid="${u.id}" data-tel="${esc(u.telefon||'')}" ${hasTel?'checked':'disabled'}></span>
+    </div>`;
   }
   body+=`</div></div>`;
 
-  // Sende-Buttons
   body+=`<div style="display:flex;flex-direction:column;gap:8px">
-    <button class="btn btn-p" style="font-size:.78rem" onclick="sendKampagneNotify('${kampId}','selected')">📣 Ausgewählte benachrichtigen</button>
+    <button class="btn btn-p" style="font-size:.78rem" onclick="sendKampagneNotify('${kampId}')">📣 Ausgewählte benachrichtigen</button>
   </div>`;
 
   // Modal
@@ -2268,18 +2281,18 @@ async function openKampagneNotify(kampId) {
   document.body.appendChild(ov);
 }
 
-async function sendKampagneNotify(kampId, modus) {
+async function sendKampagneNotify(kampId) {
   const k=[...kampagnen,...kampagnenArchiv].find(x=>String(x.id)===String(kampId));
   if(!k)return;
   const msg=document.getElementById('knMsg')?.value||k.name;
   const bodyEl=document.getElementById('kampNotifyBody');
 
-  // Ausgewählte Empfänger aus Checkboxen lesen
-  const checked=[...document.querySelectorAll('.kn-cb:checked:not(:disabled)')];
-  if(checked.length===0){toast('⚠️ Keine Empfänger ausgewählt');return;}
+  // Push-Checkboxen
+  const pushIds=[...document.querySelectorAll('.kn-push:checked:not(:disabled)')].map(cb=>cb.dataset.uid);
+  // WA-Checkboxen
+  const waCbs=[...document.querySelectorAll('.kn-wa:checked:not(:disabled)')];
 
-  const pushIds=checked.filter(cb=>cb.dataset.channel==='push').map(cb=>cb.dataset.uid);
-  const waIds=checked.filter(cb=>cb.dataset.channel==='whatsapp').map(cb=>cb.dataset.uid);
+  if(pushIds.length===0&&waCbs.length===0){toast('⚠️ Keine Empfänger ausgewählt');return;}
 
   if(bodyEl)bodyEl.innerHTML='<div style="text-align:center;padding:20px;font-size:.8rem;color:var(--text3)">📣 Wird gesendet…</div>';
 
@@ -2294,17 +2307,14 @@ async function sendKampagneNotify(kampId, modus) {
   }
 
   // WhatsApp öffnen
-  if(waIds.length>0){
+  if(waCbs.length>0){
     const waText=encodeURIComponent(`📋 *${k.name}*\n\n${msg}\n\n📱 Öffne die App: ${window.location.origin+window.location.pathname}`);
-    for(const uid of waIds){
-      const u=allUsers.find(x=>x.id===uid);
-      if(!u||!u.telefon)continue;
-      const tel=u.telefon.replace(/[^0-9+]/g,'');
+    for(const cb of waCbs){
+      const tel=(cb.dataset.tel||'').replace(/[^0-9+]/g,'');
       if(tel){window.open(`https://wa.me/${tel.replace(/^\+/,'')}?text=${waText}`,'_blank');waOk++;}
     }
   }
 
-  // Ergebnis
   let result='<div style="font-size:.8rem;line-height:1.5;padding:8px 0">';
   if(pushOk>0) result+=`<div style="color:var(--green)">✅ Push an ${pushOk} Verteiler gesendet</div>`;
   if(waOk>0) result+=`<div style="color:var(--green)">✅ WhatsApp für ${waOk} Verteiler geöffnet</div>`;
@@ -9678,6 +9688,30 @@ function initAppExitGuard(){
       if(ok){_appExitGuard=false;history.back();history.back();}
     });
   });
+}
+
+// Push-Nachricht anzeigen wenn App über Notification geöffnet wird
+function showPushMsg(info){
+  if(!info||!info.title)return;
+  const ov=document.createElement('div');
+  ov.className='modal-ov open';ov.onclick=function(e){if(e.target===this)this.remove();};
+  ov.innerHTML=`<div class="modal" style="max-width:360px">
+    <div class="m-handle"></div>
+    <div class="m-title">🔔 ${esc(info.title)}</div>
+    <div style="font-size:.82rem;color:var(--text2);line-height:1.5;white-space:pre-wrap;padding:4px 0">${esc(info.body)}</div>
+    <div class="m-actions"><button class="btn btn-p" onclick="this.closest('.modal-ov').remove()">OK</button></div>
+  </div>`;
+  document.body.appendChild(ov);
+}
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.addEventListener('message',e=>{
+    if(e.data?.type==='push-clicked')showPushMsg(e.data);
+  });
+}
+// Hash-Check für Push-Klick bei neuem Fenster
+if(location.hash.startsWith('#push=')){
+  try{const info=JSON.parse(decodeURIComponent(location.hash.slice(6)));setTimeout(()=>showPushMsg(info),1000);}catch(e){}
+  history.replaceState(null,'',location.pathname);
 }
 
 // PWA: Service Worker registrieren

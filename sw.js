@@ -1,4 +1,4 @@
-const CACHE_NAME = 'flyerorg-v187';
+const CACHE_NAME = 'flyerorg-v188';
 const OFFLINE_URL = 'offline.html';
 
 // Bei Installation: Offline-Seite cachen
@@ -52,20 +52,20 @@ self.addEventListener('push', e => {
   );
 });
 
-// Beim Klick auf die Benachrichtigung: App öffnen/fokussieren
+// Beim Klick auf die Benachrichtigung: App öffnen/fokussieren + Nachricht anzeigen
 self.addEventListener('notificationclick', e => {
   e.notification.close();
   const url = e.notification.data?.url || '/';
+  const pushInfo = { type: 'push-clicked', title: e.notification.title || '', body: e.notification.body || '' };
   e.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windowClients => {
-      // Vorhandenes Fenster fokussieren
       for (const client of windowClients) {
         if (client.url.includes(self.location.origin) && 'focus' in client) {
+          client.postMessage(pushInfo);
           return client.focus();
         }
       }
-      // Oder neues Fenster öffnen
-      return clients.openWindow(url);
+      return clients.openWindow(url + '#push=' + encodeURIComponent(JSON.stringify(pushInfo)));
     })
   );
 });
