@@ -781,7 +781,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v182 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v183 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -2928,8 +2928,9 @@ function openEditUserModal(userId){
 
   // Regionen/LK bearbeiten
   const regWrap=document.getElementById('editUserRegWrap');
-  // Regionen-Zuweisung: nur für Regionalverwalter und KV (VV ist für ganzen GV zuständig)
-  if(!isSelf&&!isGV&&!isRV&&(u.rolle==='regionalverwalter'||u.rolle==='kreisverwalter')){
+  // Regionen-Zuweisung: Admin, KV und VV dürfen Regionen von RV bearbeiten; Admin/KV dürfen LK von KV bearbeiten
+  const canEditReg=!isSelf&&(isAdmin||isKV||isGV)&&(u.rolle==='regionalverwalter'||(u.rolle==='kreisverwalter'&&(isAdmin||isKV)));
+  if(canEditReg){
     regWrap.style.display='block';
     document.getElementById('editUserRegBtn').onclick=()=>{
       closeEditUserModal();
