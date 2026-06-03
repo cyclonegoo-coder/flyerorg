@@ -781,7 +781,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v183 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v184 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -3827,6 +3827,8 @@ async function showApp() {
   updateMissingVerteilerBadge();
   // Push-Subscription synchronisieren (falls bereits erlaubt)
   syncPushSubscription();
+  // Zurück-Button Schutz aktivieren
+  initAppExitGuard();
 }
 
 // Push-Subscription bei Login automatisch re-synken
@@ -9606,12 +9608,22 @@ document.addEventListener('visibilitychange',()=>{
   if(vmActive && document.visibilityState==='visible' && !vmWakeLock) vmRequestWakeLock();
 });
 
-// App-Verlassen-Warnung (nur wenn eingeloggt)
-window.addEventListener('beforeunload',(e)=>{
-  if(!currentUser)return;
-  e.preventDefault();
-  e.returnValue='';
-});
+// App-Verlassen-Warnung (Android-Zurück-Button + Tab/Browser schließen)
+// History-Trick: Dummy-State, damit Zurück-Button nicht sofort die App verlässt
+let _appExitGuard=false;
+function initAppExitGuard(){
+  if(_appExitGuard)return;
+  _appExitGuard=true;
+  history.pushState({flyerorg:true},document.title);
+  window.addEventListener('popstate',(e)=>{
+    if(!currentUser){return;}
+    // Zurück gedrückt → State neu pushen + Warnung zeigen
+    history.pushState({flyerorg:true},document.title);
+    appConfirm('App verlassen?','Möchtest du FlyerOrg wirklich verlassen?','Verlassen','Bleiben').then(ok=>{
+      if(ok){_appExitGuard=false;history.back();history.back();}
+    });
+  });
+}
 
 // PWA: Service Worker registrieren
 if ('serviceWorker' in navigator) {
