@@ -781,7 +781,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v184 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v185 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -1829,7 +1829,7 @@ function renderKampagnenList() {
         ${k.beschreibung ? `<div style="font-size:.7rem;color:var(--text3)">${esc(k.beschreibung)}</div>` : ''}
         ${meta ? `<div style="font-size:.65rem;color:var(--text4);margin-top:2px">${meta}</div>` : ''}
       </div>
-      ${kannBearbeiten ? `<button style="background:none;border:none;cursor:pointer;font-size:.85rem;padding:2px" onclick="openKampagneNotify('${k.id}')" title="Nutzer benachrichtigen">📣</button>` : ''}
+      ${kannBearbeiten&&!k.ist_basis ? `<button style="background:none;border:none;cursor:pointer;font-size:.85rem;padding:2px" onclick="openKampagneNotify('${k.id}')" title="Nutzer benachrichtigen">📣</button>` : ''}
       ${kannBearbeiten ? `<button style="background:none;border:none;cursor:pointer;font-size:.85rem;padding:2px" onclick="editKampagne('${k.id}')" title="Bearbeiten">✏️</button>` : ''}
       ${kannBearbeiten&&!k.ist_basis ? `<button style="background:none;border:none;cursor:pointer;font-size:.75rem;padding:2px" onclick="archiveKampagne('${k.id}',true)" title="Archivieren">📥</button>` : ''}
       ${kannLoeschen ? `<button class="btn btn-d" style="width:auto;padding:4px 8px;font-size:.7rem" onclick="deleteKampagne('${k.id}')">🗑</button>` : ''}
@@ -2153,40 +2153,71 @@ async function deleteKampagne(id) {
 
 // ── Kampagne: Nutzer benachrichtigen ──
 async function openKampagneNotify(kampId) {
-  const k = kampagnen.find(x => String(x.id) === String(kampId));
-  if (!k) return;
+  const k=[...kampagnen,...kampagnenArchiv].find(x=>String(x.id)===String(kampId));
+  if(!k)return;
 
-  // Zähle Nutzer mit/ohne Push
-  const pushUsers = new Set();
-  try {
-    const {data} = await sb.from('push_subscriptions').select('user_id');
-    if (data) data.forEach(r => pushUsers.add(r.user_id));
-  } catch(e) {}
+  // Nur zugewiesene Verteiler dieser Kampagne ermitteln
+  const zugewiesene=new Set();
+  const bi=k.bereich_items||[];
+  for(const r of Object.values(regionen)){
+    for(const g of r.gebiete){
+      if(g.verteilerId&&String(g.verteilerId)!==String(currentUser?.id)){
+        // Prüfe ob Gebiet im Kampagnen-Bereich liegt
+        if(bi.length>0&&!gebietInKampagnenBereich(g.id,bi))continue;
+        zugewiesene.add(g.verteilerId);
+      }
+    }
+  }
+  const kampNutzer=allUsers.filter(u=>zugewiesene.has(u.id));
+  if(kampNutzer.length===0){toast('Keine zugewiesenen Verteiler in dieser Kampagne');return;}
 
-  const alleNutzer = allUsers.filter(u => u.id !== currentUser?.id); // alle außer mir
-  const mitPush = alleNutzer.filter(u => pushUsers.has(u.id));
-  const ohnePush = alleNutzer.filter(u => !pushUsers.has(u.id));
+  // Push-Status prüfen
+  const pushUsers=new Set();
+  try{
+    const {data}=await sb.from('push_subscriptions').select('user_id');
+    if(data)data.forEach(r=>pushUsers.add(r.user_id));
+  }catch(e){}
 
-  const body = `<div style="font-size:.8rem;line-height:1.5;margin-bottom:12px">
-    <strong>Kampagne:</strong> ${k.name}<br>
-    <strong>Nutzer gesamt:</strong> ${alleNutzer.length}<br>
-    <span style="color:var(--green)">🔔 ${mitPush.length} mit Push</span> · <span style="color:var(--text3)">📧 ${ohnePush.length} ohne Push (nur per E-Mail erreichbar)</span>
-  </div>
-  <div style="display:grid;gap:8px">
-    <button class="btn btn-p" style="font-size:.78rem" onclick="sendKampagneNotify('${kampId}','push')">🔔 Push-Nachricht senden (${mitPush.length} Nutzer)</button>
-    ${ohnePush.length > 0 ? `<button class="btn btn-g" style="font-size:.78rem" onclick="sendKampagneNotify('${kampId}','email')">📧 E-Mail an Nutzer ohne Push (${ohnePush.length})</button>` : ''}
-    <button class="btn" style="font-size:.78rem;background:var(--blue);color:#fff" onclick="sendKampagneNotify('${kampId}','alle')">📣 Alle benachrichtigen (Push + E-Mail)</button>
-  </div>
-  <div style="font-size:.62rem;color:var(--text4);margin-top:8px">Push geht sofort raus. E-Mails werden über Supabase Auth versendet.</div>`;
+  const mitPush=kampNutzer.filter(u=>pushUsers.has(u.id));
+  const mitWA=kampNutzer.filter(u=>u.telefon&&!pushUsers.has(u.id));
+  const ohneAlles=kampNutzer.filter(u=>!pushUsers.has(u.id)&&!u.telefon);
 
-  // Modal bauen
-  const ov = document.createElement('div');
-  ov.className = 'modal-ov open';
-  ov.id = 'kampNotifyOv';
-  ov.onclick = function(e){ if(e.target===this) this.remove(); };
-  ov.innerHTML = `<div class="modal" style="max-width:380px">
+  let body=`<div style="font-size:.8rem;line-height:1.5;margin-bottom:10px">
+    <strong>Kampagne:</strong> ${esc(k.name)}<br>
+    <strong>Zugewiesene Verteiler:</strong> ${kampNutzer.length}<br>
+    <div style="margin-top:4px;font-size:.72rem;color:var(--text3)">
+      <span style="color:var(--green)">🔔 ${mitPush.length} Push</span> ·
+      <span style="color:var(--green)">💬 ${mitWA.length} WhatsApp</span>
+      ${ohneAlles.length>0?` · <span style="color:var(--orange)">⚠️ ${ohneAlles.length} nicht erreichbar</span>`:''}
+    </div>
+  </div>`;
+
+  // Nachricht anpassen
+  body+=`<div style="margin-bottom:10px">
+    <label style="font-size:.65rem;font-weight:600;color:var(--text3)">Nachricht</label>
+    <textarea id="knMsg" style="width:100%;font-size:.78rem;padding:8px;border:1px solid var(--sep);border-radius:var(--r8);min-height:50px;resize:vertical">${esc(k.beschreibung||'Neue Kampagne: '+k.name+'. Bitte in der App prüfen.')}</textarea>
+  </div>`;
+
+  // Kanal-Auswahl
+  body+=`<div style="display:flex;flex-direction:column;gap:8px">`;
+  if(mitPush.length>0) body+=`<button class="btn btn-p" style="font-size:.78rem" onclick="sendKampagneNotify('${kampId}','push')">🔔 Push senden (${mitPush.length})</button>`;
+  if(mitWA.length>0) body+=`<button class="btn" style="font-size:.78rem;background:#25D366;color:#fff" onclick="sendKampagneNotify('${kampId}','whatsapp')">💬 WhatsApp öffnen (${mitWA.length})</button>`;
+  if(mitPush.length>0&&mitWA.length>0) body+=`<button class="btn" style="font-size:.78rem;background:var(--blue);color:#fff" onclick="sendKampagneNotify('${kampId}','alle')">📣 Push + WhatsApp (${mitPush.length+mitWA.length})</button>`;
+  body+=`</div>`;
+
+  if(ohneAlles.length>0){
+    body+=`<div style="font-size:.62rem;color:var(--orange);margin-top:8px">⚠️ ${ohneAlles.length} Nutzer ohne Push und ohne Telefonnummer: ${ohneAlles.map(u=>u.name||u.email).join(', ')}</div>`;
+  }
+
+  // Modal
+  let ov=document.getElementById('kampNotifyOv');
+  if(ov)ov.remove();
+  ov=document.createElement('div');
+  ov.className='modal-ov open';ov.id='kampNotifyOv';
+  ov.onclick=function(e){if(e.target===this)this.remove();};
+  ov.innerHTML=`<div class="modal" style="max-width:400px">
     <div class="m-handle"></div>
-    <div class="m-title">📣 Nutzer über Kampagne informieren</div>
+    <div class="m-title">📣 Kampagne: ${esc(k.name)}</div>
     <div id="kampNotifyBody">${body}</div>
     <div class="m-foot"><button class="btn btn-g" onclick="document.getElementById('kampNotifyOv').remove()">Schließen</button></div>
   </div>`;
@@ -2194,69 +2225,72 @@ async function openKampagneNotify(kampId) {
 }
 
 async function sendKampagneNotify(kampId, modus) {
-  const k = kampagnen.find(x => String(x.id) === String(kampId));
-  if (!k) return;
+  const k=[...kampagnen,...kampagnenArchiv].find(x=>String(x.id)===String(kampId));
+  if(!k)return;
+  const msg=document.getElementById('knMsg')?.value||k.name;
 
-  const bodyEl = document.getElementById('kampNotifyBody');
-  if (bodyEl) bodyEl.innerHTML = '<div style="text-align:center;padding:20px;font-size:.8rem;color:var(--text3)"><span class="spinner"></span> Benachrichtigungen werden gesendet…</div>';
+  const bodyEl=document.getElementById('kampNotifyBody');
 
-  const pushUsers = new Set();
-  try {
-    const {data} = await sb.from('push_subscriptions').select('user_id');
-    if (data) data.forEach(r => pushUsers.add(r.user_id));
-  } catch(e) {}
+  // Zugewiesene Verteiler ermitteln
+  const zugewiesene=new Set();
+  const bi=k.bereich_items||[];
+  for(const r of Object.values(regionen)){
+    for(const g of r.gebiete){
+      if(g.verteilerId&&String(g.verteilerId)!==String(currentUser?.id)){
+        if(bi.length>0&&!gebietInKampagnenBereich(g.id,bi))continue;
+        zugewiesene.add(g.verteilerId);
+      }
+    }
+  }
+  const kampNutzer=allUsers.filter(u=>zugewiesene.has(u.id));
 
-  const alleNutzer = allUsers.filter(u => u.id !== currentUser?.id);
-  const mitPush = alleNutzer.filter(u => pushUsers.has(u.id));
-  const ohnePush = alleNutzer.filter(u => !pushUsers.has(u.id));
+  const pushUsers=new Set();
+  try{
+    const {data}=await sb.from('push_subscriptions').select('user_id');
+    if(data)data.forEach(r=>pushUsers.add(r.user_id));
+  }catch(e){}
 
-  let pushOk = 0, emailOk = 0, fehler = [];
+  const mitPush=kampNutzer.filter(u=>pushUsers.has(u.id));
+  const mitWA=kampNutzer.filter(u=>u.telefon&&!pushUsers.has(u.id));
+
+  let pushOk=0, waOk=0, fehler=[];
 
   // Push senden
-  if (modus === 'push' || modus === 'alle') {
-    if (mitPush.length > 0) {
-      try {
+  if(modus==='push'||modus==='alle'){
+    if(mitPush.length>0){
+      if(bodyEl)bodyEl.innerHTML='<div style="text-align:center;padding:20px;font-size:.8rem;color:var(--text3)">🔔 Push wird gesendet…</div>';
+      try{
         await sendPushToUsers(
-          mitPush.map(u => u.id),
-          '📢 Neue Kampagne: ' + k.name,
-          k.beschreibung || 'Es gibt eine neue Kampagne in FlyerOrg. Öffne die App für Details.',
-          'kampagne-' + kampId
+          mitPush.map(u=>u.id),
+          '📢 '+k.name,
+          msg,
+          'kampagne-'+kampId
         );
-        pushOk = mitPush.length;
-      } catch(e) { fehler.push('Push: ' + e.message); }
+        pushOk=mitPush.length;
+      }catch(e){fehler.push('Push: '+e.message);}
     }
   }
 
-  // E-Mail senden (über Supabase Edge Function oder Auth)
-  if (modus === 'email' || modus === 'alle') {
-    const emailTargets = modus === 'alle' ? ohnePush : ohnePush;
-    for (const u of emailTargets) {
-      try {
-        // Magic-Link als "Benachrichtigungs-E-Mail" — Nutzer bekommt einen Login-Link
-        const {error} = await sb.auth.admin.generateLink({
-          type: 'magiclink',
-          email: u.email,
-          options: { redirectTo: window.location.origin + window.location.pathname }
-        });
-        if (!error) emailOk++;
-        else fehler.push(u.email + ': ' + error.message);
-      } catch(e) {
-        // Fallback: admin.generateLink braucht Service-Role-Key
-        // Ohne Admin-API nutzen wir resetPasswordForEmail als Benachrichtigung
-        fehler.push(u.email + ': Admin-API nicht verfügbar');
+  // WhatsApp öffnen (sequentiell, jeweils neues Fenster)
+  if(modus==='whatsapp'||modus==='alle'){
+    const waText=encodeURIComponent(`📋 *${k.name}*\n\n${msg}\n\n📱 Öffne die App: ${window.location.origin+window.location.pathname}`);
+    for(const u of mitWA){
+      const tel=u.telefon.replace(/[^0-9+]/g,'');
+      if(tel){
+        window.open(`https://wa.me/${tel.replace(/^\+/,'')}?text=${waText}`,'_blank');
+        waOk++;
       }
     }
   }
 
   // Ergebnis
-  let result = '<div style="font-size:.8rem;line-height:1.5;padding:8px 0">';
-  if (pushOk > 0) result += `<div style="color:var(--green)">✅ Push an ${pushOk} Nutzer gesendet</div>`;
-  if (emailOk > 0) result += `<div style="color:var(--green)">✅ E-Mail an ${emailOk} Nutzer gesendet</div>`;
-  if (fehler.length > 0) result += `<div style="color:var(--orange);margin-top:6px;font-size:.7rem">⚠️ ${fehler.length} Fehler:<br>${fehler.slice(0,5).join('<br>')}${fehler.length>5?'<br>...und '+(fehler.length-5)+' weitere':''}</div>`;
-  if (pushOk === 0 && emailOk === 0 && fehler.length === 0) result += '<div style="color:var(--text3)">Keine Nutzer zum Benachrichtigen.</div>';
-  result += '</div>';
-
-  if (bodyEl) bodyEl.innerHTML = result;
+  let result='<div style="font-size:.8rem;line-height:1.5;padding:8px 0">';
+  if(pushOk>0) result+=`<div style="color:var(--green)">✅ Push an ${pushOk} Verteiler gesendet</div>`;
+  if(waOk>0) result+=`<div style="color:var(--green)">✅ WhatsApp für ${waOk} Verteiler geöffnet</div>`;
+  if(fehler.length>0) result+=`<div style="color:var(--orange);margin-top:6px;font-size:.7rem">⚠️ ${fehler.join('<br>')}</div>`;
+  if(pushOk===0&&waOk===0&&fehler.length===0) result+='<div style="color:var(--text3)">Keine Verteiler benachrichtigt.</div>';
+  result+='</div>';
+  if(bodyEl)bodyEl.innerHTML=result;
 }
 
 function showLoginError(msg) {
