@@ -781,7 +781,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v190 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v191 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -3858,6 +3858,8 @@ async function showApp() {
   }
   // Anfragen-Glocke für alle Rollen (Admin/Verwalter: offene Anfragen, Verteiler: Rückmeldungen)
   document.getElementById('anfragenBtn').style.display = 'inline-block';
+  // Zurück-Button Schutz sofort aktivieren
+  initAppExitGuard();
   // Mode-Toggle anzeigen
   showModeToggle();
   await loadAllUsers();
@@ -3882,8 +3884,6 @@ async function showApp() {
   updateMissingVerteilerBadge();
   // Push-Subscription synchronisieren (falls bereits erlaubt)
   syncPushSubscription();
-  // Zurück-Button Schutz aktivieren
-  initAppExitGuard();
 }
 
 // Push-Subscription bei Login automatisch re-synken
@@ -9676,9 +9676,8 @@ function initAppExitGuard(){
     appConfirm('App verlassen?','Möchtest du FlyerOrg wirklich verlassen?','Verlassen','Bleiben').then(ok=>{
       if(ok){
         _appExiting=true;
-        // Versuche Tab zu schließen, sonst History komplett zurück
-        try{window.close();}catch(e){}
-        setTimeout(()=>{history.go(-(history.length-1));},200);
+        history.back(); // Pop unseren Guard-State (Handler überspringt wegen Flag)
+        setTimeout(()=>history.back(),50); // Tatsächlich die App verlassen
       }
     });
   });
