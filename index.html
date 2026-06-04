@@ -113,7 +113,7 @@ header{min-height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturat
 .mob-nav-stats{display:flex;gap:8px;font-size:.68rem;font-weight:600}
 .mob-stat::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:currentColor;margin-right:3px;vertical-align:middle}
 .mob-acc{max-height:0;overflow:hidden;transition:max-height .25s ease;padding-top:0!important;padding-bottom:0!important}
-.mob-acc.mob-open{max-height:45vh;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-top:6px!important;padding-bottom:2px!important}
+.mob-acc.mob-open{max-height:60vh;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-top:6px!important;padding-bottom:10px!important}
 .mob-action-btn{width:44px;height:44px;border-radius:var(--r12);border:1px solid var(--sep);background:var(--surface);font-size:1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s}
 .mob-action-btn:active{background:var(--surface3)}
 /* Verteilmodus */
@@ -499,7 +499,7 @@ textarea{min-height:68px}
     <button id="inviteUserBtn" onclick="openInviteModal()" title="Nutzer einladen" style="display:none;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='var(--text3)'">➕👤</button>
     <button id="manageUsersBtn" onclick="openManageUsersModal()" title="Nutzerverwaltung" style="display:none;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='var(--text3)'">👥</button>
     <button id="logbuchBtn" onclick="openLogbuchModal()" title="Logbuch" style="display:none;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='var(--text3)'">📋</button>
-    <button id="kampagnenBtn" onclick="openKampagnenModal()" title="Kampagnen verwalten" style="display:none;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='var(--text3)'">⚙️</button>
+    <button id="kampagnenBtn" onclick="openKampagnenModal()" title="Kampagnen" style="display:none;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='var(--text3)'">⚙️</button>
     <button id="missingVerteilerBtn" onclick="jumpToMissingVerteiler()" title="Gebiete ohne Verteiler" style="display:none;position:relative;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--orange)'" onmouseout="this.style.color='var(--text3)'">🆘<span id="missingVerteilerBadge" style="display:none;position:absolute;top:-2px;right:-2px;background:var(--orange);color:#fff;font-size:.55rem;font-weight:700;min-width:14px;height:14px;border-radius:7px;align-items:center;justify-content:center;padding:0 3px">0</span></button>
     <!-- Mobile overflow menu (populated by JS based on role) -->
     <div class="mob-overflow" id="mobOverflow">
@@ -781,7 +781,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v188 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v189 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -1149,10 +1149,7 @@ textarea{min-height:68px}
           </div>
         </div>
       </div>
-      <div style="display:flex;flex-direction:column;gap:2px">
-        <label style="font-size:.65rem;font-weight:600;color:var(--text3)">Spätester Zustellzeitpunkt</label>
-        <input type="date" id="newKampDeadline" style="font-size:.75rem">
-      </div>
+      <input type="hidden" id="newKampDeadline" value="">
       <div id="abhaengeDeadlineRow" style="display:none;flex-direction:column;gap:2px">
         <label style="font-size:.65rem;font-weight:600;color:var(--text3)">Plakate abhängen bis</label>
         <input type="date" id="newKampAbhaengeDeadline" style="font-size:.75rem">
@@ -1783,10 +1780,6 @@ function kampagneMetaLine(k){
     const bis=k.verteil_bis?new Date(k.verteil_bis).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}):'?';
     zeitInfo+=`📅 ${von} – ${bis}`;
   }
-  if(k.deadline){
-    const dl=new Date(k.deadline).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'2-digit'});
-    zeitInfo+=(zeitInfo?' · ':'')+`⏰ bis ${dl}`;
-  }
   let bereichInfo='';
   const bi=k.bereich_items||[];
   if(bi.length>0)bereichInfo=`🗺 ${bi.length} Bereich${bi.length>1?'e':''}`;
@@ -2043,7 +2036,7 @@ async function saveKampagne() {
   const typ = document.getElementById('newKampTyp').value || 'flyer';
   const verteilVon = document.getElementById('newKampVerteilVon').value || null;
   const verteilBis = document.getElementById('newKampVerteilBis').value || null;
-  const deadline = document.getElementById('newKampDeadline').value || null;
+  const deadline = verteilBis || null; // Deadline = Kampagnenende (verteil_bis)
   const abhaengeDeadline = document.getElementById('newKampAbhaengeDeadline').value || null;
   const bereichItems = getKampBereiche();
 
@@ -2180,10 +2173,7 @@ function genKampagneMsg(k){
     msg+=`\nVerteilzeitraum: ${fmt(k.verteil_von)} – ${fmt(k.verteil_bis)}.`;
   }
   // Deadline
-  if(k.deadline){
-    const dl=new Date(k.deadline).toLocaleDateString('de-DE',{day:'numeric',month:'long',year:'numeric'});
-    msg+=`\nSpätester Zustellzeitpunkt: ${dl}.`;
-  }
+  // Deadline entfernt — Verteilzeitraum-Ende ist maßgeblich
   // Abhänge-Deadline
   if(k.abhaenge_deadline&&(k.typ==='plakate'||k.typ==='beides')){
     const adl=new Date(k.abhaenge_deadline).toLocaleDateString('de-DE',{day:'numeric',month:'long',year:'numeric'});
@@ -7055,14 +7045,14 @@ function toggleOverflowMenu(e){
   const r=curRole||'verteiler';
   const isManager=r==='admin'||r==='kreisverwalter'||r==='verwalter'||r==='regionalverwalter';
   let items='';
-  if(isManager) items+=`<button class="mob-overflow-item" onclick="openKampagnenModal();closeMobMenu()">⚙ Kampagnen verwalten</button>`;
+  if(isManager) items+=`<button class="mob-overflow-item" onclick="openKampagnenModal();closeMobMenu()">⚙ Kampagnen</button>`;
   if(isManager) items+=`<button class="mob-overflow-item" onclick="openBulkPdfModal();closeMobMenu()">📄 PDF exportieren</button>`;
   if(isManager) items+=`<button class="mob-overflow-item" onclick="openHierarchyModal();closeMobMenu()">🏗 Gebietsstruktur</button>`;
   if(isManager) items+=`<button class="mob-overflow-item" onclick="openInviteModal();closeMobMenu()">➕ Nutzer einladen</button>`;
   if(isManager) items+=`<button class="mob-overflow-item" onclick="openManageUsersModal();closeMobMenu()">👥 Nutzerverwaltung</button>`;
-  if(isManager) items+=`<button class="mob-overflow-item" onclick="openLogbuchModal();closeMobMenu()">📋 Logbuch</button>`;
+  // Logbuch ist über Desktop-Header erreichbar (📋-Button)
   if(isManager) items+=`<button class="mob-overflow-item" onclick="jumpToMissingVerteiler();closeMobMenu()">🆘 Verteiler fehlen</button>`;
-  items+=`<button class="mob-overflow-item" onclick="openProfilModal();closeMobMenu()">👤 Mein Profil</button>`;
+  // Profil ist über den User-Pill oben rechts erreichbar
   items+=`<button class="mob-overflow-item" onclick="hardRefresh();closeMobMenu()" style="border-top:1px solid var(--sep);margin-top:4px;padding-top:8px;color:var(--text3)">🔄 App aktualisieren</button>`;
   menu.innerHTML=items;
   menu.classList.toggle('open');
@@ -9675,17 +9665,16 @@ document.addEventListener('visibilitychange',()=>{
 
 // App-Verlassen-Warnung (Android-Zurück-Button + Tab/Browser schließen)
 // History-Trick: Dummy-State, damit Zurück-Button nicht sofort die App verlässt
-let _appExitGuard=false;
+let _appExitGuard=false,_appExiting=false;
 function initAppExitGuard(){
   if(_appExitGuard)return;
   _appExitGuard=true;
   history.pushState({flyerorg:true},document.title);
   window.addEventListener('popstate',(e)=>{
-    if(!currentUser){return;}
-    // Zurück gedrückt → State neu pushen + Warnung zeigen
+    if(_appExiting||!currentUser)return;
     history.pushState({flyerorg:true},document.title);
     appConfirm('App verlassen?','Möchtest du FlyerOrg wirklich verlassen?','Verlassen','Bleiben').then(ok=>{
-      if(ok){_appExitGuard=false;history.back();history.back();}
+      if(ok){_appExiting=true;window.location.href='about:blank';}
     });
   });
 }
