@@ -781,7 +781,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v192 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v193 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -3858,8 +3858,6 @@ async function showApp() {
   }
   // Anfragen-Glocke für alle Rollen (Admin/Verwalter: offene Anfragen, Verteiler: Rückmeldungen)
   document.getElementById('anfragenBtn').style.display = 'inline-block';
-  // Zurück-Button Schutz sofort aktivieren
-  initAppExitGuard();
   // Mode-Toggle anzeigen
   showModeToggle();
   await loadAllUsers();
@@ -9662,23 +9660,6 @@ async function vmRequestWakeLock(){
 document.addEventListener('visibilitychange',()=>{
   if(vmActive && document.visibilityState==='visible' && !vmWakeLock) vmRequestWakeLock();
 });
-
-// App-Verlassen-Warnung (Android-Zurück-Button + Tab/Browser schließen)
-// History-Trick: Dummy-State, damit Zurück-Button nicht sofort die App verlässt
-let _appExitGuard=false,_appExiting=false;
-function initAppExitGuard(){
-  if(_appExitGuard)return;
-  _appExitGuard=true;
-  history.pushState({flyerorg:true},document.title);
-  window.addEventListener('popstate',(e)=>{
-    if(_appExiting||!currentUser)return;
-    appConfirm('App verlassen?','Möchtest du FlyerOrg wirklich verlassen?','Verlassen','Bleiben').then(ok=>{
-      if(!ok){
-        history.pushState({flyerorg:true},document.title);
-      }
-    });
-  });
-}
 
 // Push-Nachricht anzeigen wenn App über Notification geöffnet wird
 function showPushMsg(info){
