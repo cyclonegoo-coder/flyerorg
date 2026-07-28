@@ -2675,6 +2675,87 @@ function pkMapUpdateBar(){
   });
 }
 
+function pkMapExportPDF(){
+  const k=[...kampagnen,...kampagnenArchiv].find(x=>String(x.id)===String(pkMapKampId));
+  if(!k||!Object.keys(pkMapData).length){toast('⚠️ Keine Daten');return;}
+  const {jsPDF}=window.jspdf;
+  const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+  const pw=210,margin=12;
+  let y=margin;
+  // Titel
+  pdf.setFontSize(16);pdf.setFont(undefined,'bold');
+  pdf.text(`Plakat-Kontingent: ${k.name}`,margin,y);y+=7;
+  pdf.setFontSize(9);pdf.setFont(undefined,'normal');pdf.setTextColor(100);
+  const heute=new Date().toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'});
+  let meta=`Erstellt: ${heute}`;
+  if(k.verteil_von||k.verteil_bis){
+    const von=k.verteil_von?new Date(k.verteil_von).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}):'?';
+    const bis=k.verteil_bis?new Date(k.verteil_bis).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}):'?';
+    meta+=`  ·  Verteilzeitraum: ${von} – ${bis}`;
+  }
+  pdf.text(meta,margin,y);y+=5;
+  pdf.setTextColor(0);
+  // Gesamtübersicht
+  const ids=Object.keys(pkMapData);
+  const sollT=ids.reduce((s,id)=>s+pkMapData[id].soll,0);
+  pdf.setFontSize(10);pdf.setFont(undefined,'bold');
+  pdf.text(`Gesamt: ${sollT} Plakate auf ${ids.length} Gebiete`,margin,y);y+=6;
+  pdf.setDrawColor(180);pdf.line(margin,y,pw-margin,y);y+=4;
+  // Per Bereich gruppieren
+  const bi=pkMapBereichItems||[];
+  const gruppen=[];
+  if(bi.length>0){
+    bi.forEach(b=>{
+      const bIds=ids.filter(gId=>gebietInKampagnenBereich(gId,[b]));
+      if(bIds.length)gruppen.push({name:pkBereichName(b),soll:b.soll||0,gebiete:bIds});
+    });
+    // Gebiete die in keinem Bereich sind
+    const zugeordnet=new Set(gruppen.flatMap(g=>g.gebiete));
+    const rest=ids.filter(id=>!zugeordnet.has(id));
+    if(rest.length)gruppen.push({name:'Sonstige',soll:0,gebiete:rest});
+  } else {
+    gruppen.push({name:'Alle Gebiete',soll:sollT,gebiete:ids});
+  }
+  // Tabelle rendern
+  gruppen.forEach(gr=>{
+    if(y>270){pdf.addPage();y=margin;}
+    const grSoll=gr.gebiete.reduce((s,id)=>s+pkMapData[id].soll,0);
+    pdf.setFontSize(11);pdf.setFont(undefined,'bold');
+    pdf.text(`${gr.name}`,margin,y);
+    pdf.setFontSize(8);pdf.setFont(undefined,'normal');pdf.setTextColor(100);
+    pdf.text(`${grSoll} Plakate${gr.soll?' (Soll: '+gr.soll+')':''}  ·  ${gr.gebiete.length} Gebiete`,margin+pdf.getTextWidth(gr.name+' ')+2,y);
+    pdf.setTextColor(0);y+=5;
+    // Spaltenköpfe
+    pdf.setFontSize(7);pdf.setFont(undefined,'bold');pdf.setTextColor(120);
+    pdf.text('Gebiet',margin,y);
+    pdf.text('Plakate',margin+95,y);
+    pdf.text('Verteiler',margin+115,y);
+    pdf.text('Übergabe',margin+155,y);
+    pdf.setTextColor(0);y+=1;
+    pdf.setDrawColor(200);pdf.line(margin,y,pw-margin,y);y+=3;
+    // Zeilen
+    pdf.setFontSize(8);pdf.setFont(undefined,'normal');
+    gr.gebiete.sort((a,b)=>(pkMapData[a].name||'').localeCompare(pkMapData[b].name||'')).forEach(gId=>{
+      if(y>280){pdf.addPage();y=margin;}
+      const d=pkMapData[gId];
+      const g=getG(gId);
+      const vName=g?.verteilerId?(getVerteilerName(g)||'Zugewiesen'):'–';
+      const vUser=g?.verteilerId?allUsers.find(u=>u.id===g.verteilerId):null;
+      const ueInfo=vUser?(vUser._kampUebergabe||vUser.uebergabe_info||''):'';
+      pdf.text(d.name||gId,margin,y,{maxWidth:92});
+      pdf.setFont(undefined,'bold');
+      pdf.text(String(d.soll),margin+95,y);
+      pdf.setFont(undefined,'normal');
+      pdf.text(vName,margin+115,y,{maxWidth:38});
+      if(ueInfo)pdf.text(ueInfo,margin+155,y,{maxWidth:40});
+      y+=4.5;
+    });
+    y+=3;
+  });
+  pdf.save(`Plakat-Kontingent_${k.name.replace(/[^a-zA-ZäöüÄÖÜß0-9 _-]/g,'')}.pdf`);
+  toast('✅ PDF erstellt');
+}
+
 async function pkMapSave(){
   if(!pkMapKampId)return;
   let ok=0,lastErr='';
