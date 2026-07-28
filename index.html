@@ -143,12 +143,11 @@ header{min-height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturat
 #pkBar .pk-total{font-size:.95rem;font-weight:700;flex:1}
 #pkBar .pk-badge{padding:2px 8px;border-radius:10px;font-size:.72rem;font-weight:600}
 .pk-label{position:absolute;z-index:650;pointer-events:auto;text-align:center;transform:translate(-50%,-50%);user-select:none}
-.pk-label .pk-num{font-size:1.3rem;font-weight:800;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.7),0 0 8px rgba(0,0,0,.4);min-width:32px;display:inline-block;cursor:pointer}
-.pk-label .pk-btns{display:flex;gap:2px;justify-content:center;margin-top:1px}
-.pk-label .pk-btn{width:26px;height:22px;border:none;border-radius:4px;font-size:.8rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,.3)}
-.pk-label .pk-btn-up{background:rgba(52,199,89,.9);color:#fff}
-.pk-label .pk-btn-dn{background:rgba(255,59,48,.85);color:#fff}
-.pk-label .pk-btn:active{transform:scale(.9)}
+.pk-pill{display:inline-flex;align-items:center;gap:0;background:rgba(30,30,32,.85);backdrop-filter:blur(6px);border-radius:16px;box-shadow:0 2px 8px rgba(0,0,0,.35);overflow:hidden;height:28px}
+.pk-pill .pk-btn{width:24px;height:28px;border:none;font-size:.75rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.7);background:transparent;transition:background .15s}
+.pk-pill .pk-btn:hover{background:rgba(255,255,255,.15)}
+.pk-pill .pk-btn:active{background:rgba(255,255,255,.25)}
+.pk-pill .pk-num{font-size:.9rem;font-weight:700;color:#fff;min-width:24px;padding:0 2px;text-align:center}
 
 /* ── BODY ── */
 .app-body{display:flex;flex:1;overflow:hidden}
@@ -435,9 +434,8 @@ textarea{min-height:68px}
   </div>
   <div id="pkBarBereiche" style="display:none;flex-wrap:wrap;gap:4px;padding:0 2px"></div>
   <div class="pk-row">
-    <input type="number" id="pkBarInput" min="0" placeholder="Gesamt" oninput="if(pkMapActive)pkMapUpdateBar()" style="width:80px;font-size:.82rem;padding:5px 8px;border:1px solid rgba(255,255,255,.3);border-radius:6px;background:rgba(255,255,255,.1);color:#fff;text-align:center">
-    <button class="ms-btn" onclick="pkMapVerteilen()">⟿ Verteilen</button>
     <span style="flex:1"></span>
+    <button class="ms-btn" onclick="pkMapExportPDF()">📄 PDF</button>
     <button class="ms-btn" style="background:rgba(52,199,89,.6)" onclick="pkMapSave()">💾 Speichern</button>
   </div>
 </div>
@@ -2565,13 +2563,13 @@ function pkMapRenderLabels(){
     const center=layers[gId].getBounds().getCenter();
     const icon=L.divIcon({
       className:'pk-label',
-      html:`<div class="pk-num" id="pkn_${gId}">${d.soll}</div>
-        <div class="pk-btns">
-          <button class="pk-btn pk-btn-dn" onclick="event.stopPropagation();pkMapAdj('${gId}',-1)">−</button>
-          <button class="pk-btn pk-btn-up" onclick="event.stopPropagation();pkMapAdj('${gId}',1)">+</button>
-        </div>`,
-      iconSize:[60,44],
-      iconAnchor:[30,22]
+      html:`<div class="pk-pill">
+        <button class="pk-btn" onclick="event.stopPropagation();pkMapAdj('${gId}',-1)">−</button>
+        <span class="pk-num" id="pkn_${gId}">${d.soll}</span>
+        <button class="pk-btn" onclick="event.stopPropagation();pkMapAdj('${gId}',1)">+</button>
+      </div>`,
+      iconSize:[72,28],
+      iconAnchor:[36,14]
     });
     const marker=L.marker(center,{icon,interactive:true,zIndexOffset:1000}).addTo(map);
     pkMapLabels.push(marker);
@@ -2644,16 +2642,9 @@ function pkMapUpdateBar(){
   const ids=Object.keys(pkMapData);
   const sollT=ids.reduce((s,id)=>s+pkMapData[id].soll,0);
   const istT=ids.reduce((s,id)=>s+pkMapData[id].ist,0);
-  const input=parseInt(document.getElementById('pkBarInput')?.value)||0;
   const info=document.getElementById('pkBarInfo');
-  if(input>0){
-    const diff=sollT-input;
-    if(diff===0){info.textContent=`✅ ${sollT} verteilt`;info.style.background='rgba(52,199,89,.5)';}
-    else if(diff>0){info.textContent=`+${diff} über Soll`;info.style.background='rgba(255,149,0,.6)';}
-    else{info.textContent=`${Math.abs(diff)} noch offen`;info.style.background='rgba(255,59,48,.5)';}
-  } else {
-    info.textContent=`Soll: ${sollT} · Ist: ${istT}`;info.style.background='rgba(255,255,255,.15)';
-  }
+  info.textContent=`Soll: ${sollT} · Ist: ${istT}`;
+  info.style.background=istT===sollT&&sollT>0?'rgba(52,199,89,.5)':istT>sollT&&sollT>0?'rgba(255,149,0,.6)':'rgba(255,255,255,.15)';
   // Per-Bereich Anzeige
   const bDiv=document.getElementById('pkBarBereiche');
   const bi=pkMapBereichItems||[];
@@ -2706,7 +2697,6 @@ function pkMapEnd(){
   pkMapActive=false;
   pkMapClearLabels();
   document.getElementById('pkBar').classList.remove('pk-active');
-  document.getElementById('pkBarInput').value='';
   // Temporäre Polygone entfernen
   pkMapTempLayers.forEach(gId=>{
     if(layers[gId]){map.removeLayer(layers[gId]);delete layers[gId];}
