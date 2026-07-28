@@ -527,6 +527,7 @@ textarea{min-height:68px}
     <span class="mob-stat" id="mobStatVerteilt" style="color:var(--green)">–</span>
     <span class="mob-stat" id="mobStatOffen" style="color:var(--orange)">–</span>
     <span class="mob-stat" id="mobStatFehlt" style="color:var(--red);display:none" onclick="jumpToMissingVerteiler()">–</span>
+    <span class="mob-stat" id="mobStatPlakat" style="color:var(--text2);display:none">–</span>
   </div>
 </div>
 
@@ -781,7 +782,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v193 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v194 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -1710,6 +1711,8 @@ async function loadGebieteForKampagne(kampagneId, autoNavigate) {
           localG.verteiler = dbG.verteiler_name || '';
           localG.verteilerId = dbG.verteiler_id || null;
           localG.stueckzahl = dbG.stueckzahl || localG.stueckzahl;
+          localG.soll_stueck = dbG.soll_stueck || 0;
+          localG.ist_stueck = dbG.ist_stueck || 0;
         }
       });
       // Alle nicht in DB vorhandenen Gebiete → Status zurücksetzen auf 'offen'
@@ -1841,6 +1844,7 @@ function renderKampagnenList() {
         ${k.beschreibung ? `<div style="font-size:.7rem;color:var(--text3)">${esc(k.beschreibung)}</div>` : ''}
         ${meta ? `<div style="font-size:.65rem;color:var(--text4);margin-top:2px">${meta}</div>` : ''}
       </div>
+      ${kannBearbeiten&&(k.typ==='plakate'||k.typ==='beides') ? `<button style="background:none;border:none;cursor:pointer;font-size:.85rem;padding:2px" onclick="openPlakatKontingentModal('${k.id}')" title="Plakat-Kontingent">📌</button>` : ''}
       ${kannBearbeiten&&!k.ist_basis ? `<button style="background:none;border:none;cursor:pointer;font-size:.85rem;padding:2px" onclick="openKampagneNotify('${k.id}')" title="Nutzer benachrichtigen">📣</button>` : ''}
       ${kannBearbeiten ? `<button style="background:none;border:none;cursor:pointer;font-size:.85rem;padding:2px" onclick="editKampagne('${k.id}')" title="Bearbeiten">✏️</button>` : ''}
       ${kannBearbeiten&&!k.ist_basis ? `<button style="background:none;border:none;cursor:pointer;font-size:.75rem;padding:2px" onclick="archiveKampagne('${k.id}',true)" title="Archivieren">📥</button>` : ''}
@@ -2312,6 +2316,116 @@ async function sendKampagneNotify(kampId) {
   if(pushOk===0&&waOk===0&&fehler.length===0) result+='<div style="color:var(--text3)">Keine Verteiler benachrichtigt.</div>';
   result+='</div>';
   if(bodyEl)bodyEl.innerHTML=result;
+}
+
+// ============================================================
+// PLAKAT-KONTINGENT MODAL (Soll-Zuweisung pro Gebiet)
+// ============================================================
+async function openPlakatKontingentModal(kampId){
+  const k=[...kampagnen,...kampagnenArchiv].find(x=>String(x.id)===String(kampId));
+  if(!k)return;
+  // Gebiete für diese Kampagne laden
+  const {data:gsData}=await sb.from('gebiet_status').select('gebiet_id,soll_stueck,ist_stueck,status').eq('kampagne_id',kampId);
+  const gsMap={};
+  (gsData||[]).forEach(d=>{gsMap[d.gebiet_id]={soll:d.soll_stueck||0,ist:d.ist_stueck||0,status:d.status};});
+  // Alle Gebiete im Kampagnen-Bereich sammeln
+  const kGebiete=[];
+  const bi=k.bereich_items||[];
+  for(const[rId,r]of Object.entries(regionen)){
+    r.gebiete.forEach(g=>{
+      if(bi.length>0&&!gebietInKampagnenBereich(g.id,bi))return;
+      const gs=gsMap[g.id]||{soll:0,ist:0,status:'offen'};
+      kGebiete.push({id:g.id,name:g.name,region:r.short||r.name||rId,soll:gs.soll,ist:gs.ist,status:gs.status});
+    });
+  }
+  kGebiete.sort((a,b)=>a.region.localeCompare(b.region)||a.name.localeCompare(b.name));
+  // Gruppiert nach Region
+  const grouped={};
+  kGebiete.forEach(g=>{if(!grouped[g.region])grouped[g.region]=[];grouped[g.region].push(g);});
+  const totalSoll=kGebiete.reduce((s,g)=>s+g.soll,0);
+  const totalIst=kGebiete.reduce((s,g)=>s+g.ist,0);
+  let rows='';
+  for(const[region,gebiete]of Object.entries(grouped)){
+    const rSoll=gebiete.reduce((s,g)=>s+g.soll,0);
+    const rIst=gebiete.reduce((s,g)=>s+g.ist,0);
+    rows+=`<div style="background:var(--surface2);border-radius:var(--r8);padding:6px 8px;margin-bottom:6px">
+      <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none';this.querySelector('.pk-arrow').textContent=this.nextElementSibling.style.display==='none'?'▸':'▾'">
+        <span style="font-size:.75rem;font-weight:600"><span class="pk-arrow">▾</span> ${esc(region)} <span style="font-size:.65rem;color:var(--text4)">(${gebiete.length})</span></span>
+        <span style="font-size:.68rem;color:var(--text3)">Soll: ${rSoll} · Ist: ${rIst}</span>
+      </div>
+      <div>`;
+    gebiete.forEach(g=>{
+      const warn=g.soll&&g.ist>g.soll;
+      rows+=`<div style="display:flex;align-items:center;gap:4px;padding:3px 0;border-bottom:1px solid var(--sep)" data-pkgid="${g.id}">
+        <span style="flex:1;font-size:.72rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(g.name)}">${esc(g.name)}</span>
+        <input type="number" class="pk-soll" data-gid="${g.id}" value="${g.soll||''}" min="0" placeholder="0" style="width:52px;font-size:.72rem;padding:4px;text-align:center;border:1px solid var(--sep);border-radius:4px">
+        <span style="font-size:.65rem;color:${warn?'var(--orange)':'var(--text4)'};width:36px;text-align:center">${g.ist}</span>
+      </div>`;
+    });
+    rows+=`</div></div>`;
+  }
+
+  const ov=document.createElement('div');
+  ov.className='modal-ov open';ov.id='pkModalOv';ov.style.zIndex='3200';
+  ov.onclick=function(e){if(e.target===this)this.remove();};
+  ov.innerHTML=`<div class="modal" style="max-width:480px">
+    <div class="m-handle"></div>
+    <div class="m-title">📌 Plakat-Kontingent: ${esc(k.name)}</div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;padding:6px 8px;background:var(--surface2);border-radius:var(--r8)">
+      <div style="flex:1"><span style="font-size:.72rem;color:var(--text3)">Gesamt:</span><br><strong style="font-size:.9rem">${totalSoll}</strong> <span style="font-size:.68rem;color:var(--text4)">Soll</span> · <strong style="font-size:.9rem">${totalIst}</strong> <span style="font-size:.68rem;color:var(--text4)">Ist</span></div>
+      <div style="display:flex;flex-direction:column;gap:3px">
+        <div style="display:flex;gap:4px;align-items:center">
+          <input type="number" id="pkGleichInput" min="0" placeholder="Gesamt" style="width:80px;font-size:.75rem;padding:5px;border:1px solid var(--sep);border-radius:4px">
+          <button class="btn btn-g" style="font-size:.68rem;padding:4px 8px;white-space:nowrap" onclick="pkGleichVerteilen()">⟿ Verteilen</button>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;gap:4px;margin-bottom:4px;padding:0 8px">
+      <span style="flex:1;font-size:.62rem;color:var(--text4)">Gebiet</span>
+      <span style="width:52px;font-size:.62rem;color:var(--text4);text-align:center">Soll</span>
+      <span style="width:36px;font-size:.62rem;color:var(--text4);text-align:center">Ist</span>
+    </div>
+    <div id="pkGebietList" style="max-height:50vh;overflow-y:auto">${rows}</div>
+    <div class="m-actions">
+      <button class="btn btn-g" onclick="document.getElementById('pkModalOv').remove()">Schließen</button>
+      <button class="btn btn-p" onclick="savePlakatKontingentBulk('${kampId}')">💾 Speichern</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+}
+
+function pkGleichVerteilen(){
+  const total=parseInt(document.getElementById('pkGleichInput')?.value)||0;
+  if(!total){toast('⚠️ Bitte Gesamtzahl eingeben');return;}
+  const inputs=[...document.querySelectorAll('.pk-soll')];
+  if(!inputs.length)return;
+  const base=Math.floor(total/inputs.length);
+  let rest=total-base*inputs.length;
+  inputs.forEach(inp=>{
+    inp.value=base+(rest>0?1:0);
+    if(rest>0)rest--;
+  });
+  toast(`✅ ${total} gleichmäßig auf ${inputs.length} Gebiete verteilt`);
+}
+
+async function savePlakatKontingentBulk(kampId){
+  const inputs=[...document.querySelectorAll('.pk-soll')];
+  if(!inputs.length)return;
+  let ok=0;
+  for(const inp of inputs){
+    const gId=inp.dataset.gid;
+    const soll=parseInt(inp.value)||0;
+    const g=getG(gId);
+    if(g)g.soll_stueck=soll;
+    const {error}=await sb.from('gebiet_status').upsert({
+      gebiet_id:gId,kampagne_id:kampId,soll_stueck:soll,
+      updated_at:new Date().toISOString()
+    },{onConflict:'gebiet_id,kampagne_id'});
+    if(!error)ok++;
+  }
+  toast(`✅ Kontingent für ${ok} Gebiete gespeichert`);
+  document.getElementById('pkModalOv')?.remove();
+  renderStats();
 }
 
 function showLoginError(msg) {
@@ -5896,6 +6010,7 @@ function msUpdateUI(){
 async function msBulkStatus(){
   if(!msSelected.length)return;
   const n=msSelected.length;
+  const isPK=istPlakatKampagne();
   const ov=document.createElement('div');
   ov.className='modal-ov open';ov.id='msBulkOv';
   ov.onclick=function(e){if(e.target===this)this.remove();};
@@ -5906,27 +6021,47 @@ async function msBulkStatus(){
       <button class="btn" style="background:var(--surface3)" onclick="msDoStatus('offen')">Nicht zugestellt</button>
       <button class="btn" style="background:rgba(255,149,0,.15);color:var(--orange)" onclick="msDoStatus('zugeteilt')">Zugestellt</button>
       <button class="btn" style="background:rgba(52,199,89,.15);color:var(--green)" onclick="msDoStatus('fertig')">Verteilt ✓</button>
+      ${isPK?`<div style="margin-top:4px;border-top:1px solid var(--sep);padding-top:8px">
+        <div style="font-size:.72rem;color:var(--text3);margin-bottom:4px">📌 Plakate je Gebiet (bei „Verteilt"):</div>
+        <select id="msBulkPlakatMode" style="width:100%;font-size:.78rem;padding:6px" onchange="document.getElementById('msBulkPlakatVal').style.display=this.value==='custom'?'block':'none'">
+          <option value="soll">Soll-Wert übernehmen</option>
+          <option value="custom">Eigene Anzahl:</option>
+        </select>
+        <input type="number" id="msBulkPlakatVal" min="0" placeholder="Anzahl" style="width:100%;font-size:.78rem;padding:6px;margin-top:4px;display:none">
+      </div>`:''}
     </div>
     <div class="m-actions"><button class="btn btn-g" onclick="document.getElementById('msBulkOv').remove()">Abbrechen</button></div>
   </div>`;
   document.body.appendChild(ov);
 }
 async function msDoStatus(s){
+  const isPK=istPlakatKampagne();
+  let bulkIst=null;
+  if(isPK&&s==='fertig'){
+    const mode=document.getElementById('msBulkPlakatMode')?.value||'soll';
+    if(mode==='custom')bulkIst=parseInt(document.getElementById('msBulkPlakatVal')?.value)||0;
+    // 'soll' → use each gebiet's soll_stueck
+  }
   document.getElementById('msBulkOv')?.remove();
   let ok=0;
   for(const gId of msSelected){
     const g=getG(gId);if(!g)continue;
     g.status=s;
+    if(isPK&&s==='fertig'){
+      g.ist_stueck=bulkIst!==null?bulkIst:(g.soll_stueck||0);
+    }
     const col=getGebietFarbe(g);
     if(layers[gId])layers[gId].setStyle({fillColor:col.f,color:col.s});
     let kampId=curKampagne?.id||null;
     if(!kampId||curKampagne?._local)kampId=await ensureKampagneInDB();
     if(kampId){
-      const {error}=await sb.from('gebiet_status').upsert({
+      const upsertData={
         gebiet_id:gId,kampagne_id:kampId,status:s,
         verteiler_id:g.verteilerId||null,verteiler_name:g.verteiler||null,
         stueckzahl:g.stueckzahl,updated_at:new Date().toISOString()
-      },{onConflict:'gebiet_id,kampagne_id'});
+      };
+      if(isPK&&s==='fertig')upsertData.ist_stueck=g.ist_stueck;
+      const {error}=await sb.from('gebiet_status').upsert(upsertData,{onConflict:'gebiet_id,kampagne_id'});
       if(!error)ok++;
     }
   }
@@ -6059,6 +6194,16 @@ function renderStats(){
       mF.style.display=missing>0?'inline':'none';
     } else { mF.style.display='none'; }
   }
+  // Plakat Soll/Ist-Anzeige
+  const pkStat=document.getElementById('mobStatPlakat');
+  if(pkStat){
+    if(istPlakatKampagne()){
+      const sollT=gs.reduce((s,g)=>s+(g.soll_stueck||0),0);
+      const istT=gs.reduce((s,g)=>s+(g.ist_stueck||0),0);
+      if(sollT>0){pkStat.textContent=`📌 ${istT}/${sollT}`;pkStat.style.display='inline';}
+      else{pkStat.style.display='none';}
+    } else {pkStat.style.display='none';}
+  }
 }
 
 // ============================================================
@@ -6093,6 +6238,7 @@ function openDetail(id){
     h+=`<div class="d-sec" style="padding:8px 12px">
       <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
         <div><span style="font-size:.65rem;color:var(--text4);text-transform:uppercase">Stück</span> <strong style="color:var(--blue);font-size:.95rem">${g.stueckzahl}</strong></div>
+        ${istPlakatKampagne()&&(g.soll_stueck||g.ist_stueck)?`<div><span style="font-size:.65rem;color:var(--text4)">📌</span> <span style="font-size:.72rem">${g.ist_stueck||0}/${g.soll_stueck||0}</span>${g.soll_stueck&&g.ist_stueck>g.soll_stueck?`<span style="font-size:.6rem;color:var(--orange)"> +${g.ist_stueck-g.soll_stueck}</span>`:''}</div>`:''}
         <div style="flex:1;text-align:center"><span style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:600;${g.status==='fertig'?'background:rgba(52,199,89,.15);color:var(--green)':g.status==='zugeteilt'?'background:rgba(255,149,0,.15);color:var(--orange)':'background:var(--surface3);color:var(--text3)'}">${sl(g.status)}</span></div>
         <div style="text-align:right;font-size:.72rem;color:var(--text3)">${g.verteilerId?(g.verteilerId===currentUser?.id?'👤 Du':'👤 '+(getVerteilerName(g)||'Zugewiesen')):'⚠️ Frei'}</div>
       </div>
@@ -6168,7 +6314,16 @@ function openDetail(id){
         <div style="background:var(--surface2);border-radius:var(--r8);padding:8px 10px">
           <div style="font-size:.7rem;font-weight:600;color:var(--text2);margin-bottom:5px">📦 Stückzahl ändern</div>
           <div style="display:flex;gap:6px;align-items:center"><input type="number" id="inpS" value="${g.stueckzahl}" style="width:80px;min-width:80px;font-size:16px;font-weight:700;padding:10px 12px;color:#1c1c1e;text-align:center;border:1.5px solid var(--sep);border-radius:var(--r8);background:var(--surface2)"><button class="btn btn-g" onclick="saveSt2('${g.id}')" style="flex:1;padding:10px 14px;font-size:.78rem;white-space:nowrap">Ändern</button></div>
-        </div>`;
+        </div>
+        ${istPlakatKampagne()?`<div style="background:var(--surface2);border-radius:var(--r8);padding:8px 10px">
+          <div style="font-size:.7rem;font-weight:600;color:var(--text2);margin-bottom:5px">📌 Plakat-Kontingent</div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <div style="flex:1"><div style="font-size:.62rem;color:var(--text4)">Soll</div><input type="number" id="inpSoll" value="${g.soll_stueck||''}" min="0" placeholder="0" style="width:100%;font-size:16px;padding:8px;text-align:center;border:1.5px solid var(--sep);border-radius:var(--r8);background:var(--surface2)"></div>
+            <div style="flex:1"><div style="font-size:.62rem;color:var(--text4)">Ist</div><input type="number" id="inpIst" value="${g.ist_stueck||''}" min="0" placeholder="0" style="width:100%;font-size:16px;padding:8px;text-align:center;border:1.5px solid var(--sep);border-radius:var(--r8);background:var(--surface2)"></div>
+            <button class="btn btn-g" onclick="savePlakatKontingent('${g.id}')" style="padding:10px 14px;font-size:.78rem;white-space:nowrap;align-self:flex-end">Speichern</button>
+          </div>
+          ${g.soll_stueck&&g.ist_stueck>g.soll_stueck?`<div style="font-size:.68rem;color:var(--orange);margin-top:4px">⚠️ ${g.ist_stueck-g.soll_stueck} über Soll</div>`:''}
+        </div>`:''}`+``;
       // Verteiler anfragen (wenn kein Verteiler)
       if(!g.verteilerId){
         h+=`<div style="background:var(--surface2);border-radius:var(--r8);padding:8px 10px">
@@ -6279,6 +6434,7 @@ function openDetail(id){
     h+=`<div class="d-sec"><div class="info-g">
       <div><div class="ii-label">Stückzahl</div><div class="ii-val" style="color:var(--blue)">${g.stueckzahl}</div></div>
       <div><div class="ii-label">Status</div><div class="ii-val">${sl(g.status)}</div></div>
+      ${istPlakatKampagne()&&(g.soll_stueck||g.ist_stueck)?`<div><div class="ii-label">📌 Plakate</div><div class="ii-val">${g.ist_stueck||0} / ${g.soll_stueck||0}${g.soll_stueck&&g.ist_stueck>g.soll_stueck?` <span style="color:var(--orange);font-size:.7rem">+${g.ist_stueck-g.soll_stueck}</span>`:''}</div></div>`:''}
       <div class="ii-full"><div class="ii-label">Verteiler${_vUser?.is_offline?' <span style="font-size:.6rem;color:var(--orange)">(Offline)</span>':''}</div><div class="ii-val">${getVerteilerName(g)||'⚠️ Verteiler fehlt'}</div></div>
       ${_ueInfo?`<div class="ii-full"><div class="ii-label">Übergabe</div><div class="ii-val" style="font-size:.72rem;color:var(--text3)">📦 ${_ueInfo}</div></div>`:''}
     </div></div>`;
@@ -6310,6 +6466,14 @@ function openDetail(id){
       <div class="d-sec"><div class="sec-hd">Stückzahl</div><div class="f-stack">
         <input type="number" id="inpS" value="${g.stueckzahl}"><button class="btn btn-g" onclick="saveSt2('${g.id}')">Ändern</button>
       </div></div>`;
+      if(istPlakatKampagne()){
+        h+=`<div class="d-sec"><div class="sec-hd">📌 Plakat-Kontingent</div><div class="f-stack" style="flex-direction:row;gap:6px;align-items:center">
+          <div><span style="font-size:.68rem;color:var(--text4)">Soll</span><br><input type="number" id="inpSoll" value="${g.soll_stueck||''}" min="0" placeholder="0" style="width:65px;font-size:.85rem;padding:6px;text-align:center;border:1px solid var(--sep);border-radius:4px"></div>
+          <div><span style="font-size:.68rem;color:var(--text4)">Ist</span><br><input type="number" id="inpIst" value="${g.ist_stueck||''}" min="0" placeholder="0" style="width:65px;font-size:.85rem;padding:6px;text-align:center;border:1px solid var(--sep);border-radius:4px"></div>
+          <button class="btn btn-g" onclick="savePlakatKontingent('${g.id}')" style="align-self:flex-end">Speichern</button>
+        </div></div>`;
+      }
+      h+=``;
       const gebietAnfragen=alleAnfragen.filter(a=>a.gebiet_id===g.id && binIchZustaendigFuerGebiet(a.gebiet_id));
       if(gebietAnfragen.length>0){
         h+=`<div class="d-sec"><div class="sec-hd">📦 Offene Anfragen (${gebietAnfragen.length})</div><div class="f-stack">`;
@@ -6432,6 +6596,9 @@ function closeDetail(){
 // ============================================================
 // ACTIONS (write to Supabase + local update)
 // ============================================================
+function istPlakatKampagne(){
+  const t=curKampagne?.typ;return t==='plakate'||t==='beides';
+}
 async function setSt(id,s){
   if (!pruefeGebietZugriff(id)) return;
   if (curRole === 'verteiler') {
@@ -6444,33 +6611,82 @@ async function setSt(id,s){
     }
   }
   const g=getG(id);
-  // Bestätigungsabfrage bevor Status geändert wird
   const statusLabels = {offen:'Nicht zugestellt',zugeteilt:'Zugestellt',fertig:'Verteilt ✓'};
-  if (g.status === s) return; // Gleicher Status, nichts zu tun
-  if(!await appConfirm('Status ändern',`Status von „${g.name}" wirklich auf „${statusLabels[s]||s}" ändern?`,'Ändern','Abbrechen'))return;
+  if (g.status === s) return;
+  // Bei Plakat-Kampagne + Status=fertig: Anzahl abfragen
+  if(istPlakatKampagne()&&s==='fertig'){
+    const anzahl=await askPlakatAnzahl(g);
+    if(anzahl===null)return; // abgebrochen
+    await doSetSt(id,s,statusLabels,anzahl);
+  } else {
+    if(!await appConfirm('Status ändern',`Status von „${g.name}" wirklich auf „${statusLabels[s]||s}" ändern?`,'Ändern','Abbrechen'))return;
+    await doSetSt(id,s,statusLabels,null);
+  }
+}
+function askPlakatAnzahl(g){
+  return new Promise(resolve=>{
+    const soll=g.soll_stueck||0;
+    const ov=document.createElement('div');
+    ov.className='modal-ov open';ov.id='plakatAnzahlOv';
+    ov.onclick=function(e){if(e.target===this){this.remove();resolve(null);}};
+    ov.innerHTML=`<div class="modal" style="max-width:360px">
+      <div class="m-handle"></div>
+      <div class="m-title">📌 Plakate verteilt</div>
+      <div style="padding:8px 0">
+        <div style="font-size:.78rem;color:var(--text2);margin-bottom:8px">Wie viele Plakate wurden in „${esc(g.name)}" verteilt?</div>
+        ${soll?`<div style="font-size:.72rem;color:var(--text3);margin-bottom:6px">Soll: <strong>${soll}</strong> Stück</div>`:''}
+        <input type="number" id="plakatIstInput" value="${soll||''}" min="0" style="width:100%;font-size:16px;padding:10px;text-align:center;border:1.5px solid var(--sep);border-radius:var(--r8)" placeholder="Anzahl">
+        <div id="plakatIstWarn" style="display:none;font-size:.72rem;color:var(--orange);margin-top:4px"></div>
+      </div>
+      <div class="m-actions">
+        <button class="btn btn-g" onclick="document.getElementById('plakatAnzahlOv').remove()">Abbrechen</button>
+        <button class="btn btn-p" id="plakatIstOkBtn">Verteilt ✓</button>
+      </div>
+    </div>`;
+    document.body.appendChild(ov);
+    const inp=document.getElementById('plakatIstInput');
+    const warn=document.getElementById('plakatIstWarn');
+    inp.focus();
+    inp.oninput=()=>{
+      const v=parseInt(inp.value)||0;
+      if(soll&&v>soll){warn.style.display='block';warn.textContent=`⚠️ ${v-soll} mehr als geplant (Soll: ${soll})`;}
+      else{warn.style.display='none';}
+    };
+    document.getElementById('plakatIstOkBtn').onclick=()=>{
+      const v=parseInt(inp.value)||0;
+      ov.remove();resolve(v);
+    };
+    // Abbrechen bei Ov-click handled oben
+    ov._mdOnOverlay=true;
+  });
+}
+async function doSetSt(id,s,statusLabels,istStueck){
+  const g=getG(id);
   const altStatus=g.status;
   g.status=s;
+  if(istStueck!==null)g.ist_stueck=istStueck;
   const col=getGebietFarbe(g);
   if(layers[id])layers[id].setStyle({fillColor:col.f,color:col.s,fillOpacity:.6});
   renderList();renderStats();openDetail(id);
-  logAction('status',`Status: ${statusLabels[altStatus]||altStatus} → ${statusLabels[s]||s}`,id,g.name);
+  logAction('status',`Status: ${statusLabels[altStatus]||altStatus} → ${statusLabels[s]||s}${istStueck!==null?' ('+istStueck+' Plakate)':''}`,id,g.name);
   let kampId = curKampagne?.id || null;
   if (!kampId || curKampagne?._local) {
     kampId = await ensureKampagneInDB();
   }
   if (kampId) {
-    const { error } = await sb.from('gebiet_status').upsert({
+    const upsertData={
       gebiet_id: id,
       kampagne_id: kampId,
       status: s,
       stueckzahl: g.stueckzahl,
       updated_at: new Date().toISOString()
-    }, { onConflict: 'gebiet_id,kampagne_id' });
+    };
+    if(istStueck!==null)upsertData.ist_stueck=istStueck;
+    const { error } = await sb.from('gebiet_status').upsert(upsertData, { onConflict: 'gebiet_id,kampagne_id' });
     if (error) console.error('setSt gebiet_status error:', JSON.stringify(error));
     toast(error ? `⚠️ DB-Fehler: ${error.message||error.code||'unbekannt'}` : `✅ Status → ${sl(s)}`);
     return;
   }
-  // Fallback: Direkt in gebiete-Tabelle
   try {
     const { error } = await sb.from('gebiete').update({
       status: s, updated_at: new Date().toISOString()
@@ -6484,6 +6700,26 @@ async function setSt(id,s){
   } catch(e) {
     toast(`✅ Status → ${sl(s)} (lokal)`);
   }
+}
+
+async function savePlakatKontingent(id){
+  if(!pruefeGebietZugriff(id))return;
+  const g=getG(id);
+  const soll=parseInt(document.getElementById('inpSoll')?.value)||0;
+  const ist=parseInt(document.getElementById('inpIst')?.value)||0;
+  g.soll_stueck=soll;g.ist_stueck=ist;
+  let kampId=curKampagne?.id||null;
+  if(!kampId||curKampagne?._local)kampId=await ensureKampagneInDB();
+  if(kampId){
+    const {error}=await sb.from('gebiet_status').upsert({
+      gebiet_id:id,kampagne_id:kampId,status:g.status,
+      stueckzahl:g.stueckzahl,soll_stueck:soll,ist_stueck:ist,
+      updated_at:new Date().toISOString()
+    },{onConflict:'gebiet_id,kampagne_id'});
+    if(error){console.error('savePlakatKontingent error:',JSON.stringify(error));toast('⚠️ DB-Fehler');return;}
+  }
+  toast(`✅ Plakat-Kontingent: Soll ${soll}, Ist ${ist}`);
+  renderList();renderStats();openDetail(id);
 }
 
 async function saveZ(id){
