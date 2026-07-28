@@ -137,6 +137,18 @@ header{min-height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturat
 .ms-btn:active{background:rgba(255,255,255,.35)}
 .ms-close{background:none;border:none;color:#fff;font-size:1.2rem;cursor:pointer;padding:4px 8px}
 .g-card.ms-sel{border-left:3px solid var(--blue);background:rgba(0,122,255,.08)}
+#pkBar{position:fixed;top:0;left:0;right:0;z-index:2000;background:linear-gradient(135deg,#1c1c1e,#2c2c2e);color:#fff;display:none;flex-direction:column;padding:10px 14px;gap:6px;box-shadow:0 2px 16px rgba(0,0,0,.4)}
+#pkBar.pk-active{display:flex}
+#pkBar .pk-row{display:flex;align-items:center;gap:8px}
+#pkBar .pk-total{font-size:.95rem;font-weight:700;flex:1}
+#pkBar .pk-badge{padding:2px 8px;border-radius:10px;font-size:.72rem;font-weight:600}
+.pk-label{position:absolute;z-index:650;pointer-events:auto;text-align:center;transform:translate(-50%,-50%);user-select:none}
+.pk-label .pk-num{font-size:1.3rem;font-weight:800;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.7),0 0 8px rgba(0,0,0,.4);min-width:32px;display:inline-block;cursor:pointer}
+.pk-label .pk-btns{display:flex;gap:2px;justify-content:center;margin-top:1px}
+.pk-label .pk-btn{width:26px;height:22px;border:none;border-radius:4px;font-size:.8rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,.3)}
+.pk-label .pk-btn-up{background:rgba(52,199,89,.9);color:#fff}
+.pk-label .pk-btn-dn{background:rgba(255,59,48,.85);color:#fff}
+.pk-label .pk-btn:active{transform:scale(.9)}
 
 /* ── BODY ── */
 .app-body{display:flex;flex:1;overflow:hidden}
@@ -413,6 +425,20 @@ textarea{min-height:68px}
   <button class="ms-btn" onclick="msBulkStatus()">Status</button>
   <button class="ms-btn" onclick="msBulkVerteiler()">Verteiler</button>
   <button class="ms-btn" onclick="msBulkPdf()">PDF</button>
+</div>
+
+<div id="pkBar">
+  <div class="pk-row">
+    <button class="ms-close" onclick="pkMapEnd()" title="Beenden">✕</button>
+    <span class="pk-total">📌 Plakat-Kontingent</span>
+    <span id="pkBarInfo" class="pk-badge" style="background:rgba(255,255,255,.15)">–</span>
+  </div>
+  <div class="pk-row">
+    <input type="number" id="pkBarInput" min="0" placeholder="Gesamt" oninput="if(pkMapActive)pkMapUpdateBar()" style="width:80px;font-size:.82rem;padding:5px 8px;border:1px solid rgba(255,255,255,.3);border-radius:6px;background:rgba(255,255,255,.1);color:#fff;text-align:center">
+    <button class="ms-btn" onclick="pkMapVerteilen()">⟿ Verteilen</button>
+    <span style="flex:1"></span>
+    <button class="ms-btn" style="background:rgba(52,199,89,.6)" onclick="pkMapSave()">💾 Speichern</button>
+  </div>
 </div>
 
 <!-- ══════════════════════════════════════
@@ -1844,7 +1870,7 @@ function renderKampagnenList() {
         ${k.beschreibung ? `<div style="font-size:.7rem;color:var(--text3)">${esc(k.beschreibung)}</div>` : ''}
         ${meta ? `<div style="font-size:.65rem;color:var(--text4);margin-top:2px">${meta}</div>` : ''}
       </div>
-      ${kannBearbeiten&&(k.typ==='plakate'||k.typ==='beides') ? `<button style="background:none;border:none;cursor:pointer;font-size:.85rem;padding:2px" onclick="openPlakatKontingentModal('${k.id}')" title="Plakat-Kontingent">📌</button>` : ''}
+      ${kannBearbeiten&&(k.typ==='plakate'||k.typ==='beides') ? `<button style="background:none;border:none;cursor:pointer;font-size:.85rem;padding:2px" onclick="openPlakatKontingentMap('${k.id}')" title="Plakat-Kontingent">📌</button>` : ''}
       ${kannBearbeiten&&!k.ist_basis ? `<button style="background:none;border:none;cursor:pointer;font-size:.85rem;padding:2px" onclick="openKampagneNotify('${k.id}')" title="Nutzer benachrichtigen">📣</button>` : ''}
       ${kannBearbeiten ? `<button style="background:none;border:none;cursor:pointer;font-size:.85rem;padding:2px" onclick="editKampagne('${k.id}')" title="Bearbeiten">✏️</button>` : ''}
       ${kannBearbeiten&&!k.ist_basis ? `<button style="background:none;border:none;cursor:pointer;font-size:.75rem;padding:2px" onclick="archiveKampagne('${k.id}',true)" title="Archivieren">📥</button>` : ''}
@@ -2435,6 +2461,151 @@ async function savePlakatKontingentBulk(kampId){
   if(ok>0)toast(`✅ Kontingent für ${ok} Gebiete gespeichert`);
   else toast(`⚠️ Fehler: ${lastErr}`);
   document.getElementById('pkModalOv')?.remove();
+  renderStats();
+}
+
+// ============================================================
+// PLAKAT-KONTINGENT KARTEN-MODUS
+// ============================================================
+let pkMapActive=false, pkMapKampId=null, pkMapLabels=[], pkMapData={};
+
+async function openPlakatKontingentMap(kampId){
+  const k=[...kampagnen,...kampagnenArchiv].find(x=>String(x.id)===String(kampId));
+  if(!k){toast('⚠️ Kampagne nicht gefunden');return;}
+  // Kampagne aktivieren falls nötig
+  if(!curKampagne||String(curKampagne.id)!==String(kampId)){
+    curKampagne=k;
+    await loadGebieteForKampagne(kampId);
+  }
+  // Modal schließen
+  document.getElementById('kampagnenModalOv')?.classList.remove('open');
+  // Soll-Daten aus DB laden
+  let gsData=null;
+  try{
+    const res=await sb.from('gebiet_status').select('gebiet_id,soll_stueck,ist_stueck').eq('kampagne_id',kampId);
+    gsData=res.data;
+  }catch(e){}
+  const gsMap={};
+  (gsData||[]).forEach(d=>{gsMap[d.gebiet_id]={soll:d.soll_stueck||0,ist:d.ist_stueck||0};});
+  // Sichtbare Gebiete mit Polygonen sammeln
+  pkMapData={};
+  const gs=getVisibleGebiete().filter(g=>kmlP[g.id]&&kmlP[g.id].length>=3);
+  if(!gs.length){toast('⚠️ Keine Gebiete mit Polygonen sichtbar');return;}
+  gs.forEach(g=>{
+    const db=gsMap[g.id]||{soll:0,ist:0};
+    pkMapData[g.id]={soll:db.soll,ist:db.ist,name:g.name};
+  });
+  pkMapActive=true;
+  pkMapKampId=kampId;
+  document.getElementById('pkBar').classList.add('pk-active');
+  // Mobile: Sidebar schließen
+  document.getElementById('sidebar')?.classList.remove('open');
+  pkMapRenderLabels();
+  pkMapUpdateBar();
+}
+
+function pkMapRenderLabels(){
+  pkMapClearLabels();
+  for(const[gId,d]of Object.entries(pkMapData)){
+    if(!layers[gId])continue;
+    const center=layers[gId].getBounds().getCenter();
+    const icon=L.divIcon({
+      className:'pk-label',
+      html:`<div class="pk-num" id="pkn_${gId}">${d.soll}</div>
+        <div class="pk-btns">
+          <button class="pk-btn pk-btn-dn" onclick="event.stopPropagation();pkMapAdj('${gId}',-1)">−</button>
+          <button class="pk-btn pk-btn-up" onclick="event.stopPropagation();pkMapAdj('${gId}',1)">+</button>
+        </div>`,
+      iconSize:[60,44],
+      iconAnchor:[30,22]
+    });
+    const marker=L.marker(center,{icon,interactive:true,zIndexOffset:1000}).addTo(map);
+    pkMapLabels.push(marker);
+  }
+}
+
+function pkMapClearLabels(){
+  pkMapLabels.forEach(m=>map.removeLayer(m));
+  pkMapLabels=[];
+}
+
+function pkMapAdj(gId,delta){
+  if(!pkMapData[gId])return;
+  pkMapData[gId].soll=Math.max(0,pkMapData[gId].soll+delta);
+  const el=document.getElementById('pkn_'+gId);
+  if(el)el.textContent=pkMapData[gId].soll;
+  pkMapUpdateBar();
+}
+
+function pkMapVerteilen(){
+  const total=parseInt(document.getElementById('pkBarInput')?.value)||0;
+  if(!total){toast('⚠️ Bitte Gesamtzahl eingeben');return;}
+  const ids=Object.keys(pkMapData);
+  if(!ids.length)return;
+  const base=Math.floor(total/ids.length);
+  let rest=total-base*ids.length;
+  ids.forEach(gId=>{
+    pkMapData[gId].soll=base+(rest>0?1:0);
+    if(rest>0)rest--;
+    const el=document.getElementById('pkn_'+gId);
+    if(el)el.textContent=pkMapData[gId].soll;
+  });
+  pkMapUpdateBar();
+  toast(`✅ ${total} auf ${ids.length} Gebiete verteilt`);
+}
+
+function pkMapUpdateBar(){
+  const ids=Object.keys(pkMapData);
+  const sollT=ids.reduce((s,id)=>s+pkMapData[id].soll,0);
+  const istT=ids.reduce((s,id)=>s+pkMapData[id].ist,0);
+  const input=parseInt(document.getElementById('pkBarInput')?.value)||0;
+  const info=document.getElementById('pkBarInfo');
+  if(input>0){
+    const diff=sollT-input;
+    if(diff===0){info.textContent=`✅ ${sollT} verteilt`;info.style.background='rgba(52,199,89,.5)';}
+    else if(diff>0){info.textContent=`+${diff} über Soll`;info.style.background='rgba(255,149,0,.6)';}
+    else{info.textContent=`${Math.abs(diff)} noch offen`;info.style.background='rgba(255,59,48,.5)';}
+  } else {
+    info.textContent=`Soll: ${sollT} · Ist: ${istT}`;info.style.background='rgba(255,255,255,.15)';
+  }
+  // Farben der Polygone anpassen
+  ids.forEach(gId=>{
+    if(!layers[gId])return;
+    const d=pkMapData[gId];
+    if(d.soll>0&&d.ist>d.soll)layers[gId].setStyle({fillColor:'#ff9500',fillOpacity:.45});
+    else if(d.soll>0&&d.ist===d.soll)layers[gId].setStyle({fillColor:'#34c759',fillOpacity:.45});
+    else layers[gId].setStyle({fillColor:'#007aff',fillOpacity:.35});
+  });
+}
+
+async function pkMapSave(){
+  if(!pkMapKampId)return;
+  let ok=0,lastErr='';
+  for(const[gId,d]of Object.entries(pkMapData)){
+    const g=getG(gId);
+    if(g)g.soll_stueck=d.soll;
+    const {error}=await sb.from('gebiet_status').upsert({
+      gebiet_id:gId,kampagne_id:pkMapKampId,soll_stueck:d.soll,
+      status:g?.status||'offen',stueckzahl:g?.stueckzahl||0,
+      updated_at:new Date().toISOString()
+    },{onConflict:'gebiet_id,kampagne_id'});
+    if(error){lastErr=error.message||'';console.error('pkMapSave:',error);}else ok++;
+  }
+  if(ok>0)toast(`✅ Kontingent für ${ok} Gebiete gespeichert`);
+  else toast(`⚠️ Fehler: ${lastErr}`);
+  pkMapEnd();
+}
+
+function pkMapEnd(){
+  pkMapActive=false;
+  pkMapClearLabels();
+  document.getElementById('pkBar').classList.remove('pk-active');
+  // Polygon-Farben zurücksetzen
+  Object.keys(pkMapData).forEach(gId=>{
+    const g=getG(gId);
+    if(g&&layers[gId]){const c=getGebietFarbe(g);layers[gId].setStyle({fillColor:c.f,color:c.s,fillOpacity:.35});}
+  });
+  pkMapData={};
   renderStats();
 }
 
