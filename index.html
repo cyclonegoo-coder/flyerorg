@@ -2325,7 +2325,12 @@ async function openPlakatKontingentModal(kampId){
   const k=[...kampagnen,...kampagnenArchiv].find(x=>String(x.id)===String(kampId));
   if(!k)return;
   // Gebiete für diese Kampagne laden
-  const {data:gsData}=await sb.from('gebiet_status').select('gebiet_id,soll_stueck,ist_stueck,status').eq('kampagne_id',kampId);
+  let gsData=null;
+  try{
+    const res=await sb.from('gebiet_status').select('gebiet_id,soll_stueck,ist_stueck,status').eq('kampagne_id',kampId);
+    gsData=res.data;
+    if(res.error)console.warn('pkModal load error:',res.error.message);
+  }catch(e){console.warn('pkModal load:',e);}
   const gsMap={};
   (gsData||[]).forEach(d=>{gsMap[d.gebiet_id]={soll:d.soll_stueck||0,ist:d.ist_stueck||0,status:d.status};});
   // Alle Gebiete im Kampagnen-Bereich sammeln
@@ -2338,6 +2343,7 @@ async function openPlakatKontingentModal(kampId){
       kGebiete.push({id:g.id,name:g.name,region:r.short||r.name||rId,soll:gs.soll,ist:gs.ist,status:gs.status});
     });
   }
+  if(!kGebiete.length){toast('⚠️ Keine Gebiete im Kampagnen-Bereich gefunden');return;}
   kGebiete.sort((a,b)=>a.region.localeCompare(b.region)||a.name.localeCompare(b.name));
   // Gruppiert nach Region
   const grouped={};
@@ -2398,7 +2404,7 @@ function pkGleichVerteilen(){
   const total=parseInt(document.getElementById('pkGleichInput')?.value)||0;
   if(!total){toast('⚠️ Bitte Gesamtzahl eingeben');return;}
   const inputs=[...document.querySelectorAll('.pk-soll')];
-  if(!inputs.length)return;
+  if(!inputs.length){toast('⚠️ Keine Gebiete im Bereich');return;}
   const base=Math.floor(total/inputs.length);
   let rest=total-base*inputs.length;
   inputs.forEach(inp=>{
@@ -2410,8 +2416,8 @@ function pkGleichVerteilen(){
 
 async function savePlakatKontingentBulk(kampId){
   const inputs=[...document.querySelectorAll('.pk-soll')];
-  if(!inputs.length)return;
-  let ok=0;
+  if(!inputs.length){toast('⚠️ Keine Gebiete gefunden');return;}
+  let ok=0,lastErr='';
   for(const inp of inputs){
     const gId=inp.dataset.gid;
     const soll=parseInt(inp.value)||0;
@@ -2419,11 +2425,15 @@ async function savePlakatKontingentBulk(kampId){
     if(g)g.soll_stueck=soll;
     const {error}=await sb.from('gebiet_status').upsert({
       gebiet_id:gId,kampagne_id:kampId,soll_stueck:soll,
+      status:g?.status||'offen',
+      stueckzahl:g?.stueckzahl||0,
       updated_at:new Date().toISOString()
     },{onConflict:'gebiet_id,kampagne_id'});
-    if(!error)ok++;
+    if(error){console.error('pkSave error:',JSON.stringify(error));lastErr=error.message||error.code||'unbekannt';}
+    else ok++;
   }
-  toast(`✅ Kontingent für ${ok} Gebiete gespeichert`);
+  if(ok>0)toast(`✅ Kontingent für ${ok} Gebiete gespeichert`);
+  else toast(`⚠️ Fehler: ${lastErr}`);
   document.getElementById('pkModalOv')?.remove();
   renderStats();
 }
