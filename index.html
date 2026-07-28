@@ -807,7 +807,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v195 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v196 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -2526,7 +2526,6 @@ async function openPlakatKontingentMap(kampId){
   });
   // Gesamt-Soll aus Bereichen vorbelegen
   const bereichSollTotal=bi.reduce((s,b)=>s+(b.soll||0),0);
-  if(bereichSollTotal>0)document.getElementById('pkBarInput').value=bereichSollTotal;
   pkMapActive=true;
   pkMapKampId=kampId;
   document.getElementById('pkBar').classList.add('pk-active');
@@ -2610,26 +2609,12 @@ function pkMapVerteilen(){
         totalVerteilt+=pkMapData[gId].soll;
       });
     });
-    document.getElementById('pkBarInput').value=totalVerteilt;
     pkMapUpdateBar();
     toast(`✅ ${totalVerteilt} auf Gebiete verteilt (pro Bereich)`);
     return;
   }
-  // Fallback: gleichmäßig auf alle
-  const total=parseInt(document.getElementById('pkBarInput')?.value)||0;
-  if(!total){toast('⚠️ Bitte Gesamtzahl eingeben');return;}
-  const ids=Object.keys(pkMapData);
-  if(!ids.length)return;
-  const base=Math.floor(total/ids.length);
-  let rest=total-base*ids.length;
-  ids.forEach(gId=>{
-    pkMapData[gId].soll=base+(rest>0?1:0);
-    if(rest>0)rest--;
-    const el=document.getElementById('pkn_'+gId);
-    if(el)el.textContent=pkMapData[gId].soll;
-  });
-  pkMapUpdateBar();
-  toast(`✅ ${total} auf ${ids.length} Gebiete verteilt`);
+  // Kein Bereich-Soll gesetzt
+  toast('⚠️ Bitte Soll-Werte in den Kampagnen-Bereichen festlegen');
 }
 
 function pkBereichName(b){
