@@ -433,6 +433,7 @@ textarea{min-height:68px}
     <span class="pk-total">📌 Plakat-Kontingent</span>
     <span id="pkBarInfo" class="pk-badge" style="background:rgba(255,255,255,.15)">–</span>
   </div>
+  <div id="pkBarBereiche" style="display:none;flex-wrap:wrap;gap:4px;padding:0 2px"></div>
   <div class="pk-row">
     <input type="number" id="pkBarInput" min="0" placeholder="Gesamt" oninput="if(pkMapActive)pkMapUpdateBar()" style="width:80px;font-size:.82rem;padding:5px 8px;border:1px solid rgba(255,255,255,.3);border-radius:6px;background:rgba(255,255,255,.1);color:#fff;text-align:center">
     <button class="ms-btn" onclick="pkMapVerteilen()">⟿ Verteilen</button>
@@ -2633,6 +2634,12 @@ function pkMapVerteilen(){
   toast(`✅ ${total} auf ${ids.length} Gebiete verteilt`);
 }
 
+function pkBereichName(b){
+  if(b.typ==='landkreis')return landkreise[b.id]?.name||b.id;
+  if(b.typ==='gebietsverband')return gebietsverbaende[b.id]?.name||b.id;
+  if(b.typ==='region'){const r=regionen[b.id];return r?.short||r?.name||b.id;}
+  return b.id;
+}
 function pkMapUpdateBar(){
   const ids=Object.keys(pkMapData);
   const sollT=ids.reduce((s,id)=>s+pkMapData[id].soll,0);
@@ -2646,6 +2653,26 @@ function pkMapUpdateBar(){
     else{info.textContent=`${Math.abs(diff)} noch offen`;info.style.background='rgba(255,59,48,.5)';}
   } else {
     info.textContent=`Soll: ${sollT} · Ist: ${istT}`;info.style.background='rgba(255,255,255,.15)';
+  }
+  // Per-Bereich Anzeige
+  const bDiv=document.getElementById('pkBarBereiche');
+  const bi=pkMapBereichItems||[];
+  if(bi.length>1){
+    bDiv.style.display='flex';
+    let bHtml='';
+    bi.forEach(b=>{
+      const bGebiete=ids.filter(gId=>gebietInKampagnenBereich(gId,[b]));
+      const bVerteilt=bGebiete.reduce((s,gId)=>s+pkMapData[gId].soll,0);
+      const bSoll=b.soll||0;
+      const ok=bSoll>0&&bVerteilt===bSoll;
+      const ueber=bSoll>0&&bVerteilt>bSoll;
+      const unter=bSoll>0&&bVerteilt<bSoll;
+      const bg=ok?'rgba(52,199,89,.4)':ueber?'rgba(255,149,0,.5)':unter?'rgba(255,59,48,.35)':'rgba(255,255,255,.12)';
+      bHtml+=`<span style="padding:2px 7px;border-radius:8px;font-size:.65rem;font-weight:600;background:${bg};white-space:nowrap">${pkBereichName(b)}: ${bVerteilt}${bSoll?' / '+bSoll:''}</span>`;
+    });
+    bDiv.innerHTML=bHtml;
+  } else {
+    bDiv.style.display='none';
   }
   // Farben der Polygone anpassen
   ids.forEach(gId=>{
