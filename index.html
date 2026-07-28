@@ -137,13 +137,13 @@ header{min-height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturat
 .ms-btn:active{background:rgba(255,255,255,.35)}
 .ms-close{background:none;border:none;color:#fff;font-size:1.2rem;cursor:pointer;padding:4px 8px}
 .g-card.ms-sel{border-left:3px solid var(--blue);background:rgba(0,122,255,.08)}
-#pkBar{position:fixed;top:0;left:0;right:0;z-index:2000;background:linear-gradient(135deg,#1c1c1e,#2c2c2e);color:#fff;display:none;flex-direction:column;padding:10px 14px;gap:6px;box-shadow:0 2px 16px rgba(0,0,0,.4)}
+#pkBar{position:fixed;top:0;left:0;right:0;z-index:2000;background:linear-gradient(135deg,rgba(30,80,160,.92),rgba(40,100,190,.92));backdrop-filter:blur(8px);color:#fff;display:none;flex-direction:column;padding:10px 14px;gap:6px;box-shadow:0 2px 16px rgba(0,0,0,.25)}
 #pkBar.pk-active{display:flex}
 #pkBar .pk-row{display:flex;align-items:center;gap:8px}
 #pkBar .pk-total{font-size:.95rem;font-weight:700;flex:1}
 #pkBar .pk-badge{padding:2px 8px;border-radius:10px;font-size:.72rem;font-weight:600}
 .pk-label{position:absolute;z-index:650;pointer-events:auto;text-align:center;transform:translate(-50%,-50%);user-select:none}
-.pk-pill{display:inline-flex;align-items:center;gap:0;background:rgba(30,30,32,.85);backdrop-filter:blur(6px);border-radius:16px;box-shadow:0 2px 8px rgba(0,0,0,.35);overflow:hidden;height:28px}
+.pk-pill{display:inline-flex;align-items:center;gap:0;background:rgba(30,80,170,.7);backdrop-filter:blur(6px);border-radius:16px;box-shadow:0 2px 8px rgba(0,40,120,.3);overflow:hidden;height:28px}
 .pk-pill .pk-btn{width:24px;height:28px;border:none;font-size:.75rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.7);background:transparent;transition:background .15s}
 .pk-pill .pk-btn:hover{background:rgba(255,255,255,.15)}
 .pk-pill .pk-btn:active{background:rgba(255,255,255,.25)}
@@ -807,7 +807,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v196 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v197 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
