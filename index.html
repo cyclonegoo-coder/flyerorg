@@ -808,7 +808,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v194 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v195 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -1880,7 +1880,7 @@ function renderKampagnenList() {
 }
 
 // Mischbare Geltungsbereiche: Dynamische Zeilen
-function addKampBereichZeile(typ, id) {
+function addKampBereichZeile(typ, id, soll) {
   const container = document.getElementById('kampBereicheContainer');
   const row = document.createElement('div');
   row.style.cssText = 'display:flex;gap:4px;align-items:center';
@@ -1956,13 +1956,29 @@ function addKampBereichZeile(typ, id) {
   typSel.onchange = fillIdOptions;
   fillIdOptions();
 
+  const sollInput = document.createElement('input');
+  sollInput.type = 'number';
+  sollInput.min = '0';
+  sollInput.placeholder = '📌';
+  sollInput.title = 'Plakat-Soll für diesen Bereich';
+  sollInput.className = 'kampBereichSoll';
+  sollInput.value = soll || '';
+  sollInput.style.cssText = 'width:58px;font-size:.72rem;padding:3px 4px;text-align:center;border:1px solid var(--sep);border-radius:4px';
+  // Soll-Feld nur bei Plakat-Kampagnen zeigen
+  function updateSollVis(){
+    const t=document.getElementById('newKampTyp')?.value;
+    sollInput.style.display=(t==='plakate'||t==='beides')?'':'none';
+  }
+  updateSollVis();
+
   const removeBtn = document.createElement('button');
   removeBtn.type = 'button';
   removeBtn.textContent = '×';
   removeBtn.style.cssText = 'background:none;border:none;font-size:1rem;cursor:pointer;color:var(--red);padding:0 4px;line-height:1';
   removeBtn.onclick = () => row.remove();
 
-  row.append(typSel, idSel, removeBtn);
+  row.append(typSel, idSel, sollInput, removeBtn);
+  row._updateSollVis = updateSollVis;
   container.appendChild(row);
 }
 
@@ -1972,7 +1988,9 @@ function getKampBereiche() {
   rows.forEach(row => {
     const typ = row.querySelector('select').value;
     const id = row.querySelector('.kampBereichIdSel').value;
-    if (typ && id) items.push({ typ, id });
+    const sollInp = row.querySelector('.kampBereichSoll');
+    const soll = sollInp ? (parseInt(sollInp.value)||0) : 0;
+    if (typ && id) items.push({ typ, id, soll });
   });
   return items;
 }
@@ -1995,6 +2013,8 @@ function toggleAbhaengeDeadline() {
   const typ = document.getElementById('newKampTyp').value;
   const row = document.getElementById('abhaengeDeadlineRow');
   row.style.display = (typ === 'plakate' || typ === 'beides') ? 'flex' : 'none';
+  // Soll-Felder in Bereich-Zeilen aktualisieren
+  document.querySelectorAll('.kampBereichZeile').forEach(r=>{if(r._updateSollVis)r._updateSollVis();});
 }
 async function archiveKampagne(id, archivieren){
   const k=[...kampagnen,...kampagnenArchiv].find(k=>String(k.id)===String(id));
@@ -2053,7 +2073,7 @@ function editKampagne(id) {
   const container = document.getElementById('kampBereicheContainer');
   container.innerHTML = '';
   const items = k.bereich_items || [];
-  items.forEach(bi => addKampBereichZeile(bi.typ, bi.id));
+  items.forEach(bi => addKampBereichZeile(bi.typ, bi.id, bi.soll));
   document.getElementById('kampFormModalOv').classList.add('open');
 }
 
@@ -2467,7 +2487,7 @@ async function savePlakatKontingentBulk(kampId){
 // ============================================================
 // PLAKAT-KONTINGENT KARTEN-MODUS
 // ============================================================
-let pkMapActive=false, pkMapKampId=null, pkMapLabels=[], pkMapData={};
+let pkMapActive=false, pkMapKampId=null, pkMapLabels=[], pkMapData={}, pkMapBereichItems=[];
 
 async function openPlakatKontingentMap(kampId){
   const k=[...kampagnen,...kampagnenArchiv].find(x=>String(x.id)===String(kampId));
@@ -2487,21 +2507,54 @@ async function openPlakatKontingentMap(kampId){
   }catch(e){}
   const gsMap={};
   (gsData||[]).forEach(d=>{gsMap[d.gebiet_id]={soll:d.soll_stueck||0,ist:d.ist_stueck||0};});
-  // Sichtbare Gebiete mit Polygonen sammeln
+  // ALLE Gebiete im Kampagnen-Bereich sammeln (nicht nur sichtbare)
   pkMapData={};
-  const gs=getVisibleGebiete().filter(g=>kmlP[g.id]&&kmlP[g.id].length>=3);
-  if(!gs.length){toast('⚠️ Keine Gebiete mit Polygonen sichtbar');return;}
-  gs.forEach(g=>{
+  const bi=k.bereich_items||[];
+  const allKampGebiete=[];
+  for(const[rId,r]of Object.entries(regionen)){
+    r.gebiete.forEach(g=>{
+      if(bi.length>0&&!gebietInKampagnenBereich(g.id,bi))return;
+      if(!kmlP[g.id]||kmlP[g.id].length<3)return;
+      allKampGebiete.push(g);
+    });
+  }
+  if(!allKampGebiete.length){toast('⚠️ Keine Gebiete mit Polygonen im Kampagnen-Bereich');return;}
+  // Bereich-Soll merken für Verteilung
+  pkMapBereichItems=bi;
+  allKampGebiete.forEach(g=>{
     const db=gsMap[g.id]||{soll:0,ist:0};
     pkMapData[g.id]={soll:db.soll,ist:db.ist,name:g.name};
   });
+  // Gesamt-Soll aus Bereichen vorbelegen
+  const bereichSollTotal=bi.reduce((s,b)=>s+(b.soll||0),0);
+  if(bereichSollTotal>0)document.getElementById('pkBarInput').value=bereichSollTotal;
   pkMapActive=true;
   pkMapKampId=kampId;
   document.getElementById('pkBar').classList.add('pk-active');
   // Mobile: Sidebar schließen
   document.getElementById('sidebar')?.classList.remove('open');
+  // Sicherstellen, dass alle Kampagnen-Polygone auf der Karte sind
+  pkMapEnsurePolygons(allKampGebiete);
   pkMapRenderLabels();
   pkMapUpdateBar();
+}
+
+let pkMapTempLayers=[];
+function pkMapEnsurePolygons(gebiete){
+  // Temporäre Polygone für Gebiete hinzufügen die nicht sichtbar sind
+  pkMapTempLayers=[];
+  const allBounds=[];
+  gebiete.forEach(g=>{
+    if(layers[g.id]){allBounds.push(...layers[g.id].getLatLngs()[0]);return;}
+    const c=kmlP[g.id];
+    if(!c||c.length<3)return;
+    const poly=L.polygon(c,{color:'#8e8e93',fillColor:'#007aff',fillOpacity:.25,weight:1.5,dashArray:'4'}).addTo(map);
+    layers[g.id]=poly;
+    pkMapTempLayers.push(g.id);
+    allBounds.push(...c.map(p=>L.latLng(p[0],p[1])));
+  });
+  // Auf alle Kampagnen-Gebiete zoomen
+  if(allBounds.length>0)map.flyToBounds(L.latLngBounds(allBounds).pad(0.1),{duration:.8});
 }
 
 function pkMapRenderLabels(){
@@ -2538,6 +2591,32 @@ function pkMapAdj(gId,delta){
 }
 
 function pkMapVerteilen(){
+  const bi=pkMapBereichItems||[];
+  const bereichSollTotal=bi.reduce((s,b)=>s+(b.soll||0),0);
+  // Wenn Bereiche eigene Soll-Werte haben → pro Bereich verteilen
+  if(bereichSollTotal>0){
+    let totalVerteilt=0;
+    bi.forEach(b=>{
+      if(!b.soll)return;
+      // Gebiete in diesem Bereich finden
+      const bGebiete=Object.keys(pkMapData).filter(gId=>gebietInKampagnenBereich(gId,[b]));
+      if(!bGebiete.length)return;
+      const base=Math.floor(b.soll/bGebiete.length);
+      let rest=b.soll-base*bGebiete.length;
+      bGebiete.forEach(gId=>{
+        pkMapData[gId].soll=base+(rest>0?1:0);
+        if(rest>0)rest--;
+        const el=document.getElementById('pkn_'+gId);
+        if(el)el.textContent=pkMapData[gId].soll;
+        totalVerteilt+=pkMapData[gId].soll;
+      });
+    });
+    document.getElementById('pkBarInput').value=totalVerteilt;
+    pkMapUpdateBar();
+    toast(`✅ ${totalVerteilt} auf Gebiete verteilt (pro Bereich)`);
+    return;
+  }
+  // Fallback: gleichmäßig auf alle
   const total=parseInt(document.getElementById('pkBarInput')?.value)||0;
   if(!total){toast('⚠️ Bitte Gesamtzahl eingeben');return;}
   const ids=Object.keys(pkMapData);
@@ -2600,12 +2679,18 @@ function pkMapEnd(){
   pkMapActive=false;
   pkMapClearLabels();
   document.getElementById('pkBar').classList.remove('pk-active');
+  document.getElementById('pkBarInput').value='';
+  // Temporäre Polygone entfernen
+  pkMapTempLayers.forEach(gId=>{
+    if(layers[gId]){map.removeLayer(layers[gId]);delete layers[gId];}
+  });
+  pkMapTempLayers=[];
   // Polygon-Farben zurücksetzen
   Object.keys(pkMapData).forEach(gId=>{
     const g=getG(gId);
     if(g&&layers[gId]){const c=getGebietFarbe(g);layers[gId].setStyle({fillColor:c.f,color:c.s,fillOpacity:.35});}
   });
-  pkMapData={};
+  pkMapData={};pkMapBereichItems=[];
   renderStats();
 }
 
