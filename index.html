@@ -143,11 +143,12 @@ header{min-height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturat
 #pkBar .pk-total{font-size:.95rem;font-weight:700;flex:1}
 #pkBar .pk-badge{padding:2px 8px;border-radius:10px;font-size:.72rem;font-weight:600}
 .pk-label{position:absolute;z-index:650;pointer-events:auto;text-align:center;transform:translate(-50%,-50%);user-select:none}
-.pk-pill{display:inline-flex;align-items:center;gap:0;background:rgba(30,80,170,.7);backdrop-filter:blur(6px);border-radius:16px;box-shadow:0 2px 8px rgba(0,40,120,.3);overflow:hidden;height:28px}
-.pk-pill .pk-btn{width:24px;height:28px;border:none;font-size:.75rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.7);background:transparent;transition:background .15s}
-.pk-pill .pk-btn:hover{background:rgba(255,255,255,.15)}
-.pk-pill .pk-btn:active{background:rgba(255,255,255,.25)}
-.pk-pill .pk-num{font-size:.9rem;font-weight:700;color:#fff;min-width:24px;padding:0 2px;text-align:center}
+.pk-pill{display:inline-flex;align-items:center;gap:0;background:rgba(30,80,170,.75);backdrop-filter:blur(4px);border-radius:13px;box-shadow:0 1px 4px rgba(0,40,120,.3);height:26px;min-width:26px;justify-content:center;transition:all .2s ease;cursor:default}
+.pk-pill .pk-btn{width:0;height:26px;border:none;font-size:.7rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.8);background:transparent;transition:all .2s ease;overflow:hidden;padding:0;opacity:0}
+.pk-pill:hover .pk-btn{width:22px;opacity:1;padding:0 1px}
+.pk-pill .pk-btn:hover{background:rgba(255,255,255,.2)}
+.pk-pill .pk-btn:active{background:rgba(255,255,255,.35)}
+.pk-pill .pk-num{font-size:.78rem;font-weight:700;color:#fff;min-width:18px;padding:0 3px;text-align:center;line-height:26px}
 
 /* ── BODY ── */
 .app-body{display:flex;flex:1;overflow:hidden}
@@ -435,6 +436,7 @@ textarea{min-height:68px}
   <div id="pkBarBereiche" style="display:none;flex-wrap:wrap;gap:4px;padding:0 2px"></div>
   <div class="pk-row">
     <span style="flex:1"></span>
+    <button class="ms-btn" onclick="pkShowVerteilerPanel()">👤 Verteiler</button>
     <button class="ms-btn" onclick="pkMapExportPDF()">📄 PDF</button>
     <button class="ms-btn" style="background:rgba(52,199,89,.6)" onclick="pkMapSave()">💾 Speichern</button>
   </div>
@@ -807,7 +809,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v198 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v200 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -1738,7 +1740,6 @@ async function loadGebieteForKampagne(kampagneId, autoNavigate) {
           localG.stueckzahl = dbG.stueckzahl || localG.stueckzahl;
           localG.soll_stueck = dbG.soll_stueck || 0;
           localG.ist_stueck = dbG.ist_stueck || 0;
-          localG.plakat_verteiler_id = dbG.plakat_verteiler_id || null;
         }
       });
       // Alle nicht in DB vorhandenen Gebiete → Status zurücksetzen auf 'offen'
@@ -2488,6 +2489,7 @@ async function savePlakatKontingentBulk(kampId){
 // PLAKAT-KONTINGENT KARTEN-MODUS
 // ============================================================
 let pkMapActive=false, pkMapKampId=null, pkMapLabels=[], pkMapData={}, pkMapBereichItems=[];
+let pkRegionVerteiler={}; // {region_id: user_id}
 
 async function openPlakatKontingentMap(kampId){
   const k=[...kampagnen,...kampagnenArchiv].find(x=>String(x.id)===String(kampId));
@@ -2502,11 +2504,17 @@ async function openPlakatKontingentMap(kampId){
   // Soll-Daten aus DB laden
   let gsData=null;
   try{
-    const res=await sb.from('gebiet_status').select('gebiet_id,soll_stueck,ist_stueck,plakat_verteiler_id').eq('kampagne_id',kampId);
+    const res=await sb.from('gebiet_status').select('gebiet_id,soll_stueck,ist_stueck').eq('kampagne_id',kampId);
     gsData=res.data;
   }catch(e){}
   const gsMap={};
-  (gsData||[]).forEach(d=>{gsMap[d.gebiet_id]={soll:d.soll_stueck||0,ist:d.ist_stueck||0,pvId:d.plakat_verteiler_id||null};});
+  (gsData||[]).forEach(d=>{gsMap[d.gebiet_id]={soll:d.soll_stueck||0,ist:d.ist_stueck||0};});
+  // Plakatverteiler pro Region laden
+  pkRegionVerteiler={};
+  try{
+    const pvRes=await sb.from('kampagne_plakat_verteiler').select('region_id,plakat_verteiler_id').eq('kampagne_id',kampId);
+    (pvRes.data||[]).forEach(d=>{pkRegionVerteiler[d.region_id]=d.plakat_verteiler_id;});
+  }catch(e){}
   // ALLE Gebiete im Kampagnen-Bereich sammeln (nicht nur sichtbare)
   pkMapData={};
   const bi=k.bereich_items||[];
@@ -2522,8 +2530,8 @@ async function openPlakatKontingentMap(kampId){
   // Bereich-Soll merken für Verteilung
   pkMapBereichItems=bi;
   allKampGebiete.forEach(g=>{
-    const db=gsMap[g.id]||{soll:0,ist:0,pvId:null};
-    pkMapData[g.id]={soll:db.soll,ist:db.ist,name:g.name,pvId:db.pvId};
+    const db=gsMap[g.id]||{soll:0,ist:0};
+    pkMapData[g.id]={soll:db.soll,ist:db.ist,name:g.name};
   });
   // Gesamt-Soll aus Bereichen vorbelegen
   const bereichSollTotal=bi.reduce((s,b)=>s+(b.soll||0),0);
@@ -2560,7 +2568,11 @@ function pkMapRenderLabels(){
   pkMapClearLabels();
   for(const[gId,d]of Object.entries(pkMapData)){
     if(!layers[gId])continue;
-    const center=layers[gId].getBounds().getCenter();
+    const bounds=layers[gId].getBounds();
+    const center=bounds.getCenter();
+    // Leicht nach oben versetzen (20% der Polygon-Höhe) damit Ortsnamen frei bleiben
+    const offsetLat=(bounds.getNorth()-bounds.getSouth())*0.2;
+    const pos=L.latLng(center.lat+offsetLat,center.lng);
     const icon=L.divIcon({
       className:'pk-label',
       html:`<div class="pk-pill">
@@ -2568,10 +2580,10 @@ function pkMapRenderLabels(){
         <span class="pk-num" id="pkn_${gId}">${d.soll}</span>
         <button class="pk-btn" onclick="event.stopPropagation();pkMapAdj('${gId}',1)">+</button>
       </div>`,
-      iconSize:[72,28],
-      iconAnchor:[36,14]
+      iconSize:[26,26],
+      iconAnchor:[13,13]
     });
-    const marker=L.marker(center,{icon,interactive:true,zIndexOffset:1000}).addTo(map);
+    const marker=L.marker(pos,{icon,interactive:true,zIndexOffset:1000}).addTo(map);
     pkMapLabels.push(marker);
   }
 }
@@ -2724,7 +2736,13 @@ function pkMapExportPDF(){
     gr.gebiete.sort((a,b)=>(pkMapData[a].name||'').localeCompare(pkMapData[b].name||'')).forEach(gId=>{
       if(y>280){pdf.addPage();y=margin;}
       const d=pkMapData[gId];
-      const pvUser=d.pvId?allUsers.find(u=>u.id===d.pvId):null;
+      // Plakatverteiler aus Region ermitteln
+      let pvUser=null;
+      for(const[rId,r]of Object.entries(regionen)){
+        if(r.gebiete.some(g=>g.id===gId)&&pkRegionVerteiler[rId]){
+          pvUser=allUsers.find(u=>u.id===pkRegionVerteiler[rId]);break;
+        }
+      }
       const pvName=pvUser?pvUser.name:'–';
       const ueInfo=pvUser?(pvUser._kampUebergabe||pvUser.uebergabe_info||''):'';
       pdf.text(d.name||gId,margin,y,{maxWidth:92});
@@ -2773,8 +2791,73 @@ function pkMapEnd(){
     const g=getG(gId);
     if(g&&layers[gId]){const c=getGebietFarbe(g);layers[gId].setStyle({fillColor:c.f,color:c.s,fillOpacity:.35});}
   });
-  pkMapData={};pkMapBereichItems=[];
+  pkMapData={};pkMapBereichItems=[];pkRegionVerteiler={};
   renderStats();
+}
+
+function pkGetKampRegionen(){
+  // Alle Regionen sammeln, die Gebiete im Kontingent haben
+  const regs={};
+  for(const[rId,r]of Object.entries(regionen)){
+    const hasG=r.gebiete.some(g=>pkMapData[g.id]);
+    if(hasG)regs[rId]=r;
+  }
+  return regs;
+}
+
+function pkShowVerteilerPanel(){
+  const existing=document.getElementById('pkVtPanel');
+  if(existing){existing.remove();return;}
+  const regs=pkGetKampRegionen();
+  const rKeys=Object.keys(regs).sort((a,b)=>(regs[a].short||regs[a].name||a).localeCompare(regs[b].short||regs[b].name||b));
+  let h='<div style="font-weight:600;font-size:.82rem;margin-bottom:8px">👤 Plakatverteiler pro Region</div>';
+  rKeys.forEach(rId=>{
+    const r=regs[rId];
+    const rName=r.short||r.name||rId;
+    const pvId=pkRegionVerteiler[rId]||'';
+    const pvUser=pvId?allUsers.find(u=>u.id===pvId):null;
+    const pvName=pvUser?pvUser.name:'— nicht zugewiesen';
+    h+=`<div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.1)">
+      <span style="font-size:.75rem;min-width:100px;font-weight:500">${rName}</span>
+      <button id="pkVt_${rId}" onclick="pkPickRegionVerteiler('${rId}')" style="flex:1;font-size:.75rem;padding:5px 8px;text-align:left;border:1px solid rgba(255,255,255,.25);border-radius:6px;background:rgba(255,255,255,.1);color:${pvId?'#fff':'rgba(255,255,255,.5)'};cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${pvName}</button>
+    </div>`;
+  });
+  h+=`<button onclick="pkSaveRegionVerteiler()" style="margin-top:8px;width:100%;padding:8px;border:none;border-radius:6px;background:rgba(52,199,89,.7);color:#fff;font-size:.78rem;font-weight:600;cursor:pointer">💾 Speichern</button>`;
+  const panel=document.createElement('div');
+  panel.id='pkVtPanel';
+  panel.style.cssText='position:fixed;top:60px;right:14px;z-index:2100;background:rgba(30,40,70,.95);backdrop-filter:blur(10px);border-radius:10px;padding:12px 14px;box-shadow:0 4px 20px rgba(0,0,0,.4);max-height:60vh;overflow-y:auto;min-width:280px;color:#fff';
+  panel.innerHTML=h;
+  document.body.appendChild(panel);
+}
+
+function pkPickRegionVerteiler(regionId){
+  // Finde ein Gebiet in dieser Region um den Picker zu öffnen
+  const r=regionen[regionId];
+  const gId=r?.gebiete[0]?.id;
+  if(!gId)return;
+  openVerteilerPicker(gId,{title:'Plakatverteiler: '+(r.short||r.name||regionId),callback:function(userId,userName){
+    pkRegionVerteiler[regionId]=userId||null;
+    const btn=document.getElementById('pkVt_'+regionId);
+    if(btn){btn.textContent=userName||'— nicht zugewiesen';btn.style.color=userName?'#fff':'rgba(255,255,255,.5)';}
+  }});
+}
+
+async function pkSaveRegionVerteiler(){
+  if(!pkMapKampId){toast('⚠️ Keine Kampagne');return;}
+  const rows=[];
+  for(const[rId,pvId]of Object.entries(pkRegionVerteiler)){
+    if(pvId)rows.push({kampagne_id:pkMapKampId,region_id:rId,plakat_verteiler_id:pvId});
+  }
+  // Alte löschen + neu einfügen
+  try{
+    await sb.from('kampagne_plakat_verteiler').delete().eq('kampagne_id',pkMapKampId);
+    if(rows.length){
+      const {error}=await sb.from('kampagne_plakat_verteiler').insert(rows);
+      if(error){console.error('pkSaveRegionVerteiler:',JSON.stringify(error));toast('⚠️ DB-Fehler');return;}
+    }
+  }catch(e){console.error(e);toast('⚠️ Fehler');return;}
+  toast(`✅ Plakatverteiler für ${rows.length} Regionen gespeichert`);
+  document.getElementById('pkVtPanel')?.remove();
 }
 
 function showLoginError(msg) {
@@ -6676,11 +6759,6 @@ function openDetail(id){
           </div>
           ${g.soll_stueck&&g.ist_stueck>g.soll_stueck?`<div style="font-size:.68rem;color:var(--orange);margin-top:4px">⚠️ ${g.ist_stueck-g.soll_stueck} über Soll</div>`:''}
         </div>
-        <div style="background:var(--surface2);border-radius:var(--r8);padding:8px 10px">
-          <div style="font-size:.7rem;font-weight:600;color:var(--text2);margin-bottom:5px">📌 Plakatverteiler zuweisen</div>
-          <input type="hidden" id="inpPV" value="${g.plakat_verteiler_id||''}" data-name="${g.plakat_verteiler_id?(allUsers.find(u=>u.id===g.plakat_verteiler_id)?.name||''):''}">
-          <button id="pvDisplay" onclick="openVerteilerPicker('${g.id}',{title:'Plakatverteiler wählen',callback:function(id,name){document.getElementById('inpPV').value=id;document.getElementById('inpPV').dataset.name=name;var d=document.getElementById('pvDisplay');d.textContent=name||'— Plakatverteiler fehlt';d.style.color=name?'var(--text1)':'var(--text4)';}})" style="width:100%;font-size:.8rem;padding:9px 10px;text-align:left;border:1.5px solid var(--sep);border-radius:var(--r8);background:#fff;color:${g.plakat_verteiler_id?'var(--text1)':'var(--text4)'};cursor:pointer;margin-bottom:6px">${g.plakat_verteiler_id?(allUsers.find(u=>u.id===g.plakat_verteiler_id)?.name||'Zugewiesen'):'— Plakatverteiler fehlt'}</button>
-          <button class="btn btn-p" onclick="savePlakatVerteiler('${g.id}')" style="width:100%;padding:9px 14px;font-size:.78rem">Speichern</button>
         </div>`:''}`+``;
       // Verteiler anfragen (wenn kein Verteiler)
       if(!g.verteilerId){
@@ -6793,8 +6871,7 @@ function openDetail(id){
       <div><div class="ii-label">Stückzahl</div><div class="ii-val" style="color:var(--blue)">${g.stueckzahl}</div></div>
       <div><div class="ii-label">Status</div><div class="ii-val">${sl(g.status)}</div></div>
       ${istPlakatKampagne()&&(g.soll_stueck||g.ist_stueck)?`<div><div class="ii-label">📌 Plakat-Soll</div><div class="ii-val" style="color:var(--blue);font-size:.9rem">${g.soll_stueck||0}</div></div><div><div class="ii-label">📌 Verteilt</div><div class="ii-val" style="color:${g.ist_stueck>g.soll_stueck?'var(--orange)':'var(--green)'}">${g.ist_stueck||0}</div></div>`:''}
-      <div class="ii-full"><div class="ii-label">Flyerverteiler${_vUser?.is_offline?' <span style="font-size:.6rem;color:var(--orange)">(Offline)</span>':''}</div><div class="ii-val">${getVerteilerName(g)||'⚠️ Verteiler fehlt'}</div></div>
-      ${istPlakatKampagne()?`<div class="ii-full"><div class="ii-label">📌 Plakatverteiler</div><div class="ii-val">${g.plakat_verteiler_id?(allUsers.find(u=>u.id===g.plakat_verteiler_id)?.name||'Zugewiesen'):'⚠️ Nicht zugewiesen'}</div></div>`:''}
+      <div class="ii-full"><div class="ii-label">Verteiler${_vUser?.is_offline?' <span style="font-size:.6rem;color:var(--orange)">(Offline)</span>':''}</div><div class="ii-val">${getVerteilerName(g)||'⚠️ Verteiler fehlt'}</div></div>
       ${_ueInfo?`<div class="ii-full"><div class="ii-label">Übergabe</div><div class="ii-val" style="font-size:.72rem;color:var(--text3)">📦 ${_ueInfo}</div></div>`:''}
     </div></div>`;
     h+=`<div class="d-sec"><div class="sec-hd">Status</div><div class="s-grid">
@@ -6826,16 +6903,10 @@ function openDetail(id){
         <input type="number" id="inpS" value="${g.stueckzahl}"><button class="btn btn-g" onclick="saveSt2('${g.id}')">Ändern</button>
       </div></div>`;
       if(istPlakatKampagne()){
-        const _pkVName=g.plakat_verteiler_id?(allUsers.find(u=>u.id===g.plakat_verteiler_id)?.name||'Zugewiesen'):'— Plakatverteiler fehlt';
         h+=`<div class="d-sec"><div class="sec-hd">📌 Plakat-Kontingent</div><div class="f-stack" style="flex-direction:row;gap:6px;align-items:center">
           <div><span style="font-size:.68rem;color:var(--text4)">Soll</span><br><input type="number" id="inpSoll" value="${g.soll_stueck||''}" min="0" placeholder="0" style="width:65px;font-size:.85rem;padding:6px;text-align:center;border:1px solid var(--sep);border-radius:4px"></div>
           <div><span style="font-size:.68rem;color:var(--text4)">Ist</span><br><input type="number" id="inpIst" value="${g.ist_stueck||''}" min="0" placeholder="0" style="width:65px;font-size:.85rem;padding:6px;text-align:center;border:1px solid var(--sep);border-radius:4px"></div>
           <button class="btn btn-g" onclick="savePlakatKontingent('${g.id}')" style="align-self:flex-end">Speichern</button>
-        </div></div>
-        <div class="d-sec"><div class="sec-hd">📌 Plakatverteiler zuweisen</div><div class="f-stack">
-          <input type="hidden" id="inpPV" value="${g.plakat_verteiler_id||''}" data-name="${_pkVName!=='— Plakatverteiler fehlt'?_pkVName:''}">
-          <button id="pvDisplay" onclick="openVerteilerPicker('${g.id}',{title:'Plakatverteiler wählen',callback:function(id,name){document.getElementById('inpPV').value=id;document.getElementById('inpPV').dataset.name=name;var d=document.getElementById('pvDisplay');d.textContent=name||'— Plakatverteiler fehlt';d.style.color=name?'var(--text1)':'var(--text4)';}})" style="flex:1;font-size:.8rem;padding:8px 10px;text-align:left;border:1.5px solid var(--sep);border-radius:var(--r8);background:var(--surface2);color:${g.plakat_verteiler_id?'var(--text1)':'var(--text4)'};cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_pkVName}</button>
-          <button class="btn btn-p" onclick="savePlakatVerteiler('${g.id}')">Speichern</button>
         </div></div>`;
       }
       h+=``;
@@ -7085,28 +7156,6 @@ async function savePlakatKontingent(id){
   }
   toast(`✅ Plakat-Kontingent: Soll ${soll}, Ist ${ist}`);
   renderList();renderStats();openDetail(id);
-}
-
-async function savePlakatVerteiler(id){
-  if(!pruefeGebietZugriff(id))return;
-  if(curRole==='verteiler'){toast('⚠️ Keine Berechtigung');return;}
-  const g=getG(id);
-  const pvId=document.getElementById('inpPV')?.value||null;
-  g.plakat_verteiler_id=pvId||null;
-  let kampId=curKampagne?.id||null;
-  if(!kampId||curKampagne?._local)kampId=await ensureKampagneInDB();
-  if(kampId){
-    const {error}=await sb.from('gebiet_status').upsert({
-      gebiet_id:id,kampagne_id:kampId,status:g.status,
-      stueckzahl:g.stueckzahl,soll_stueck:g.soll_stueck||0,ist_stueck:g.ist_stueck||0,
-      plakat_verteiler_id:pvId||null,
-      updated_at:new Date().toISOString()
-    },{onConflict:'gebiet_id,kampagne_id'});
-    if(error){console.error('savePlakatVerteiler error:',JSON.stringify(error));toast('⚠️ DB-Fehler');return;}
-  }
-  const pvName=pvId?(allUsers.find(u=>u.id===pvId)?.name||'Zugewiesen'):'Keiner';
-  toast(`✅ Plakatverteiler: ${pvName}`);
-  renderList();openDetail(id);
 }
 
 async function saveZ(id){
