@@ -149,6 +149,8 @@ header{min-height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturat
 .pk-pill .pk-btn:hover{background:rgba(255,255,255,.2)}
 .pk-pill .pk-btn:active{background:rgba(255,255,255,.35)}
 .pk-pill .pk-num{font-size:.78rem;font-weight:700;color:#fff;min-width:18px;padding:0 3px;text-align:center;line-height:26px}
+.pk-soll{display:inline-flex;align-items:center;gap:3px;backdrop-filter:blur(4px);border-radius:13px;box-shadow:0 1px 4px rgba(0,0,0,.25);height:24px;padding:0 8px;white-space:nowrap;pointer-events:none}
+.pk-soll span{font-size:.72rem;font-weight:700;color:#fff}
 
 /* ── BODY ── */
 .app-body{display:flex;flex:1;overflow:hidden}
@@ -808,7 +810,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v203 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v205 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -1725,6 +1727,7 @@ async function loadGebieteForKampagne(kampagneId, autoNavigate) {
     console.log('loadGebieteForKampagne: Lokale Kampagne, überspringe gebiet_status Abfrage');
     closeDetail();
     if(autoNavigate) vmNavigateToMyGebiete(); else { renderBreadcrumb(); renderList(); renderStats(); drawPolygons(); showDrawToolbar(); }
+    if(curMode==='plakate') loadPlakate().then(()=>drawPlakatMarkers());
     return;
   }
   try {
@@ -1762,6 +1765,8 @@ async function loadGebieteForKampagne(kampagneId, autoNavigate) {
   closeDetail();
   if(autoNavigate) vmNavigateToMyGebiete();
   else { renderBreadcrumb(); renderList(); renderStats(); drawPolygons(); showDrawToolbar(); }
+  // Plakat-Marker neu laden wenn im Plakatmodus
+  if(curMode==='plakate') loadPlakate().then(()=>drawPlakatMarkers());
   updateMissingVerteilerBadge();
 }
 
@@ -9238,11 +9243,51 @@ function drawPlakatMarkers(){
     });
     plakatMarkers[p.id]=marker;
   });
+  drawPlakatSollLabels();
 }
 
 function clearPlakatMarkers(){
   Object.values(plakatMarkers).forEach(m=>map&&map.removeLayer(m));
   plakatMarkers={};
+  clearPlakatSollLabels();
+}
+
+// ── Plakat-Soll Labels auf Karte (read-only, für alle Rollen) ──
+let pkSollLabels=[];
+function drawPlakatSollLabels(){
+  clearPlakatSollLabels();
+  if(curMode!=='plakate') return;
+  if(pkMapActive) return; // Kontingent-Editiermodus hat eigene Labels
+  // Aktive Plakate pro Gebiet zählen
+  const istCount={};
+  plakate.forEach(p=>{
+    if(p.gebiet_id&&(p.status==='haengt'||p.status==='ersetzt'))
+      istCount[p.gebiet_id]=(istCount[p.gebiet_id]||0)+1;
+  });
+  const gs=getVisibleGebiete();
+  gs.forEach(g=>{
+    const soll=g.soll_stueck||0;
+    if(soll<=0) return;
+    if(!layers[g.id]) return;
+    const ist=istCount[g.id]||0;
+    const bounds=layers[g.id].getBounds();
+    const center=bounds.getCenter();
+    const offsetLat=(bounds.getNorth()-bounds.getSouth())*0.2;
+    const pos=L.latLng(center.lat+offsetLat,center.lng);
+    const done=ist>=soll;
+    const bg=done?'rgba(52,199,89,.8)':'rgba(30,80,170,.75)';
+    const icon=L.divIcon({
+      className:'pk-label',
+      html:'<div class="pk-soll" style="background:'+bg+'"><span>📌 '+ist+'/'+soll+'</span></div>',
+      iconSize:[null,24],iconAnchor:[28,12]
+    });
+    const marker=L.marker(pos,{icon,interactive:false,zIndexOffset:900}).addTo(map);
+    pkSollLabels.push(marker);
+  });
+}
+function clearPlakatSollLabels(){
+  pkSollLabels.forEach(m=>map&&map.removeLayer(m));
+  pkSollLabels=[];
 }
 
 function getVisiblePlakate(){
