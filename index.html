@@ -6675,6 +6675,12 @@ function openDetail(id){
             <button class="btn btn-g" onclick="savePlakatKontingent('${g.id}')" style="padding:10px 14px;font-size:.78rem;white-space:nowrap;align-self:flex-end">Speichern</button>
           </div>
           ${g.soll_stueck&&g.ist_stueck>g.soll_stueck?`<div style="font-size:.68rem;color:var(--orange);margin-top:4px">⚠️ ${g.ist_stueck-g.soll_stueck} über Soll</div>`:''}
+        </div>
+        <div style="background:var(--surface2);border-radius:var(--r8);padding:8px 10px">
+          <div style="font-size:.7rem;font-weight:600;color:var(--text2);margin-bottom:5px">📌 Plakatverteiler zuweisen</div>
+          <input type="hidden" id="inpPV" value="${g.plakat_verteiler_id||''}" data-name="${g.plakat_verteiler_id?(allUsers.find(u=>u.id===g.plakat_verteiler_id)?.name||''):''}">
+          <button id="pvDisplay" onclick="openVerteilerPicker('${g.id}',{title:'Plakatverteiler wählen',callback:function(id,name){document.getElementById('inpPV').value=id;document.getElementById('inpPV').dataset.name=name;var d=document.getElementById('pvDisplay');d.textContent=name||'— Plakatverteiler fehlt';d.style.color=name?'var(--text1)':'var(--text4)';}})" style="width:100%;font-size:.8rem;padding:9px 10px;text-align:left;border:1.5px solid var(--sep);border-radius:var(--r8);background:#fff;color:${g.plakat_verteiler_id?'var(--text1)':'var(--text4)'};cursor:pointer;margin-bottom:6px">${g.plakat_verteiler_id?(allUsers.find(u=>u.id===g.plakat_verteiler_id)?.name||'Zugewiesen'):'— Plakatverteiler fehlt'}</button>
+          <button class="btn btn-p" onclick="savePlakatVerteiler('${g.id}')" style="width:100%;padding:9px 14px;font-size:.78rem">Speichern</button>
         </div>`:''}`+``;
       // Verteiler anfragen (wenn kein Verteiler)
       if(!g.verteilerId){
