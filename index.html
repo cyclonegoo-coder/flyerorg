@@ -810,7 +810,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v208 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v209 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -1903,15 +1903,16 @@ function renderKampagnenList() {
 
 // ── Kampagnen-Kontextmenü ──
 function toggleKampMenu(kampId,btn,ev){
-  ev.stopPropagation();
-  // Bestehendes Menü schließen
-  document.getElementById('kampCtxMenu')?.remove();
+  ev.stopPropagation();ev.preventDefault();
+  const old=document.getElementById('kampCtxMenu');
+  if(old){old.remove();return;}
   const k=[...kampagnen,...kampagnenArchiv].find(x=>String(x.id)===String(kampId));
   if(!k)return;
   const isBasis=!!k.ist_basis;
   const menu=document.createElement('div');
   menu.id='kampCtxMenu';
-  menu.style.cssText='position:absolute;right:0;top:100%;z-index:3300;background:#fff;border:1px solid var(--sep);border-radius:var(--r8);box-shadow:0 4px 16px rgba(0,0,0,.15);min-width:180px;padding:4px 0;font-size:.78rem';
+  const rect=btn.getBoundingClientRect();
+  menu.style.cssText='position:fixed;z-index:9999;background:#fff;border:1px solid var(--sep);border-radius:var(--r8);box-shadow:0 4px 16px rgba(0,0,0,.18);min-width:190px;padding:4px 0;font-size:.78rem;top:'+rect.bottom+'px;right:'+(window.innerWidth-rect.right)+'px';
   const items=[];
   items.push({icon:'✏️',label:'Bearbeiten',fn:()=>editKampagne(kampId)});
   if(!isBasis) items.push({icon:'📋',label:'Als Vorlage verwenden',fn:()=>kampagneAlsVorlage(kampId)});
@@ -1923,15 +1924,15 @@ function toggleKampMenu(kampId,btn,ev){
     if(it.sep){const hr=document.createElement('div');hr.style.cssText='height:1px;background:var(--sep);margin:4px 0';menu.appendChild(hr);return;}
     const row=document.createElement('div');
     row.style.cssText='display:flex;align-items:center;gap:8px;padding:8px 14px;cursor:pointer;color:'+(it.danger?'var(--red)':'var(--text)');
-    row.onmouseover=()=>row.style.background='var(--surface2)';
+    row.onmouseover=()=>row.style.background='#f5f5f5';
     row.onmouseout=()=>row.style.background='';
-    row.onclick=()=>{menu.remove();it.fn();};
+    row.onclick=(e)=>{e.stopPropagation();menu.remove();it.fn();};
     row.innerHTML=it.icon+' '+it.label;
     menu.appendChild(row);
   });
-  btn.parentElement.appendChild(menu);
-  // Klick außerhalb schließt
-  setTimeout(()=>document.addEventListener('click',function _closeKM(){document.getElementById('kampCtxMenu')?.remove();document.removeEventListener('click',_closeKM);},{once:false}),10);
+  document.body.appendChild(menu);
+  function closeMenu(e){if(!menu.contains(e.target)&&e.target!==btn){menu.remove();document.removeEventListener('click',closeMenu,true);}}
+  setTimeout(()=>document.addEventListener('click',closeMenu,true),0);
 }
 
 function kampagneAlsVorlage(kampId){
