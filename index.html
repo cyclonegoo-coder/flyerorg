@@ -344,7 +344,7 @@ textarea{min-height:68px}
   .draw-info{left:10px;right:10px;transform:none;white-space:normal;font-size:.72rem;padding:6px 10px;top:auto;bottom:10px;z-index:701}
   /* Step 1: Header overflow menu */
   .mob-overflow{display:block}
-  #bulkPdfBtn,#hierarchyBtn,#inviteUserBtn,#manageUsersBtn,#logbuchBtn,#kampagnenBtn,#missingVerteilerBtn{display:none!important}
+  #bulkPdfBtn,#hierarchyBtn,#manageUsersBtn,#logbuchBtn,#kampagnenBtn,#missingVerteilerBtn{display:none!important}
   .user-name,.role-badge{display:none}
   .user-pill{padding:4px;border-radius:50%}
   .h-left{min-width:40px;gap:4px}
@@ -523,7 +523,6 @@ textarea{min-height:68px}
     <button id="anfragenBtn" onclick="openAnfragenModal()" title="Offene Anfragen" style="display:none;position:relative;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--orange)'" onmouseout="this.style.color='var(--text3)'">🔔<span id="anfragenBadge" style="display:none;position:absolute;top:-2px;right:-2px;background:var(--red);color:#fff;font-size:.55rem;font-weight:700;min-width:14px;height:14px;border-radius:7px;align-items:center;justify-content:center;padding:0 3px">0</span></button>
     <button id="bulkPdfBtn" onclick="openBulkPdfModal()" title="Gebiete-PDF exportieren" style="display:none;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='var(--text3)'">📄</button>
     <button id="hierarchyBtn" onclick="openHierarchyModal()" title="Gebietsstruktur verwalten" style="display:none;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='var(--text3)'">🏗</button>
-    <button id="inviteUserBtn" onclick="openInviteModal()" title="Nutzer einladen" style="display:none;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='var(--text3)'">➕👤</button>
     <button id="manageUsersBtn" onclick="openManageUsersModal()" title="Nutzerverwaltung" style="display:none;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='var(--text3)'">👥</button>
     <button id="logbuchBtn" onclick="openLogbuchModal()" title="Logbuch" style="display:none;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='var(--text3)'">📋</button>
     <button id="kampagnenBtn" onclick="openKampagnenModal()" title="Kampagnen" style="display:none;background:none;border:none;font-size:1rem;cursor:pointer;color:var(--text3);padding:4px 6px;border-radius:var(--r8);transition:color .15s" onmouseover="this.style.color='var(--blue)'" onmouseout="this.style.color='var(--text3)'">⚙️</button>
@@ -809,7 +808,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v200 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v203 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -969,8 +968,9 @@ textarea{min-height:68px}
       </div>
       <div id="pendingInvitesList" style="display:none;flex-direction:column;gap:4px;max-height:200px;overflow-y:auto"></div>
     </div>
-    <div class="m-actions">
-      <button class="btn btn-g" onclick="closeManageUsersModal()">Schließen</button>
+    <div class="m-actions" style="gap:8px">
+      <button class="btn btn-g" onclick="closeManageUsersModal()" style="flex:1">Schließen</button>
+      <button class="btn btn-p" onclick="openInviteModal()" style="flex:1;display:flex;align-items:center;justify-content:center;gap:4px">➕ Einladen</button>
     </div>
   </div>
 </div>
@@ -1186,6 +1186,9 @@ textarea{min-height:68px}
         <label style="font-size:.65rem;font-weight:600;color:var(--text3)">Geltungsbereiche</label>
         <div id="kampBereicheContainer" style="display:flex;flex-direction:column;gap:4px"></div>
         <button type="button" onclick="addKampBereichZeile()" style="align-self:flex-start;background:none;border:1px dashed var(--text4);border-radius:var(--r8);padding:4px 10px;font-size:.72rem;color:var(--text3);cursor:pointer">+ Bereich hinzufügen</button>
+      </div>
+      <div id="kampKontingentBtn" style="display:none;margin-top:4px">
+        <button type="button" onclick="kampOpenKontingent()" style="width:100%;padding:10px;border:none;border-radius:var(--r8);background:linear-gradient(135deg,rgba(30,80,170,.85),rgba(40,100,190,.85));color:#fff;font-size:.78rem;font-weight:600;cursor:pointer">📌 Plakat-Kontingent auf Karte verteilen</button>
       </div>
     </div>
     <div class="m-actions" style="margin-top:12px">
@@ -1871,7 +1874,7 @@ function renderKampagnenList() {
         ${k.beschreibung ? `<div style="font-size:.7rem;color:var(--text3)">${esc(k.beschreibung)}</div>` : ''}
         ${meta ? `<div style="font-size:.65rem;color:var(--text4);margin-top:2px">${meta}</div>` : ''}
       </div>
-      ${kannBearbeiten&&(k.typ==='plakate'||k.typ==='beides') ? `<button style="background:none;border:none;cursor:pointer;font-size:.85rem;padding:2px" onclick="openPlakatKontingentMap('${k.id}')" title="Plakat-Kontingent">📌</button>` : ''}
+      ${kannBearbeiten&&(k.typ==='plakate'||k.typ==='beides'||k.ist_basis) ? `<button style="background:none;border:none;cursor:pointer;font-size:.85rem;padding:2px" onclick="openPlakatKontingentMap('${k.id}')" title="Plakat-Kontingent">📌</button>` : ''}
       ${kannBearbeiten&&!k.ist_basis ? `<button style="background:none;border:none;cursor:pointer;font-size:.85rem;padding:2px" onclick="openKampagneNotify('${k.id}')" title="Nutzer benachrichtigen">📣</button>` : ''}
       ${kannBearbeiten ? `<button style="background:none;border:none;cursor:pointer;font-size:.85rem;padding:2px" onclick="editKampagne('${k.id}')" title="Bearbeiten">✏️</button>` : ''}
       ${kannBearbeiten&&!k.ist_basis ? `<button style="background:none;border:none;cursor:pointer;font-size:.75rem;padding:2px" onclick="archiveKampagne('${k.id}',true)" title="Archivieren">📥</button>` : ''}
@@ -1922,37 +1925,46 @@ function addKampBereichZeile(typ, id, soll) {
         const verwGV = currentProfile?.verwaltete_gebietsverbaende || [];
         items = verwGV.map(gvId => gebietsverbaende[gvId] ? {id:gvId,name:gebietsverbaende[gvId].name} : null).filter(Boolean);
         if (items.length === 0) {
-          // Fallback alte Logik
           const gvIds = new Set(); (currentProfile?.verwaltete_regionen||[]).forEach(rId=>{const r=regionen[rId];if(r)gvIds.add(r.gebietsverband_id);});
           items = [...gvIds].map(gvId => gebietsverbaende[gvId] ? {id:gvId,name:gebietsverbaende[gvId].name} : null).filter(Boolean);
         }
       } else if (curRole === 'kreisverwalter') {
         const myLK = currentProfile?.verwalteter_landkreis;
-        items = Object.entries(gebietsverbaende).filter(([,gv])=>gv.landkreis_id===myLK).map(([k,v])=>({id:k,name:v.name}));
+        items = Object.entries(gebietsverbaende).filter(([,gv])=>gv.landkreis_id===myLK).map(([k,v])=>({id:k,name:v.name,lk:v.landkreis_id}));
       } else {
-        items = Object.entries(gebietsverbaende).map(([k,v])=>({id:k,name:v.name}));
+        items = Object.entries(gebietsverbaende).map(([k,v])=>({id:k,name:v.name,lk:v.landkreis_id}));
       }
     } else if (t === 'region') {
       if (curRole === 'regionalverwalter') {
         const verwReg = currentProfile?.verwaltete_regionen || [];
-        items = verwReg.map(rId => regionen[rId] ? {id:rId,name:regionen[rId].short||regionen[rId].name} : null).filter(Boolean);
+        items = verwReg.map(rId => regionen[rId] ? {id:rId,name:regionen[rId].short||regionen[rId].name,gv:regionen[rId].gebietsverband_id} : null).filter(Boolean);
       } else if (curRole === 'verwalter') {
-        // VV: alle Regionen in seinen GVs
         const verwGV = currentProfile?.verwaltete_gebietsverbaende || [];
         if (verwGV.length > 0) {
-          items = Object.entries(regionen).filter(([,r])=>verwGV.includes(r.gebietsverband_id)).map(([k,v])=>({id:k,name:v.short||v.name}));
+          items = Object.entries(regionen).filter(([,r])=>verwGV.includes(r.gebietsverband_id)).map(([k,v])=>({id:k,name:v.short||v.name,gv:v.gebietsverband_id}));
         } else {
-          items = Object.entries(regionen).map(([k,v])=>({id:k,name:v.short||v.name}));
+          items = Object.entries(regionen).map(([k,v])=>({id:k,name:v.short||v.name,gv:v.gebietsverband_id}));
         }
       } else if (curRole === 'kreisverwalter') {
         const myLK = currentProfile?.verwalteter_landkreis;
-        items = Object.entries(regionen).filter(([,r])=>{const gv=gebietsverbaende[r.gebietsverband_id];return gv&&gv.landkreis_id===myLK;}).map(([k,v])=>({id:k,name:v.short||v.name}));
+        items = Object.entries(regionen).filter(([,r])=>{const gv=gebietsverbaende[r.gebietsverband_id];return gv&&gv.landkreis_id===myLK;}).map(([k,v])=>({id:k,name:v.short||v.name,gv:v.gebietsverband_id}));
       } else {
-        items = Object.entries(regionen).map(([k,v])=>({id:k,name:v.short||v.name}));
+        items = Object.entries(regionen).map(([k,v])=>({id:k,name:v.short||v.name,gv:v.gebietsverband_id}));
       }
     }
     items.sort((a,b)=>a.name.localeCompare(b.name));
-    idSel.innerHTML = items.map(i=>`<option value="${i.id}" ${i.id===id?'selected':''}>${i.name}</option>`).join('');
+    // Gruppiert nach übergeordneter Ebene (Regionen→GV, GVs→LK)
+    if(t==='region'&&items.length>5){
+      const groups={};
+      items.forEach(i=>{const gvName=gebietsverbaende[i.gv]?.name||'Sonstige';if(!groups[gvName])groups[gvName]=[];groups[gvName].push(i);});
+      idSel.innerHTML=Object.keys(groups).sort().map(gn=>`<optgroup label="${gn}">${groups[gn].map(i=>`<option value="${i.id}" ${i.id===id?'selected':''}>${i.name}</option>`).join('')}</optgroup>`).join('');
+    } else if(t==='gebietsverband'&&items.length>5){
+      const groups={};
+      items.forEach(i=>{const lkName=landkreise[i.lk]?.name||'Sonstige';if(!groups[lkName])groups[lkName]=[];groups[lkName].push(i);});
+      idSel.innerHTML=Object.keys(groups).sort().map(ln=>`<optgroup label="${ln}">${groups[ln].map(i=>`<option value="${i.id}" ${i.id===id?'selected':''}>${i.name}</option>`).join('')}</optgroup>`).join('');
+    } else {
+      idSel.innerHTML = items.map(i=>`<option value="${i.id}" ${i.id===id?'selected':''}>${i.name}</option>`).join('');
+    }
   }
   typSel.onchange = fillIdOptions;
   fillIdOptions();
@@ -2012,11 +2024,26 @@ function resetKampForm() {
 }
 function toggleAbhaengeDeadline() {
   const typ = document.getElementById('newKampTyp').value;
+  const isPK=typ==='plakate'||typ==='beides';
   const row = document.getElementById('abhaengeDeadlineRow');
-  row.style.display = (typ === 'plakate' || typ === 'beides') ? 'flex' : 'none';
+  row.style.display = isPK ? 'flex' : 'none';
+  // Kontingent-Button nur bei bestehenden Plakat-Kampagnen zeigen
+  const kBtn=document.getElementById('kampKontingentBtn');
+  const editId=document.getElementById('editKampagneId')?.value;
+  if(kBtn) kBtn.style.display=(isPK&&editId)?'block':'none';
   // Soll-Felder in Bereich-Zeilen aktualisieren
   document.querySelectorAll('.kampBereichZeile').forEach(r=>{if(r._updateSollVis)r._updateSollVis();});
 }
+function kampOpenKontingent(){
+  const kBtn=document.getElementById('kampKontingentBtn');
+  const kampId=kBtn?.getAttribute('data-kamp-id');
+  if(!kampId){toast('⚠️ Kampagne erst speichern');return;}
+  // Modals schließen und Kontingent-Karte öffnen
+  closeKampFormModal();
+  document.getElementById('kampagnenModalOv')?.classList.remove('open');
+  openPlakatKontingentMap(kampId);
+}
+
 async function archiveKampagne(id, archivieren){
   const k=[...kampagnen,...kampagnenArchiv].find(k=>String(k.id)===String(id));
   if(!k)return;
@@ -2075,6 +2102,10 @@ function editKampagne(id) {
   container.innerHTML = '';
   const items = k.bereich_items || [];
   items.forEach(bi => addKampBereichZeile(bi.typ, bi.id, bi.soll));
+  // Kontingent-Button zeigen bei Plakat-Kampagnen
+  const kBtn=document.getElementById('kampKontingentBtn');
+  if(kBtn) kBtn.style.display=(k.typ==='plakate'||k.typ==='beides')?'block':'none';
+  kBtn?.setAttribute('data-kamp-id',k.id);
   document.getElementById('kampFormModalOv').classList.add('open');
 }
 
@@ -2492,8 +2523,15 @@ let pkMapActive=false, pkMapKampId=null, pkMapLabels=[], pkMapData={}, pkMapBere
 let pkRegionVerteiler={}; // {region_id: user_id}
 
 async function openPlakatKontingentMap(kampId){
-  const k=[...kampagnen,...kampagnenArchiv].find(x=>String(x.id)===String(kampId));
+  let k=[...kampagnen,...kampagnenArchiv].find(x=>String(x.id)===String(kampId));
   if(!k){toast('⚠️ Kampagne nicht gefunden');return;}
+  // Grundzuweisung: erst in DB persistieren falls lokal
+  if(k._local){
+    curKampagne=k;
+    const realId=await ensureKampagneInDB();
+    if(!realId){toast('⚠️ Kampagne konnte nicht gespeichert werden');return;}
+    kampId=realId;k=curKampagne;
+  }
   // Kampagne aktivieren falls nötig
   if(!curKampagne||String(curKampagne.id)!==String(kampId)){
     curKampagne=k;
@@ -2781,6 +2819,7 @@ function pkMapEnd(){
   pkMapActive=false;
   pkMapClearLabels();
   document.getElementById('pkBar').classList.remove('pk-active');
+  document.getElementById('pkVtPanel')?.remove();
   // Temporäre Polygone entfernen
   pkMapTempLayers.forEach(gId=>{
     if(layers[gId]){map.removeLayer(layers[gId]);delete layers[gId];}
@@ -4394,7 +4433,6 @@ async function showApp() {
   // Manager-Buttons: Nutzer einladen + Nutzerverwaltung (Admin, KV, VV, RV)
   const istMgr = rolle === 'admin' || rolle === 'kreisverwalter' || rolle === 'verwalter' || rolle === 'regionalverwalter';
   if (istMgr) {
-    document.getElementById('inviteUserBtn').style.display = 'block';
     document.getElementById('manageUsersBtn').style.display = 'block';
     document.getElementById('hierarchyBtn').style.display = 'block';
     document.getElementById('bulkPdfBtn').style.display = 'block';
@@ -7033,7 +7071,10 @@ function closeDetail(){
 // ACTIONS (write to Supabase + local update)
 // ============================================================
 function istPlakatKampagne(){
-  const t=curKampagne?.typ;return t==='plakate'||t==='beides';
+  const t=curKampagne?.typ;
+  // Grundzuweisung im Plakatmodus zählt auch
+  if(curKampagne?.ist_basis&&curMode==='plakate') return true;
+  return t==='plakate'||t==='beides';
 }
 async function setSt(id,s){
   if (!pruefeGebietZugriff(id)) return;
@@ -8992,7 +9033,8 @@ function switchMode(mode){
 function showModeToggle(){
   const typ=curKampagne?.typ||'flyer';
   const toggle=document.getElementById('modeToggle');
-  if(typ==='beides'){
+  // Grundzuweisung (ist_basis) immer als "beides" behandeln
+  if(typ==='beides'||curKampagne?.ist_basis){
     if(toggle) toggle.style.display='flex';
   } else if(typ==='plakate'){
     if(toggle) toggle.style.display='none';
@@ -9004,8 +9046,11 @@ function showModeToggle(){
 }
 function updateModeForKampagne(){
   const typ=curKampagne?.typ||'flyer';
-  if(typ==='flyer'&&curMode==='plakate') switchMode('flyer');
-  if(typ==='plakate'&&curMode==='flyer') switchMode('plakate');
+  // Grundzuweisung: Modus beibehalten (toggle ist sichtbar)
+  if(!curKampagne?.ist_basis){
+    if(typ==='flyer'&&curMode==='plakate') switchMode('flyer');
+    if(typ==='plakate'&&curMode==='flyer') switchMode('plakate');
+  }
   showModeToggle();
 }
 
