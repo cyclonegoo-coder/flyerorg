@@ -810,7 +810,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v205 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v208 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -1161,7 +1161,7 @@ textarea{min-height:68px}
     <div style="display:flex;flex-direction:column;gap:7px;max-height:55vh;overflow-y:auto;padding:2px">
       <input type="text" id="newKampName" placeholder="Name der Kampagne">
       <input type="text" id="newKampBeschr" placeholder="Beschreibung (optional)">
-      <div style="display:flex;flex-direction:column;gap:2px">
+      <div id="kampTypRow" style="display:flex;flex-direction:column;gap:2px">
         <label style="font-size:.65rem;font-weight:600;color:var(--text3)">Kampagnen-Typ</label>
         <select id="newKampTyp" style="font-size:.75rem" onchange="toggleAbhaengeDeadline()">
           <option value="flyer">📦 Nur Flyer</option>
@@ -1169,7 +1169,7 @@ textarea{min-height:68px}
           <option value="beides">📦📌 Flyer + Plakate</option>
         </select>
       </div>
-      <div style="display:flex;gap:6px">
+      <div id="kampDatumRow" style="display:flex;gap:6px">
         <div style="flex:1;display:flex;flex-direction:column;gap:2px">
           <label style="font-size:.65rem;font-weight:600;color:var(--text3)">Optimaler Verteilzeitraum</label>
           <div style="display:flex;gap:4px">
@@ -1184,10 +1184,10 @@ textarea{min-height:68px}
         <label style="font-size:.65rem;font-weight:600;color:var(--text3)">Plakate abhängen bis</label>
         <input type="date" id="newKampAbhaengeDeadline" style="font-size:.75rem">
       </div>
-      <div style="display:flex;flex-direction:column;gap:2px">
+      <div style="display:flex;flex-direction:column;gap:4px">
         <label style="font-size:.65rem;font-weight:600;color:var(--text3)">Geltungsbereiche</label>
-        <div id="kampBereicheContainer" style="display:flex;flex-direction:column;gap:4px"></div>
-        <button type="button" onclick="addKampBereichZeile()" style="align-self:flex-start;background:none;border:1px dashed var(--text4);border-radius:var(--r8);padding:4px 10px;font-size:.72rem;color:var(--text3);cursor:pointer">+ Bereich hinzufügen</button>
+        <div id="kampBereicheSummary" style="font-size:.75rem;color:var(--text3);padding:2px 0">Alle Bereiche</div>
+        <button type="button" onclick="openBereichModal()" style="width:100%;padding:8px;border:1px solid var(--sep);border-radius:var(--r8);background:var(--surface2);font-size:.75rem;color:var(--text2);cursor:pointer;text-align:left">🗺 Geltungsbereiche bearbeiten…</button>
       </div>
       <div id="kampKontingentBtn" style="display:none;margin-top:4px">
         <button type="button" onclick="kampOpenKontingent()" style="width:100%;padding:10px;border:none;border-radius:var(--r8);background:linear-gradient(135deg,rgba(30,80,170,.85),rgba(40,100,190,.85));color:#fff;font-size:.78rem;font-weight:600;cursor:pointer">📌 Plakat-Kontingent auf Karte verteilen</button>
@@ -1196,6 +1196,24 @@ textarea{min-height:68px}
     <div class="m-actions" style="margin-top:12px">
       <button class="btn btn-g" onclick="closeKampFormModal()">Abbrechen</button>
       <button class="btn btn-p" id="kampSaveBtn" onclick="saveKampagne()">Erstellen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Geltungsbereich Modal -->
+<div class="modal-ov" id="bereichModalOv" onclick="if(event.target===this)closeBereichModal()" style="z-index:3200">
+  <div class="modal" style="max-width:480px">
+    <div class="m-handle"></div>
+    <div class="m-title">🗺 Geltungsbereiche</div>
+    <input type="text" id="bereichSearch" placeholder="Suchen…" oninput="renderBereichTree()" style="width:100%;font-size:.78rem;padding:8px 10px;border:1px solid var(--sep);border-radius:var(--r8);margin-bottom:6px;box-sizing:border-box">
+    <div style="display:flex;gap:6px;margin-bottom:6px">
+      <button type="button" onclick="bereichAlleWaehlen(true)" style="flex:1;font-size:.68rem;padding:5px 8px;border:1px solid var(--sep);border-radius:var(--r8);background:var(--surface2);cursor:pointer;color:var(--text2)">✓ Alle auswählen</button>
+      <button type="button" onclick="bereichAlleWaehlen(false)" style="flex:1;font-size:.68rem;padding:5px 8px;border:1px solid var(--sep);border-radius:var(--r8);background:var(--surface2);cursor:pointer;color:var(--text2)">✗ Alle abwählen</button>
+    </div>
+    <div id="bereichTree" style="max-height:50vh;overflow-y:auto;border:1px solid var(--sep);border-radius:var(--r8)"></div>
+    <div class="m-actions" style="margin-top:10px">
+      <button class="btn btn-g" onclick="closeBereichModal()">Abbrechen</button>
+      <button class="btn btn-p" onclick="saveBereichModal()">Übernehmen</button>
     </div>
   </div>
 </div>
@@ -1870,22 +1888,66 @@ function renderKampagnenList() {
 
   list.innerHTML = sichtbar.map(k => {
     const kannBearbeiten = isAdmin || isKV || (String(k.erstellt_von) === String(currentUser?.id));
-    const kannLoeschen = kannBearbeiten && !k.ist_basis;
     const abgelaufen=k.deadline&&k.deadline<heute&&!k.ist_basis;
     const meta=kampagneMetaLine(k);
     return `<div style="display:flex;align-items:center;gap:6px;padding:8px 0;border-bottom:1px solid var(--sep)${abgelaufen?';opacity:.55':''}">
-      <div style="flex:1">
+      <div style="flex:1;cursor:pointer" onclick="editKampagne('${k.id}')">
         <div style="font-size:.85rem;font-weight:500">${esc(k.name)}${abgelaufen?' <span style="font-size:.65rem;color:var(--orange);font-weight:600">(abgelaufen)</span>':''}</div>
         ${k.beschreibung ? `<div style="font-size:.7rem;color:var(--text3)">${esc(k.beschreibung)}</div>` : ''}
         ${meta ? `<div style="font-size:.65rem;color:var(--text4);margin-top:2px">${meta}</div>` : ''}
       </div>
-      ${kannBearbeiten&&(k.typ==='plakate'||k.typ==='beides'||k.ist_basis) ? `<button style="background:none;border:none;cursor:pointer;font-size:.85rem;padding:2px" onclick="openPlakatKontingentMap('${k.id}')" title="Plakat-Kontingent">📌</button>` : ''}
-      ${kannBearbeiten&&!k.ist_basis ? `<button style="background:none;border:none;cursor:pointer;font-size:.85rem;padding:2px" onclick="openKampagneNotify('${k.id}')" title="Nutzer benachrichtigen">📣</button>` : ''}
-      ${kannBearbeiten ? `<button style="background:none;border:none;cursor:pointer;font-size:.85rem;padding:2px" onclick="editKampagne('${k.id}')" title="Bearbeiten">✏️</button>` : ''}
-      ${kannBearbeiten&&!k.ist_basis ? `<button style="background:none;border:none;cursor:pointer;font-size:.75rem;padding:2px" onclick="archiveKampagne('${k.id}',true)" title="Archivieren">📥</button>` : ''}
-      ${kannLoeschen ? `<button class="btn btn-d" style="width:auto;padding:4px 8px;font-size:.7rem" onclick="deleteKampagne('${k.id}')">🗑</button>` : ''}
+      ${kannBearbeiten?`<button onclick="toggleKampMenu('${k.id}',this,event)" style="background:none;border:none;cursor:pointer;font-size:1.1rem;padding:4px 6px;color:var(--text3);border-radius:var(--r8)" title="Aktionen">⋮</button>`:''}
     </div>`;
   }).join('') || '<div style="color:var(--text3);font-size:.85rem;padding:8px 0">Keine Kampagnen vorhanden.</div>';
+}
+
+// ── Kampagnen-Kontextmenü ──
+function toggleKampMenu(kampId,btn,ev){
+  ev.stopPropagation();
+  // Bestehendes Menü schließen
+  document.getElementById('kampCtxMenu')?.remove();
+  const k=[...kampagnen,...kampagnenArchiv].find(x=>String(x.id)===String(kampId));
+  if(!k)return;
+  const isBasis=!!k.ist_basis;
+  const menu=document.createElement('div');
+  menu.id='kampCtxMenu';
+  menu.style.cssText='position:absolute;right:0;top:100%;z-index:3300;background:#fff;border:1px solid var(--sep);border-radius:var(--r8);box-shadow:0 4px 16px rgba(0,0,0,.15);min-width:180px;padding:4px 0;font-size:.78rem';
+  const items=[];
+  items.push({icon:'✏️',label:'Bearbeiten',fn:()=>editKampagne(kampId)});
+  if(!isBasis) items.push({icon:'📋',label:'Als Vorlage verwenden',fn:()=>kampagneAlsVorlage(kampId)});
+  if(!isBasis) items.push({icon:'📣',label:'Benachrichtigen',fn:()=>openKampagneNotify(kampId)});
+  if(!isBasis) items.push({sep:true});
+  if(!isBasis) items.push({icon:'📥',label:'Archivieren',fn:()=>archiveKampagne(kampId,true)});
+  if(!isBasis) items.push({icon:'🗑',label:'Löschen',fn:()=>deleteKampagne(kampId),danger:true});
+  items.forEach(it=>{
+    if(it.sep){const hr=document.createElement('div');hr.style.cssText='height:1px;background:var(--sep);margin:4px 0';menu.appendChild(hr);return;}
+    const row=document.createElement('div');
+    row.style.cssText='display:flex;align-items:center;gap:8px;padding:8px 14px;cursor:pointer;color:'+(it.danger?'var(--red)':'var(--text)');
+    row.onmouseover=()=>row.style.background='var(--surface2)';
+    row.onmouseout=()=>row.style.background='';
+    row.onclick=()=>{menu.remove();it.fn();};
+    row.innerHTML=it.icon+' '+it.label;
+    menu.appendChild(row);
+  });
+  btn.parentElement.appendChild(menu);
+  // Klick außerhalb schließt
+  setTimeout(()=>document.addEventListener('click',function _closeKM(){document.getElementById('kampCtxMenu')?.remove();document.removeEventListener('click',_closeKM);},{once:false}),10);
+}
+
+function kampagneAlsVorlage(kampId){
+  const k=[...kampagnen,...kampagnenArchiv].find(x=>String(x.id)===String(kampId));
+  if(!k)return;
+  resetKampForm();
+  document.getElementById('newKampName').value=(k.name||'')+' (Kopie)';
+  document.getElementById('newKampBeschr').value=k.beschreibung||'';
+  document.getElementById('newKampTyp').value=k.typ||'flyer';
+  // Geltungsbereiche übernehmen
+  _kampBereichData=expandBereichToRegions(k.bereich_items||[]);
+  updateBereichSummary();
+  toggleAbhaengeDeadline();
+  document.getElementById('kampFormTitle').textContent='📋 Neue Kampagne (Vorlage: '+esc(k.name)+')';
+  document.getElementById('kampSaveBtn').textContent='Erstellen';
+  document.getElementById('kampFormModalOv').classList.add('open');
 }
 
 // Mischbare Geltungsbereiche: Dynamische Zeilen
@@ -2000,17 +2062,10 @@ function addKampBereichZeile(typ, id, soll) {
   container.appendChild(row);
 }
 
+let _kampBereichData=[];
+
 function getKampBereiche() {
-  const rows = document.querySelectorAll('.kampBereichZeile');
-  const items = [];
-  rows.forEach(row => {
-    const typ = row.querySelector('select').value;
-    const id = row.querySelector('.kampBereichIdSel').value;
-    const sollInp = row.querySelector('.kampBereichSoll');
-    const soll = sollInp ? (parseInt(sollInp.value)||0) : 0;
-    if (typ && id) items.push({ typ, id, soll });
-  });
-  return items;
+  return _kampBereichData;
 }
 
 function resetKampForm() {
@@ -2022,9 +2077,14 @@ function resetKampForm() {
   document.getElementById('newKampVerteilBis').value = '';
   document.getElementById('newKampDeadline').value = '';
   document.getElementById('newKampAbhaengeDeadline').value = '';
-  document.getElementById('kampBereicheContainer').innerHTML = '';
   document.getElementById('kampFormTitle').textContent = 'Neue Kampagne';
   document.getElementById('kampSaveBtn').textContent = 'Erstellen';
+  // Grundzuweisung-spezifische Felder zurücksetzen
+  document.getElementById('kampTypRow').style.display='';
+  document.getElementById('kampDatumRow').style.display='';
+  document.getElementById('newKampName').readOnly=false;
+  _kampBereichData=[];
+  updateBereichSummary();
   toggleAbhaengeDeadline();
 }
 function toggleAbhaengeDeadline() {
@@ -2037,8 +2097,142 @@ function toggleAbhaengeDeadline() {
   const editId=document.getElementById('editKampagneId')?.value;
   if(kBtn) kBtn.style.display=(isPK&&editId)?'block':'none';
   // Soll-Felder in Bereich-Zeilen aktualisieren
-  document.querySelectorAll('.kampBereichZeile').forEach(r=>{if(r._updateSollVis)r._updateSollVis();});
 }
+
+// ── Geltungsbereich Modal ──
+let _bereichModalData=[];
+let _bereichTreeExp=new Set();
+
+function expandBereichToRegions(items){
+  const result=[],seen=new Set();
+  (items||[]).forEach(bi=>{
+    if(bi.typ==='region'){
+      if(!seen.has(bi.id)){result.push({typ:'region',id:bi.id,soll:bi.soll||0});seen.add(bi.id);}
+    } else if(bi.typ==='gebietsverband'){
+      Object.entries(regionen).filter(([,r])=>r.gebietsverband_id===bi.id).forEach(([rId])=>{
+        if(!seen.has(rId)){result.push({typ:'region',id:rId,soll:bi.soll||0});seen.add(rId);}
+      });
+    } else if(bi.typ==='landkreis'){
+      Object.entries(gebietsverbaende).filter(([,gv])=>gv.landkreis_id===bi.id).forEach(([gvId])=>{
+        Object.entries(regionen).filter(([,r])=>r.gebietsverband_id===gvId).forEach(([rId])=>{
+          if(!seen.has(rId)){result.push({typ:'region',id:rId,soll:bi.soll||0});seen.add(rId);}
+        });
+      });
+    }
+  });
+  return result;
+}
+
+function openBereichModal(){
+  _bereichModalData=JSON.parse(JSON.stringify(_kampBereichData));
+  _bereichTreeExp.clear();
+  const s=document.getElementById('bereichSearch');if(s)s.value='';
+  renderBereichTree();
+  document.getElementById('bereichModalOv').classList.add('open');
+}
+function closeBereichModal(){document.getElementById('bereichModalOv').classList.remove('open');}
+
+function saveBereichModal(){
+  _kampBereichData=_bereichModalData.filter(b=>b.id);
+  updateBereichSummary();
+  closeBereichModal();
+}
+
+function updateBereichSummary(){
+  const el=document.getElementById('kampBereicheSummary');if(!el)return;
+  const n=_kampBereichData.length;
+  if(n===0){el.textContent='Alle Bereiche (keine Einschränkung)';el.style.color='var(--text3)';}
+  else{
+    const totalSoll=_kampBereichData.reduce((s,b)=>s+(b.soll||0),0);
+    const si=totalSoll>0?' · 📌 '+totalSoll+' Plakat-Soll':'';
+    el.textContent=n+' '+(n===1?'Region':'Regionen')+' ausgewählt'+si;
+    el.style.color='var(--text)';
+  }
+}
+
+function bereichAlleWaehlen(select){
+  if(select){
+    _bereichModalData=[];
+    Object.keys(regionen).forEach(rId=>{_bereichModalData.push({typ:'region',id:rId,soll:0});});
+  } else _bereichModalData=[];
+  renderBereichTree();
+}
+
+function toggleBereichNode(key){
+  if(_bereichTreeExp.has(key))_bereichTreeExp.delete(key);else _bereichTreeExp.add(key);
+  renderBereichTree();
+}
+
+function toggleBereichRegion(rId,checked){
+  if(checked){
+    if(!_bereichModalData.some(b=>b.typ==='region'&&b.id===rId))
+      _bereichModalData.push({typ:'region',id:rId,soll:0});
+  } else _bereichModalData=_bereichModalData.filter(b=>!(b.typ==='region'&&b.id===rId));
+  renderBereichTree();
+}
+
+function setBereichSoll(rId,val){
+  const item=_bereichModalData.find(b=>b.typ==='region'&&b.id===rId);
+  if(item)item.soll=parseInt(val)||0;
+}
+
+function renderBereichTree(){
+  const container=document.getElementById('bereichTree');if(!container)return;
+  const q=(document.getElementById('bereichSearch')?.value||'').toLowerCase().trim();
+  const typVal=document.getElementById('newKampTyp')?.value||'flyer';
+  const showSoll=typVal==='plakate'||typVal==='beides';
+  let html='';
+  const lkEntries=Object.entries(landkreise).sort((a,b)=>a[1].name.localeCompare(b[1].name));
+  lkEntries.forEach(([lkId,lk])=>{
+    const gvEntries=Object.entries(gebietsverbaende).filter(([,gv])=>gv.landkreis_id===lkId).sort((a,b)=>a[1].name.localeCompare(b[1].name));
+    if(!gvEntries.length)return;
+    const lkMatch=!q||lk.name.toLowerCase().includes(q);
+    const matchedGVs=gvEntries.filter(([gvId,gv])=>{
+      if(lkMatch)return true;
+      if(gv.name.toLowerCase().includes(q))return true;
+      return Object.entries(regionen).filter(([,r])=>r.gebietsverband_id===gvId).some(([,r])=>(r.short||r.name||'').toLowerCase().includes(q));
+    });
+    if(!matchedGVs.length)return;
+    const lkKey='br_lk_'+lkId;
+    const lkOpen=_bereichTreeExp.has(lkKey)||!!q;
+    let lkTotal=0,lkSel=0;
+    matchedGVs.forEach(([gvId])=>{Object.entries(regionen).filter(([,r])=>r.gebietsverband_id===gvId).forEach(([rId])=>{lkTotal++;if(_bereichModalData.some(b=>b.typ==='region'&&b.id===rId))lkSel++;});});
+    html+='<div style="border-bottom:1px solid var(--sep)">';
+    html+='<div onclick="toggleBereichNode(\''+lkKey+'\')" style="display:flex;align-items:center;gap:6px;padding:8px;cursor:pointer;font-weight:600;font-size:.8rem;color:var(--text);user-select:none">';
+    html+='<span style="font-size:.6rem;color:var(--text3)">'+(lkOpen?'▾':'▸')+'</span>'+esc(lk.name);
+    html+='<span style="font-size:.62rem;color:'+(lkSel>0?'var(--blue)':'var(--text4)')+';margin-left:auto">'+lkSel+'/'+lkTotal+'</span></div>';
+    if(lkOpen){
+      matchedGVs.forEach(([gvId,gv])=>{
+        const gvKey='br_gv_'+gvId;
+        const gvOpen=_bereichTreeExp.has(gvKey)||!!q;
+        const regs=Object.entries(regionen).filter(([,r])=>r.gebietsverband_id===gvId).sort((a,b)=>(a[1].short||a[1].name||'').localeCompare(b[1].short||b[1].name||''));
+        const filtRegs=q&&!lkMatch&&!gv.name.toLowerCase().includes(q)?regs.filter(([,r])=>(r.short||r.name||'').toLowerCase().includes(q)):regs;
+        if(!filtRegs.length)return;
+        const gvSel=regs.filter(([rId])=>_bereichModalData.some(b=>b.typ==='region'&&b.id===rId)).length;
+        html+='<div style="padding-left:16px">';
+        html+='<div onclick="toggleBereichNode(\''+gvKey+'\')" style="display:flex;align-items:center;gap:6px;padding:5px 4px;cursor:pointer;font-size:.78rem;color:var(--text2);user-select:none">';
+        html+='<span style="font-size:.55rem;color:var(--text4)">'+(gvOpen?'▾':'▸')+'</span>'+esc(gv.name);
+        html+='<span style="font-size:.6rem;color:'+(gvSel>0?'var(--blue)':'var(--text4)')+';margin-left:auto">'+gvSel+'/'+regs.length+'</span></div>';
+        if(gvOpen){
+          filtRegs.forEach(([rId,r])=>{
+            const checked=_bereichModalData.some(b=>b.typ==='region'&&b.id===rId);
+            const sollItem=_bereichModalData.find(b=>b.typ==='region'&&b.id===rId);
+            const sollVal=sollItem?.soll||'';
+            html+='<div style="display:flex;align-items:center;gap:6px;padding:4px 4px 4px 32px;font-size:.75rem">';
+            html+='<input type="checkbox" '+(checked?'checked':'')+' onchange="toggleBereichRegion(\''+rId+'\',this.checked)" style="width:16px;height:16px;cursor:pointer;flex-shrink:0">';
+            html+='<span style="flex:1;color:var(--text)">'+esc(r.short||r.name||rId)+'</span>';
+            if(showSoll) html+='<input type="number" min="0" value="'+sollVal+'" placeholder="Soll" onchange="setBereichSoll(\''+rId+'\',this.value)" style="width:55px;font-size:.7rem;padding:3px 4px;border:1px solid var(--sep);border-radius:4px;text-align:center">';
+            html+='</div>';
+          });
+        }
+        html+='</div>';
+      });
+    }
+    html+='</div>';
+  });
+  container.innerHTML=html||'<div style="color:var(--text3);font-size:.8rem;padding:12px">Keine Bereiche gefunden</div>';
+}
+
 function kampOpenKontingent(){
   const kBtn=document.getElementById('kampKontingentBtn');
   const kampId=kBtn?.getAttribute('data-kamp-id');
@@ -2092,24 +2286,30 @@ async function archiveKampagne(id, archivieren){
 function editKampagne(id) {
   const k = kampagnen.find(k => String(k.id) === String(id));
   if (!k) return;
+  const isBasis=!!k.ist_basis;
   document.getElementById('editKampagneId').value = k.id;
   document.getElementById('newKampName').value = k.name || '';
   document.getElementById('newKampBeschr').value = k.beschreibung || '';
-  document.getElementById('newKampTyp').value = k.typ || 'flyer';
+  document.getElementById('newKampTyp').value = isBasis?'beides':(k.typ || 'flyer');
   document.getElementById('newKampVerteilVon').value = k.verteil_von || '';
   document.getElementById('newKampVerteilBis').value = k.verteil_bis || '';
   document.getElementById('newKampDeadline').value = k.deadline || '';
   document.getElementById('newKampAbhaengeDeadline').value = k.abhaenge_deadline || '';
-  toggleAbhaengeDeadline();
-  document.getElementById('kampFormTitle').textContent = `✏️ „${k.name}" bearbeiten`;
+  // Grundzuweisung: Typ + Datum ausblenden, Name readonly
+  document.getElementById('kampTypRow').style.display=isBasis?'none':'';
+  document.getElementById('kampDatumRow').style.display=isBasis?'none':'';
+  document.getElementById('abhaengeDeadlineRow').style.display=isBasis?'none':'';
+  document.getElementById('newKampName').readOnly=isBasis;
+  if(!isBasis) toggleAbhaengeDeadline();
+  document.getElementById('kampFormTitle').textContent = isBasis?'⭐ Grundzuweisung bearbeiten':`✏️ „${k.name}" bearbeiten`;
   document.getElementById('kampSaveBtn').textContent = 'Speichern';
-  const container = document.getElementById('kampBereicheContainer');
-  container.innerHTML = '';
-  const items = k.bereich_items || [];
-  items.forEach(bi => addKampBereichZeile(bi.typ, bi.id, bi.soll));
-  // Kontingent-Button zeigen bei Plakat-Kampagnen
+  // Bereich-Daten laden (GV/LK-Einträge zu Regionen expandieren)
+  _kampBereichData=expandBereichToRegions(k.bereich_items||[]);
+  updateBereichSummary();
+  // Kontingent-Button
   const kBtn=document.getElementById('kampKontingentBtn');
-  if(kBtn) kBtn.style.display=(k.typ==='plakate'||k.typ==='beides')?'block':'none';
+  const isPK=isBasis||k.typ==='plakate'||k.typ==='beides';
+  if(kBtn) kBtn.style.display=isPK?'block':'none';
   kBtn?.setAttribute('data-kamp-id',k.id);
   document.getElementById('kampFormModalOv').classList.add('open');
 }
@@ -2120,11 +2320,14 @@ async function saveKampagne() {
   const beschr = document.getElementById('newKampBeschr').value.trim();
   if (!name) { toast('⚠️ Bitte Namen eingeben'); return; }
 
-  const typ = document.getElementById('newKampTyp').value || 'flyer';
-  const verteilVon = document.getElementById('newKampVerteilVon').value || null;
-  const verteilBis = document.getElementById('newKampVerteilBis').value || null;
-  const deadline = verteilBis || null; // Deadline = Kampagnenende (verteil_bis)
-  const abhaengeDeadline = document.getElementById('newKampAbhaengeDeadline').value || null;
+  // Grundzuweisung: Typ immer 'beides'
+  const editingK=editId?kampagnen.find(k=>String(k.id)===String(editId)):null;
+  const isBasisEdit=!!editingK?.ist_basis;
+  const typ = isBasisEdit?'beides':(document.getElementById('newKampTyp').value || 'flyer');
+  const verteilVon = isBasisEdit?null:(document.getElementById('newKampVerteilVon').value || null);
+  const verteilBis = isBasisEdit?null:(document.getElementById('newKampVerteilBis').value || null);
+  const deadline = verteilBis || null;
+  const abhaengeDeadline = isBasisEdit?null:(document.getElementById('newKampAbhaengeDeadline').value || null);
   const bereichItems = getKampBereiche();
 
   const kampData = {
