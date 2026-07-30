@@ -810,7 +810,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v209 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v210 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -1206,7 +1206,7 @@ textarea{min-height:68px}
     <div class="m-handle"></div>
     <div class="m-title">🗺 Geltungsbereiche</div>
     <input type="text" id="bereichSearch" placeholder="Suchen…" oninput="renderBereichTree()" style="width:100%;font-size:.78rem;padding:8px 10px;border:1px solid var(--sep);border-radius:var(--r8);margin-bottom:6px;box-sizing:border-box">
-    <div style="display:flex;gap:6px;margin-bottom:6px">
+    <div id="bereichAlleButtons" style="display:flex;gap:6px;margin-bottom:6px">
       <button type="button" onclick="bereichAlleWaehlen(true)" style="flex:1;font-size:.68rem;padding:5px 8px;border:1px solid var(--sep);border-radius:var(--r8);background:var(--surface2);cursor:pointer;color:var(--text2)">✓ Alle auswählen</button>
       <button type="button" onclick="bereichAlleWaehlen(false)" style="flex:1;font-size:.68rem;padding:5px 8px;border:1px solid var(--sep);border-radius:var(--r8);background:var(--surface2);cursor:pointer;color:var(--text2)">✗ Alle abwählen</button>
     </div>
@@ -2124,10 +2124,24 @@ function expandBereichToRegions(items){
   return result;
 }
 
+let _bereichIsBasis=false;
 function openBereichModal(){
-  _bereichModalData=JSON.parse(JSON.stringify(_kampBereichData));
+  // Prüfen ob Grundzuweisung
+  const editId=document.getElementById('editKampagneId')?.value;
+  const editK=editId?kampagnen.find(k=>String(k.id)===String(editId)):null;
+  _bereichIsBasis=!!editK?.ist_basis;
+  if(_bereichIsBasis){
+    // Grundzuweisung: ALLE Regionen, bestehende Soll-Werte beibehalten
+    const existing=new Map(_kampBereichData.map(b=>[b.id,b.soll||0]));
+    _bereichModalData=[];
+    Object.keys(regionen).forEach(rId=>{_bereichModalData.push({typ:'region',id:rId,soll:existing.get(rId)||0});});
+  } else {
+    _bereichModalData=JSON.parse(JSON.stringify(_kampBereichData));
+  }
   _bereichTreeExp.clear();
   const s=document.getElementById('bereichSearch');if(s)s.value='';
+  // Buttons ausblenden bei Grundzuweisung
+  document.getElementById('bereichAlleButtons').style.display=_bereichIsBasis?'none':'';
   renderBereichTree();
   document.getElementById('bereichModalOv').classList.add('open');
 }
@@ -2172,6 +2186,22 @@ function toggleBereichRegion(rId,checked){
   renderBereichTree();
 }
 
+function toggleBereichGV(gvId,checked){
+  const regIds=Object.entries(regionen).filter(([,r])=>r.gebietsverband_id===gvId).map(([id])=>id);
+  if(checked){regIds.forEach(rId=>{if(!_bereichModalData.some(b=>b.typ==='region'&&b.id===rId))_bereichModalData.push({typ:'region',id:rId,soll:0});});}
+  else{_bereichModalData=_bereichModalData.filter(b=>!(b.typ==='region'&&regIds.includes(b.id)));}
+  renderBereichTree();
+}
+
+function toggleBereichLK(lkId,checked){
+  const gvIds=Object.entries(gebietsverbaende).filter(([,gv])=>gv.landkreis_id===lkId).map(([id])=>id);
+  const regIds=[];
+  gvIds.forEach(gvId=>{Object.entries(regionen).filter(([,r])=>r.gebietsverband_id===gvId).forEach(([rId])=>regIds.push(rId));});
+  if(checked){regIds.forEach(rId=>{if(!_bereichModalData.some(b=>b.typ==='region'&&b.id===rId))_bereichModalData.push({typ:'region',id:rId,soll:0});});}
+  else{_bereichModalData=_bereichModalData.filter(b=>!(b.typ==='region'&&regIds.includes(b.id)));}
+  renderBereichTree();
+}
+
 function setBereichSoll(rId,val){
   const item=_bereichModalData.find(b=>b.typ==='region'&&b.id===rId);
   if(item)item.soll=parseInt(val)||0;
@@ -2182,6 +2212,7 @@ function renderBereichTree(){
   const q=(document.getElementById('bereichSearch')?.value||'').toLowerCase().trim();
   const typVal=document.getElementById('newKampTyp')?.value||'flyer';
   const showSoll=typVal==='plakate'||typVal==='beides';
+  const basis=_bereichIsBasis;
   let html='';
   const lkEntries=Object.entries(landkreise).sort((a,b)=>a[1].name.localeCompare(b[1].name));
   lkEntries.forEach(([lkId,lk])=>{
@@ -2199,9 +2230,10 @@ function renderBereichTree(){
     let lkTotal=0,lkSel=0;
     matchedGVs.forEach(([gvId])=>{Object.entries(regionen).filter(([,r])=>r.gebietsverband_id===gvId).forEach(([rId])=>{lkTotal++;if(_bereichModalData.some(b=>b.typ==='region'&&b.id===rId))lkSel++;});});
     html+='<div style="border-bottom:1px solid var(--sep)">';
-    html+='<div onclick="toggleBereichNode(\''+lkKey+'\')" style="display:flex;align-items:center;gap:6px;padding:8px;cursor:pointer;font-weight:600;font-size:.8rem;color:var(--text);user-select:none">';
-    html+='<span style="font-size:.6rem;color:var(--text3)">'+(lkOpen?'▾':'▸')+'</span>'+esc(lk.name);
-    html+='<span style="font-size:.62rem;color:'+(lkSel>0?'var(--blue)':'var(--text4)')+';margin-left:auto">'+lkSel+'/'+lkTotal+'</span></div>';
+    html+='<div style="display:flex;align-items:center;gap:6px;padding:8px;cursor:pointer;font-weight:600;font-size:.8rem;color:var(--text);user-select:none">';
+    if(!basis) html+='<input type="checkbox" '+(lkSel===lkTotal&&lkTotal>0?'checked':'')+(lkSel>0&&lkSel<lkTotal?' style="opacity:.5;width:16px;height:16px;cursor:pointer;flex-shrink:0"':' style="width:16px;height:16px;cursor:pointer;flex-shrink:0"')+' onchange="toggleBereichLK(\''+lkId+'\',this.checked)" onclick="event.stopPropagation()">';
+    html+='<span onclick="toggleBereichNode(\''+lkKey+'\')" style="display:flex;align-items:center;gap:6px;flex:1"><span style="font-size:.6rem;color:var(--text3)">'+(lkOpen?'▾':'▸')+'</span>'+esc(lk.name)+'</span>';
+    html+='<span style="font-size:.62rem;color:'+(lkSel>0?'var(--blue)':'var(--text4)')+'">'+lkSel+'/'+lkTotal+'</span></div>';
     if(lkOpen){
       matchedGVs.forEach(([gvId,gv])=>{
         const gvKey='br_gv_'+gvId;
@@ -2211,16 +2243,17 @@ function renderBereichTree(){
         if(!filtRegs.length)return;
         const gvSel=regs.filter(([rId])=>_bereichModalData.some(b=>b.typ==='region'&&b.id===rId)).length;
         html+='<div style="padding-left:16px">';
-        html+='<div onclick="toggleBereichNode(\''+gvKey+'\')" style="display:flex;align-items:center;gap:6px;padding:5px 4px;cursor:pointer;font-size:.78rem;color:var(--text2);user-select:none">';
-        html+='<span style="font-size:.55rem;color:var(--text4)">'+(gvOpen?'▾':'▸')+'</span>'+esc(gv.name);
-        html+='<span style="font-size:.6rem;color:'+(gvSel>0?'var(--blue)':'var(--text4)')+';margin-left:auto">'+gvSel+'/'+regs.length+'</span></div>';
+        html+='<div style="display:flex;align-items:center;gap:6px;padding:5px 4px;cursor:pointer;font-size:.78rem;color:var(--text2);user-select:none">';
+        if(!basis) html+='<input type="checkbox" '+(gvSel===regs.length&&regs.length>0?'checked':'')+(gvSel>0&&gvSel<regs.length?' style="opacity:.5;width:15px;height:15px;cursor:pointer;flex-shrink:0"':' style="width:15px;height:15px;cursor:pointer;flex-shrink:0"')+' onchange="toggleBereichGV(\''+gvId+'\',this.checked)" onclick="event.stopPropagation()">';
+        html+='<span onclick="toggleBereichNode(\''+gvKey+'\')" style="display:flex;align-items:center;gap:6px;flex:1"><span style="font-size:.55rem;color:var(--text4)">'+(gvOpen?'▾':'▸')+'</span>'+esc(gv.name)+'</span>';
+        html+='<span style="font-size:.6rem;color:'+(gvSel>0?'var(--blue)':'var(--text4)')+'">'+gvSel+'/'+regs.length+'</span></div>';
         if(gvOpen){
           filtRegs.forEach(([rId,r])=>{
             const checked=_bereichModalData.some(b=>b.typ==='region'&&b.id===rId);
             const sollItem=_bereichModalData.find(b=>b.typ==='region'&&b.id===rId);
             const sollVal=sollItem?.soll||'';
-            html+='<div style="display:flex;align-items:center;gap:6px;padding:4px 4px 4px 32px;font-size:.75rem">';
-            html+='<input type="checkbox" '+(checked?'checked':'')+' onchange="toggleBereichRegion(\''+rId+'\',this.checked)" style="width:16px;height:16px;cursor:pointer;flex-shrink:0">';
+            html+='<div style="display:flex;align-items:center;gap:6px;padding:4px 4px 4px '+(basis?'32':'48')+'px;font-size:.75rem">';
+            if(!basis) html+='<input type="checkbox" '+(checked?'checked':'')+' onchange="toggleBereichRegion(\''+rId+'\',this.checked)" style="width:15px;height:15px;cursor:pointer;flex-shrink:0">';
             html+='<span style="flex:1;color:var(--text)">'+esc(r.short||r.name||rId)+'</span>';
             if(showSoll) html+='<input type="number" min="0" value="'+sollVal+'" placeholder="Soll" onchange="setBereichSoll(\''+rId+'\',this.value)" style="width:55px;font-size:.7rem;padding:3px 4px;border:1px solid var(--sep);border-radius:4px;text-align:center">';
             html+='</div>';
