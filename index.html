@@ -617,6 +617,11 @@ textarea{min-height:68px}
         <div class="leg-row"><div class="leg-dot" style="background:#42a5f5"></div>Ersetzt</div>
         <div class="leg-row"><div class="leg-dot" style="background:#aeaeb2"></div>Abgehängt</div>
         <div class="leg-row"><div class="leg-dot" style="background:#ff3b30"></div>Zerstört</div>
+        <hr style="border:none;border-top:1px solid #e0e0e0;margin:6px 0">
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:.7rem">
+          <input type="checkbox" id="toggleGebiete" checked onchange="toggleGebieteVisible(this.checked)">
+          <span>Gebiete anzeigen</span>
+        </label>
       </div>
       <hr style="border:none;border-top:1px solid #e0e0e0;margin:6px 0">
       <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:.7rem">
@@ -816,7 +821,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v211 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v212 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -5452,7 +5457,7 @@ let plakatFilter='alle'; // alle, haengt, abgehaengt, zerstoert, ersetzt
 let selPlakatId=null;
 let tourActive=false, tourStops=[], tourIdx=0, tourRouteLine=null, tourStopMarkers=[];
 const scol={offen:{f:'#aeaeb2',s:'#8e8e93'},offen_zugewiesen:{f:'#cfd8dc',s:'#546e7a'},zugeteilt:{f:'#ff9500',s:'#c97800'},fertig:{f:'#42a5f5',s:'#1565c0'},problem:{f:'#ff3b30',s:'#c62828'}};
-function getGebietFarbe(g){if(!g.verteilerId)return scol.problem;return(g.status==='offen'&&g.verteilerId)?scol.offen_zugewiesen:(scol[g.status]||scol.offen);}
+function getGebietFarbe(g){if(curMode==='plakate')return{f:'#d0d0d0',s:'#999'};if(!g.verteilerId)return scol.problem;return(g.status==='offen'&&g.verteilerId)?scol.offen_zugewiesen:(scol[g.status]||scol.offen);}
 
 // ── HELPER: Rollen-Prüfungen ──
 function istVerwalterOderKreisverwalter() { return curRole === 'verwalter' || curRole === 'kreisverwalter' || curRole === 'regionalverwalter'; }
@@ -5735,7 +5740,8 @@ function drawPolygons(){
     const idx=rObj?rObj.gebiete.indexOf(g):0;
     const c=getCoords(rKey,idx,rObj?rObj.gebiete.length:1,g.id);
     const col=getGebietFarbe(g);
-    const poly=L.polygon(c,{color:col.s,fillColor:col.f,fillOpacity:.35,weight:2}).addTo(map);
+    const hideGeb=curMode==='plakate'&&!_gebieteVisible;
+    const poly=L.polygon(c,{color:col.s,fillColor:col.f,fillOpacity:hideGeb?0:.35,opacity:hideGeb?0:1,weight:2}).addTo(map);
     poly.bindPopup(`<div class="popup-name">${g.name}</div><div class="popup-meta">📦 ${g.stueckzahl} · ${sl(g.status)}</div>`);
     let _msPolyTimer=null,_msJustStarted=false,_msDownPos=null;
     poly.on('mousedown',(e)=>{
@@ -9269,13 +9275,25 @@ function switchMode(mode){
   closeDetail();
   selPlakatId=null;
   if(mode==='plakate'){
+    drawPolygons(); // Redraw in gray
+    const tg=document.getElementById('toggleGebiete');if(tg)tg.checked=true;
     loadPlakate().then(()=>{ drawPlakatMarkers(); renderList(); renderStats(); updateTourFab(); });
   } else {
     if(tourActive) endTour();
     clearPlakatMarkers();
+    _gebieteVisible=true;
     renderList(); renderStats(); drawPolygons();
     updateTourFab();
   }
+}
+
+let _gebieteVisible=true;
+function toggleGebieteVisible(show){
+  _gebieteVisible=show;
+  Object.values(layers).forEach(l=>{
+    if(show) l.setStyle({opacity:1,fillOpacity:.35});
+    else l.setStyle({opacity:0,fillOpacity:0});
+  });
 }
 
 function showModeToggle(){
