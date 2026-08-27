@@ -82,12 +82,12 @@ header{min-height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturat
 .mode-btn.active{background:var(--surface);color:var(--text);box-shadow:var(--sh-sm)}
 .mode-btn.active[id="modePlakat"]{background:var(--blue);color:#fff}
 .plakat-chip{display:inline-block;padding:2px 8px;border-radius:10px;font-size:.68rem;font-weight:600}
-.plakat-chip.c-haengt{background:rgba(52,199,89,.12);color:var(--green)}
-.plakat-chip.c-abgehaengt{background:rgba(174,174,178,.15);color:#8e8e93}
+.plakat-chip.c-haengt{background:rgba(66,165,245,.12);color:var(--blue)}
+.plakat-chip.c-abgehaengt{background:rgba(156,39,176,.12);color:#9c27b0}
 .plakat-chip.c-zerstoert{background:rgba(255,59,48,.12);color:var(--red)}
-.plakat-chip.c-ersetzt{background:rgba(0,158,224,.12);color:var(--blue)}
+.plakat-chip.c-ersetzt{background:rgba(66,165,245,.12);color:var(--blue)}
 .plakat-chip.c-aufzuhaengen{background:rgba(255,149,0,.12);color:var(--orange)}
-.plakat-chip.c-vorlage{background:rgba(156,39,176,.12);color:#9c27b0}
+.plakat-chip.c-vorlage{background:rgba(174,174,178,.15);color:#8e8e93}
 .tour-fab{display:none;position:absolute;bottom:22px;right:10px;z-index:401;height:40px;padding:0 14px;border-radius:20px;border:none;background:var(--blue);color:#fff;font-size:.75rem;font-weight:600;cursor:pointer;box-shadow:var(--sh);align-items:center;gap:5px;font-family:inherit;white-space:nowrap}
 .tour-fab.show{display:flex}
 
@@ -616,11 +616,10 @@ textarea{min-height:68px}
       <div id="legendPlakat" style="display:none">
         <div class="leg-title">Plakat-Status</div>
         <div class="leg-row"><div class="leg-dot" style="background:#ff9500"></div>Aufzuhängen</div>
-        <div class="leg-row"><div class="leg-dot" style="background:#34c759"></div>Hängt</div>
-        <div class="leg-row"><div class="leg-dot" style="background:#42a5f5"></div>Ersetzt</div>
-        <div class="leg-row"><div class="leg-dot" style="background:#aeaeb2"></div>Abgehängt</div>
+        <div class="leg-row"><div class="leg-dot" style="background:#42a5f5"></div>Hängt / Ersetzt</div>
+        <div class="leg-row"><div class="leg-dot" style="background:#9c27b0"></div>Abgehängt</div>
         <div class="leg-row"><div class="leg-dot" style="background:#ff3b30"></div>Zerstört</div>
-        <div class="leg-row"><div class="leg-dot" style="background:#9c27b0"></div>Vorlage</div>
+        <div class="leg-row"><div class="leg-dot" style="background:#aeaeb2"></div>Vorlage</div>
         <hr style="border:none;border-top:1px solid #e0e0e0;margin:6px 0">
         <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:.7rem">
           <input type="checkbox" id="toggleGebiete" checked onchange="toggleGebieteVisible(this.checked)">
@@ -833,7 +832,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v223 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v224 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -9527,9 +9526,9 @@ function getPlakatIcon(status, plakatId){
   const hatHilfe = plakatId && alleAnfragen.some(a=>a.typ==='plakat_abhaengen'&&a.plakat_id===plakatId&&a.status==='offen');
   const isBanner = p?.kategorie==='banner';
   const isPrivat = p?.ort_typ==='privat';
-  const colors={aufzuhaengen:'#ff9500',haengt:'#34c759',abgehaengt:'#aeaeb2',zerstoert:'#ff3b30',ersetzt:'#42a5f5'};
+  const colors={aufzuhaengen:'#ff9500',haengt:'#42a5f5',abgehaengt:'#9c27b0',zerstoert:'#ff3b30',ersetzt:'#42a5f5'};
   const isVorlage = p?.ist_vorlage;
-  const c = hatHilfe ? '#ff3b30' : isVorlage ? '#9c27b0' : (colors[status]||'#8e8e93');
+  const c = hatHilfe ? '#ff3b30' : isVorlage ? '#aeaeb2' : (colors[status]||'#8e8e93');
   const ring = hatHilfe ? `<circle cx="16" cy="16" r="15" fill="none" stroke="#ff3b30" stroke-width="2" opacity=".5"><animate attributeName="r" from="13" to="18" dur="1.2s" repeatCount="indefinite"/><animate attributeName="opacity" from=".6" to="0" dur="1.2s" repeatCount="indefinite"/></circle>` : '';
   const privatRing = isPrivat && !hatHilfe ? `<circle cx="16" cy="16" r="14" fill="none" stroke="#ff9500" stroke-width="1.5" stroke-dasharray="3,2"/>` : '';
   let shape;
@@ -9634,15 +9633,15 @@ function openPlakatDetailModal(plakatId){
   const gName=p.gebiet_id?(getG(p.gebiet_id)?.name||'Unbekannt'):'Außerhalb';
   const aufh=p.aufhaenger_name||'?';
   const abh=p.abhaenger_name||'–';
-  const statusLabels={aufzuhaengen:'🟠 Aufzuhängen',haengt:'🟢 Hängt',abgehaengt:'⚪ Abgehängt',zerstoert:'🔴 Zerstört/Entfernt',ersetzt:'🔵 Ersetzt'};
-  const sl=p.ist_vorlage?'🟣 Vorlage':(statusLabels[p.status]||p.status);
+  const statusLabels={aufzuhaengen:'🟠 Aufzuhängen',haengt:'🔵 Hängt',abgehaengt:'🟣 Abgehängt',zerstoert:'🔴 Zerstört/Entfernt',ersetzt:'🔵 Ersetzt'};
+  const sl=p.ist_vorlage?'⚪ Vorlage':(statusLabels[p.status]||p.status);
 
   let btns='';
   const isBasis=!!curKampagne?.ist_basis;
   if(!isBasis){
     if(p.status==='aufzuhaengen'){
       btns+=`<button class="btn btn-p" style="flex:1" onclick="updatePlakat('${p.id}','haengt')">✅ Aufgehängt</button>`;
-      btns+=`<button class="btn btn-g" style="flex:1" onclick="deletePlakat('${p.id}')">🗑 Entfernen</button>`;
+      if(!p.ist_vorlage) btns+=`<button class="btn btn-g" style="flex:1" onclick="deletePlakat('${p.id}')">🗑 Entfernen</button>`;
     }
     if(p.status==='haengt'||p.status==='ersetzt'){
       btns+=`<button class="btn btn-p" style="flex:1" onclick="updatePlakat('${p.id}','abgehaengt')">✓ Abhängen</button>`;
@@ -9891,7 +9890,7 @@ function renderListPlakate(){
 
   const fEl=document.getElementById('gebietFilter');
   if(fEl) fEl.innerHTML=[
-    ['alle','Alle'],['aufzuhaengen','🟠 Geplant'],['haengt','🟢 Hängt'],['ersetzt','🔵 Ersetzt'],['abgehaengt','⚪ Abgeh.'],['zerstoert','🔴 Zerst.']
+    ['alle','Alle'],['aufzuhaengen','🟠 Geplant'],['haengt','🔵 Hängt'],['ersetzt','🔵 Ersetzt'],['abgehaengt','🟣 Abgeh.'],['zerstoert','🔴 Zerst.']
   ].filter(([k])=>k==='alle'||counts[k]>0).map(([k,l])=>
     `<button class="g-filter-btn${plakatFilter===k?' active':''}" onclick="setPlakatFilter('${k}')">${l}<span class="g-filter-cnt">${counts[k]||0}</span></button>`
   ).join('');
@@ -9921,7 +9920,7 @@ function renderListPlakate(){
     const statusLabels={aufzuhaengen:'Geplant',haengt:'Hängt',abgehaengt:'Abgehängt',zerstoert:'Zerstört',ersetzt:'Ersetzt'};
     const vorlageIcon=p.ist_vorlage?'📍 ':'';
     const displayStatus=p.ist_vorlage?'Vorlage':(statusLabels[p.status]||p.status);
-    const borderColor=p.ist_vorlage?'#9c27b0':({aufzuhaengen:'#ff9500',haengt:'#34c759',abgehaengt:'#aeaeb2',zerstoert:'#ff3b30',ersetzt:'#42a5f5'})[p.status]||'#ccc';
+    const borderColor=p.ist_vorlage?'#aeaeb2':({aufzuhaengen:'#ff9500',haengt:'#42a5f5',abgehaengt:'#9c27b0',zerstoert:'#ff3b30',ersetzt:'#42a5f5'})[p.status]||'#ccc';
     return `<div class="g-card ${selPlakatId===p.id?'sel':''}" onclick="selectPlakat('${p.id}')" style="border-left:3px solid ${borderColor}">
       <div class="g-top"><span class="g-name">${vorlageIcon}${gName}</span><span class="plakat-chip c-${p.ist_vorlage?'vorlage':p.status}">${displayStatus}</span></div>
       <div class="g-meta"><span>👤 ${p.aufhaenger_name||'?'}</span><span>${new Date(p.created_at).toLocaleDateString('de')}</span>${p.kategorie==='banner'?'<span>🏳️</span>':''}${p.ort_typ==='privat'?'<span>🏠</span>':''}${p.ersetzt_count>0?'<span>🔄'+p.ersetzt_count+'</span>':''}${p.foto_url?'<span>📷</span>':''}</div>
@@ -10406,8 +10405,8 @@ function showTourPanel(){
   panel.style.display='flex';
   const p=tourStops[tourIdx];
   const gName=p.gebiet_id?(getG(p.gebiet_id)?.name||'?'):'Außerhalb';
-  const statusLabels={haengt:'🟢 Hängt',abgehaengt:'⚪ Abgehängt',zerstoert:'🔴 Zerstört',ersetzt:'🔵 Ersetzt'};
-  const statusColors={haengt:'var(--green)',abgehaengt:'#8e8e93',zerstoert:'var(--red)',ersetzt:'var(--blue)'};
+  const statusLabels={haengt:'🔵 Hängt',abgehaengt:'🟣 Abgehängt',zerstoert:'🔴 Zerstört',ersetzt:'🔵 Ersetzt'};
+  const statusColors={haengt:'var(--blue)',abgehaengt:'#9c27b0',zerstoert:'var(--red)',ersetzt:'var(--blue)'};
 
   // Status-Buttons je nach aktuellem Status
   let statusBtns='';
