@@ -831,7 +831,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v218 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v221 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -2472,11 +2472,14 @@ async function saveKampagne() {
                 gebiet_id:v.gebiet_id,
                 status:'aufzuhaengen',
                 ist_vorlage:true,
+                kategorie:v.kategorie||'wahlplakat',
+                ort_typ:v.ort_typ||'oeffentlich',
+                foto_url:v.foto_url||null,
                 aufhaenger_id:null,
                 aufhaenger_name:null
               }));
               await sb.from('plakate').insert(kopien);
-              toast(`📌 ${unique.length} Vorlagen-Standort${unique.length>1?'e':''} übernommen (als abgehängt)`);
+              toast(`📌 ${unique.length} Vorlagen-Standort${unique.length>1?'e':''} übernommen (geplant)`);
             }
           }
         }catch(e){console.warn('Vorlagen-Übernahme fehlgeschlagen:',e);}
@@ -9335,8 +9338,22 @@ function updateModeForKampagne(){
 async function loadPlakate(){
   if(!curKampagne?.id){plakate=[];return;}
   try{
-    const {data,error}=await sb.from('plakate').select('*').eq('kampagne_id',curKampagne.id).order('created_at',{ascending:false});
-    if(!error&&data) plakate=data; else plakate=[];
+    if(curKampagne.ist_basis){
+      // Grundzuweisung: alle Vorlagen-Fixpunkte aus allen Kampagnen laden
+      const {data,error}=await sb.from('plakate').select('*').eq('ist_vorlage',true).order('created_at',{ascending:false});
+      if(!error&&data){
+        // Deduplizieren nach Position (gerundet)
+        const seen=new Set();
+        plakate=data.filter(v=>{
+          const key=`${v.lat.toFixed(5)}_${v.lng.toFixed(5)}`;
+          if(seen.has(key)) return false;
+          seen.add(key); return true;
+        });
+      } else plakate=[];
+    } else {
+      const {data,error}=await sb.from('plakate').select('*').eq('kampagne_id',curKampagne.id).order('created_at',{ascending:false});
+      if(!error&&data) plakate=data; else plakate=[];
+    }
   }catch(e){console.warn('loadPlakate:',e);plakate=[];}
 }
 
@@ -10017,8 +10034,15 @@ function updateTourIdOptions(){
   const kampRegions=bi.length>0?new Set(expandBereichToRegions(bi).map(b=>b.id)):null;
   if(typ==='region'){
     label.textContent='Regionen';
+    // Nur Regionen mit Plakaten UND im Kampagnen-Bereich
+    const regionenMitPlakaten=new Set();
+    plakate.filter(p=>p.gebiet_id&&!p.ist_vorlage).forEach(p=>{
+      for(const [rk,r] of Object.entries(regionen)){
+        if(r.gebiete.some(g=>g.id===p.gebiet_id)){regionenMitPlakaten.add(rk);break;}
+      }
+    });
     const entries=Object.entries(regionen)
-      .filter(([rKey])=>!kampRegions||kampRegions.has(rKey))
+      .filter(([rKey])=>regionenMitPlakaten.has(rKey)&&(!kampRegions||kampRegions.has(rKey)))
       .sort((a,b)=>(a[1].short||a[1].name||'').localeCompare(b[1].short||b[1].name||''));
     if(entries.length===0){sel.innerHTML='<div style="padding:6px;font-size:.72rem;color:var(--text4)">Keine Regionen</div>';updateTourPreview();return;}
     sel.innerHTML=entries.map(([rKey,r])=>
