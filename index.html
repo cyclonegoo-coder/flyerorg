@@ -831,7 +831,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v214 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v215 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -9628,7 +9628,11 @@ function openPlakatDetailModal(plakatId){
   if(p.status==='zerstoert'){
     btns+=`<button class="btn btn-p" style="flex:1" onclick="updatePlakat('${p.id}','ersetzt')">🔄 Ersetzt (neu aufgehängt)</button>`;
   }
-  if(p.status==='abgehaengt'||p.status==='zerstoert'){
+  if(p.status==='abgehaengt'){
+    btns+=`<button class="btn" style="flex:1;background:var(--orange);color:#fff" onclick="updatePlakat('${p.id}','aufzuhaengen')">📋 Einplanen</button>`;
+    btns+=`<button class="btn btn-g" style="flex:1" onclick="updatePlakat('${p.id}','haengt')">↩ Hängt wieder</button>`;
+  }
+  if(p.status==='zerstoert'){
     btns+=`<button class="btn btn-g" style="flex:1" onclick="updatePlakat('${p.id}','haengt')">↩ Rückgängig (hängt)</button>`;
   }
 
