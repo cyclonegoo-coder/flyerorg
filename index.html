@@ -831,7 +831,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v215 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v217 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -9286,7 +9286,8 @@ function switchMode(mode){
   selPlakatId=null;
   if(mode==='plakate'){
     drawPolygons(); // Redraw in gray
-    const tg=document.getElementById('toggleGebiete');if(tg)tg.checked=true;
+    _gebieteVisible=false;
+    const tg=document.getElementById('toggleGebiete');if(tg)tg.checked=false;
     loadPlakate().then(()=>{ drawPlakatMarkers(); renderList(); renderStats(); updateTourFab(); });
   } else {
     if(tourActive) endTour();
@@ -10013,11 +10014,10 @@ function updateTourIdOptions(){
   sel.innerHTML='';
   if(typ==='region'){
     label.textContent='Region';
-    // Nur Regionen die im aktuellen LK/GV sichtbar sind
     for(const [rKey,r] of Object.entries(regionen)){
-      if(curLK){const gvId=r.gebietsverband_id;const lkId=gebietsverbaende[gvId]?.landkreis_id;if(lkId!==curLK)continue;}
-      if(curGV&&r.gebietsverband_id!==curGV)continue;
-      if(curReg&&rKey!==curReg)continue;
+      if(curLK&&curLK!=='alle'){const gvId=r.gebietsverband_id;const lkId=gebietsverbaende[gvId]?.landkreis_id;if(lkId!==curLK)continue;}
+      if(curGV&&curGV!=='alle'&&r.gebietsverband_id!==curGV)continue;
+      if(curReg&&curReg!=='alle'&&rKey!==curReg)continue;
       sel.innerHTML+=`<option value="${rKey}">${r.short||r.name}</option>`;
     }
   } else if(typ==='gebiet'){
