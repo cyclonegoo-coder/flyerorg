@@ -832,7 +832,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v226 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v228 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -9413,7 +9413,7 @@ async function loadPlakate(){
           const key=`${v.lat.toFixed(5)}_${v.lng.toFixed(5)}`;
           if(seen.has(key)) return false;
           seen.add(key); return true;
-        });
+        }).map(v=>({...v,status:'vorlage'}));
       } else plakate=[];
     } else {
       const {data,error}=await sb.from('plakate').select('*').eq('kampagne_id',curKampagne.id).order('created_at',{ascending:false});
@@ -9590,9 +9590,9 @@ function getPlakatIcon(status, plakatId){
   const hatHilfe = plakatId && alleAnfragen.some(a=>a.typ==='plakat_abhaengen'&&a.plakat_id===plakatId&&a.status==='offen');
   const isBanner = p?.kategorie==='banner';
   const isPrivat = p?.ort_typ==='privat';
-  const colors={aufzuhaengen:'#ff9500',haengt:'#42a5f5',abgehaengt:'#9c27b0',zerstoert:'#ff3b30',ersetzt:'#42a5f5'};
+  const colors={aufzuhaengen:'#ff9500',haengt:'#42a5f5',abgehaengt:'#9c27b0',zerstoert:'#ff3b30',ersetzt:'#42a5f5',vorlage:'#aeaeb2'};
   const isVorlage = p?.ist_vorlage;
-  const c = hatHilfe ? '#ff3b30' : (isVorlage && status==='aufzuhaengen') ? '#aeaeb2' : (colors[status]||'#8e8e93');
+  const c = hatHilfe ? '#ff3b30' : (isVorlage && (status==='aufzuhaengen'||status==='vorlage')) ? '#aeaeb2' : (colors[status]||'#8e8e93');
   const ring = hatHilfe ? `<circle cx="16" cy="16" r="15" fill="none" stroke="#ff3b30" stroke-width="2" opacity=".5"><animate attributeName="r" from="13" to="18" dur="1.2s" repeatCount="indefinite"/><animate attributeName="opacity" from=".6" to="0" dur="1.2s" repeatCount="indefinite"/></circle>` : '';
   const privatRing = isPrivat && !hatHilfe ? `<circle cx="16" cy="16" r="14" fill="none" stroke="#ff9500" stroke-width="1.5" stroke-dasharray="3,2"/>` : '';
   let shape;
@@ -9697,8 +9697,8 @@ function openPlakatDetailModal(plakatId){
   const gName=p.gebiet_id?(getG(p.gebiet_id)?.name||'Unbekannt'):'Außerhalb';
   const aufh=p.aufhaenger_name||'?';
   const abh=p.abhaenger_name||'–';
-  const statusLabels={aufzuhaengen:'🟠 Aufzuhängen',haengt:'🔵 Hängt',abgehaengt:'🟣 Abgehängt',zerstoert:'🔴 Zerstört/Entfernt',ersetzt:'🔵 Ersetzt'};
-  const sl=(p.ist_vorlage&&p.status==='aufzuhaengen')?'⚪ Vorlage':(statusLabels[p.status]||p.status);
+  const statusLabels={aufzuhaengen:'🟠 Aufzuhängen',haengt:'🔵 Hängt',abgehaengt:'🟣 Abgehängt',zerstoert:'🔴 Zerstört/Entfernt',ersetzt:'🔵 Ersetzt',vorlage:'⚪ Vorlage'};
+  const sl=(p.ist_vorlage&&(p.status==='aufzuhaengen'||p.status==='vorlage'))?'⚪ Vorlage':(statusLabels[p.status]||p.status);
 
   let btns='';
   const isBasis=!!curKampagne?.ist_basis;
@@ -9954,12 +9954,12 @@ function renderListPlakate(){
     return gName.toLowerCase().includes(q)||(p.aufhaenger_name||'').toLowerCase().includes(q);
   }):visible;
 
-  const counts={alle:filtered.length,aufzuhaengen:0,haengt:0,abgehaengt:0,zerstoert:0,ersetzt:0};
+  const counts={alle:filtered.length,aufzuhaengen:0,haengt:0,abgehaengt:0,zerstoert:0,ersetzt:0,vorlage:0};
   filtered.forEach(p=>{counts[p.status]=(counts[p.status]||0)+1;});
 
   const fEl=document.getElementById('gebietFilter');
   if(fEl) fEl.innerHTML=[
-    ['alle','Alle'],['aufzuhaengen','🟠 Geplant'],['haengt','🔵 Hängt'],['ersetzt','🔵 Ersetzt'],['abgehaengt','🟣 Abgeh.'],['zerstoert','🔴 Zerst.']
+    ['alle','Alle'],['vorlage','⚪ Vorlage'],['aufzuhaengen','🟠 Geplant'],['haengt','🔵 Hängt'],['ersetzt','🔵 Ersetzt'],['abgehaengt','🟣 Abgeh.'],['zerstoert','🔴 Zerst.']
   ].filter(([k])=>k==='alle'||counts[k]>0).map(([k,l])=>
     `<button class="g-filter-btn${plakatFilter===k?' active':''}" onclick="setPlakatFilter('${k}')">${l}<span class="g-filter-cnt">${counts[k]||0}</span></button>`
   ).join('');
@@ -9986,12 +9986,13 @@ function renderListPlakate(){
   }
   listEl.innerHTML=routeHtml+displayed.map(p=>{
     const gName=p.gebiet_id?(getG(p.gebiet_id)?.name||'?'):'Außerhalb';
-    const statusLabels={aufzuhaengen:'Geplant',haengt:'Hängt',abgehaengt:'Abgehängt',zerstoert:'Zerstört',ersetzt:'Ersetzt'};
+    const statusLabels={aufzuhaengen:'Geplant',haengt:'Hängt',abgehaengt:'Abgehängt',zerstoert:'Zerstört',ersetzt:'Ersetzt',vorlage:'Vorlage'};
     const vorlageIcon=p.ist_vorlage?'📍 ':'';
-    const displayStatus=(p.ist_vorlage&&p.status==='aufzuhaengen')?'Vorlage':(statusLabels[p.status]||p.status);
-    const borderColor=(p.ist_vorlage&&p.status==='aufzuhaengen')?'#aeaeb2':({aufzuhaengen:'#ff9500',haengt:'#42a5f5',abgehaengt:'#9c27b0',zerstoert:'#ff3b30',ersetzt:'#42a5f5'})[p.status]||'#ccc';
+    const isVorlageStatus=p.status==='vorlage'||(p.ist_vorlage&&p.status==='aufzuhaengen');
+    const displayStatus=isVorlageStatus?'Vorlage':(statusLabels[p.status]||p.status);
+    const borderColor=isVorlageStatus?'#aeaeb2':({aufzuhaengen:'#ff9500',haengt:'#42a5f5',abgehaengt:'#9c27b0',zerstoert:'#ff3b30',ersetzt:'#42a5f5'})[p.status]||'#ccc';
     return `<div class="g-card ${selPlakatId===p.id?'sel':''}" onclick="selectPlakat('${p.id}')" style="border-left:3px solid ${borderColor}">
-      <div class="g-top"><span class="g-name">${vorlageIcon}${gName}</span><span class="plakat-chip c-${(p.ist_vorlage&&p.status==='aufzuhaengen')?'vorlage':p.status}">${displayStatus}</span></div>
+      <div class="g-top"><span class="g-name">${vorlageIcon}${gName}</span><span class="plakat-chip c-${isVorlageStatus?'vorlage':p.status}">${displayStatus}</span></div>
       <div class="g-meta"><span>👤 ${p.aufhaenger_name||'?'}</span><span>${new Date(p.created_at).toLocaleDateString('de')}</span>${p.kategorie==='banner'?'<span>🏳️</span>':''}${p.ort_typ==='privat'?'<span>🏠</span>':''}${p.ersetzt_count>0?'<span>🔄'+p.ersetzt_count+'</span>':''}${p.foto_url?'<span>📷</span>':''}</div>
     </div>`;
   }).join('');
