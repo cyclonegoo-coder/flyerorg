@@ -784,7 +784,7 @@ textarea{min-height:68px}
       </div>
       <div id="tourIdRow" style="display:none;flex-direction:column;gap:2px">
         <label style="font-size:.65rem;font-weight:600;color:var(--text3);text-transform:uppercase" id="tourIdLabel">Auswahl</label>
-        <select id="tourIdSelect" style="font-size:.8rem"></select>
+        <div id="tourIdSelect" style="max-height:140px;overflow-y:auto;border:1px solid var(--sep);border-radius:var(--r8);padding:4px"></div>
       </div>
       <div style="display:flex;flex-direction:column;gap:2px">
         <label style="font-size:.65rem;font-weight:600;color:var(--text3);text-transform:uppercase">Status-Filter</label>
@@ -831,7 +831,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v217 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v218 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -10012,25 +10012,38 @@ function updateTourIdOptions(){
   if(typ==='alle'){row.style.display='none';updateTourPreview();return;}
   row.style.display='flex';
   sel.innerHTML='';
+  // Kampagnen-Bereich: nur Regionen die zur Kampagne gehören
+  const bi=curKampagne?.bereich_items||[];
+  const kampRegions=bi.length>0?new Set(expandBereichToRegions(bi).map(b=>b.id)):null;
   if(typ==='region'){
-    label.textContent='Region';
-    for(const [rKey,r] of Object.entries(regionen)){
-      if(curLK&&curLK!=='alle'){const gvId=r.gebietsverband_id;const lkId=gebietsverbaende[gvId]?.landkreis_id;if(lkId!==curLK)continue;}
-      if(curGV&&curGV!=='alle'&&r.gebietsverband_id!==curGV)continue;
-      if(curReg&&curReg!=='alle'&&rKey!==curReg)continue;
-      sel.innerHTML+=`<option value="${rKey}">${r.short||r.name}</option>`;
-    }
+    label.textContent='Regionen';
+    const entries=Object.entries(regionen)
+      .filter(([rKey])=>!kampRegions||kampRegions.has(rKey))
+      .sort((a,b)=>(a[1].short||a[1].name||'').localeCompare(b[1].short||b[1].name||''));
+    if(entries.length===0){sel.innerHTML='<div style="padding:6px;font-size:.72rem;color:var(--text4)">Keine Regionen</div>';updateTourPreview();return;}
+    sel.innerHTML=entries.map(([rKey,r])=>
+      `<label style="display:flex;align-items:center;gap:6px;padding:3px 6px;font-size:.75rem;cursor:pointer">
+        <input type="checkbox" value="${rKey}" checked onchange="updateTourPreview()" style="width:15px;height:15px;flex-shrink:0">
+        <span>${r.short||r.name}</span>
+      </label>`
+    ).join('');
   } else if(typ==='gebiet'){
-    label.textContent='Gebiet';
-    // Alle Gebiete die Plakate haben
-    const gebieteMitPlakaten=new Set(plakate.filter(p=>p.gebiet_id).map(p=>p.gebiet_id));
-    for(const gId of gebieteMitPlakaten){
-      const g=getG(gId);
-      if(g) sel.innerHTML+=`<option value="${gId}">${g.name}</option>`;
-    }
-    if(sel.options.length===0) sel.innerHTML='<option value="">Keine Gebiete mit Plakaten</option>';
+    label.textContent='Gebiete';
+    const gebieteMitPlakaten=new Set(plakate.filter(p=>p.gebiet_id&&!p.ist_vorlage).map(p=>p.gebiet_id));
+    const gebiete=[...gebieteMitPlakaten].map(gId=>({id:gId,name:getG(gId)?.name||gId})).filter(g=>g.name).sort((a,b)=>a.name.localeCompare(b.name));
+    if(gebiete.length===0){sel.innerHTML='<div style="padding:6px;font-size:.72rem;color:var(--text4)">Keine Gebiete mit Plakaten</div>';updateTourPreview();return;}
+    sel.innerHTML=gebiete.map(g=>
+      `<label style="display:flex;align-items:center;gap:6px;padding:3px 6px;font-size:.75rem;cursor:pointer">
+        <input type="checkbox" value="${g.id}" checked onchange="updateTourPreview()" style="width:15px;height:15px;flex-shrink:0">
+        <span>${g.name}</span>
+      </label>`
+    ).join('');
   }
   updateTourPreview();
+}
+function getSelectedTourIds(){
+  const cbs=document.querySelectorAll('#tourIdSelect input[type=checkbox]:checked');
+  return [...cbs].map(cb=>cb.value);
 }
 
 function getTourPlakate(){
@@ -10039,17 +10052,20 @@ function getTourPlakate(){
   let targets=plakate.filter(p=>!p.ist_vorlage);
   // Bereichs-Filter
   if(bereichTyp==='region'){
-    const rKey=document.getElementById('tourIdSelect').value;
-    if(rKey&&regionen[rKey]){
-      const gebietIds=new Set(regionen[rKey].gebiete.map(g=>g.id));
+    const selRegions=getSelectedTourIds();
+    if(selRegions.length>0){
+      const gebietIds=new Set();
+      selRegions.forEach(rKey=>{if(regionen[rKey])regionen[rKey].gebiete.forEach(g=>gebietIds.add(g.id));});
       targets=targets.filter(p=>p.gebiet_id&&gebietIds.has(p.gebiet_id));
-    }
+    } else targets=[];
   } else if(bereichTyp==='gebiet'){
-    const gId=document.getElementById('tourIdSelect').value;
-    if(gId) targets=targets.filter(p=>p.gebiet_id===gId);
+    const selGebiete=getSelectedTourIds();
+    if(selGebiete.length>0){
+      const gSet=new Set(selGebiete);
+      targets=targets.filter(p=>p.gebiet_id&&gSet.has(p.gebiet_id));
+    } else targets=[];
   } else {
-    // "alle sichtbaren" = getVisiblePlakate
-    targets=getVisiblePlakate();
+    targets=getVisiblePlakate().filter(p=>!p.ist_vorlage);
   }
   // Status-Filter
   if(statusFilter==='aufzuhaengen') targets=targets.filter(p=>p.status==='aufzuhaengen');
