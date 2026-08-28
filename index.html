@@ -832,7 +832,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v230 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v232 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -2492,7 +2492,7 @@ async function saveKampagne() {
                   kampagne_id:neueKampagne.id,
                   lat:v.lat, lng:v.lng,
                   gebiet_id:v.gebiet_id,
-                  status:'aufzuhaengen',
+                  status:v.ist_vorlage?'vorlage':'aufzuhaengen',
                   ist_vorlage:v.ist_vorlage||false,
                   kategorie:v.kategorie||'wahlplakat',
                   ort_typ:v.ort_typ||'oeffentlich',
@@ -2533,7 +2533,7 @@ async function saveKampagne() {
                   kampagne_id:neueKampagne.id,
                   lat:v.lat, lng:v.lng,
                   gebiet_id:v.gebiet_id,
-                  status:'aufzuhaengen',
+                  status:'vorlage',
                   ist_vorlage:true,
                   kategorie:v.kategorie||'wahlplakat',
                   ort_typ:v.ort_typ||'oeffentlich',
@@ -2542,7 +2542,7 @@ async function saveKampagne() {
                   aufhaenger_name:null
                 }));
                 await sb.from('plakate').insert(kopien);
-                toast(`📌 ${unique.length} Vorlagen-Standort${unique.length>1?'e':''} übernommen (geplant)`);
+                toast(`📌 ${unique.length} Vorlagen-Standort${unique.length>1?'e':''} übernommen`);
               }
             }
           }
@@ -9592,7 +9592,7 @@ function getPlakatIcon(status, plakatId){
   const isPrivat = p?.ort_typ==='privat';
   const colors={aufzuhaengen:'#ff9500',haengt:'#42a5f5',abgehaengt:'#9c27b0',zerstoert:'#ff3b30',ersetzt:'#42a5f5',vorlage:'#aeaeb2'};
   const isVorlage = p?.ist_vorlage;
-  const c = hatHilfe ? '#ff3b30' : (isVorlage && (status==='aufzuhaengen'||status==='vorlage')) ? '#aeaeb2' : (colors[status]||'#8e8e93');
+  const c = hatHilfe ? '#ff3b30' : (colors[status]||'#8e8e93');
   const ring = hatHilfe ? `<circle cx="16" cy="16" r="15" fill="none" stroke="#ff3b30" stroke-width="2" opacity=".5"><animate attributeName="r" from="13" to="18" dur="1.2s" repeatCount="indefinite"/><animate attributeName="opacity" from=".6" to="0" dur="1.2s" repeatCount="indefinite"/></circle>` : '';
   const privatRing = isPrivat && !hatHilfe ? `<circle cx="16" cy="16" r="14" fill="none" stroke="#ff9500" stroke-width="1.5" stroke-dasharray="3,2"/>` : '';
   let shape;
@@ -9698,28 +9698,32 @@ function openPlakatDetailModal(plakatId){
   const aufh=p.aufhaenger_name||'?';
   const abh=p.abhaenger_name||'–';
   const statusLabels={aufzuhaengen:'🟠 Aufzuhängen',haengt:'🔵 Hängt',abgehaengt:'🟣 Abgehängt',zerstoert:'🔴 Zerstört/Entfernt',ersetzt:'🔵 Ersetzt',vorlage:'⚪ Vorlage'};
-  const sl=(p.ist_vorlage&&(p.status==='aufzuhaengen'||p.status==='vorlage'))?'⚪ Vorlage':(statusLabels[p.status]||p.status);
+  const sl=statusLabels[p.status]||p.status;
 
   let btns='';
   const isBasis=!!curKampagne?.ist_basis;
   if(!isBasis){
+    if(p.status==='vorlage'){
+      btns+=`<button class="btn" style="flex:1;background:var(--orange);color:#fff" onclick="updatePlakat('${p.id}','aufzuhaengen')">📋 Einplanen</button>`;
+    }
     if(p.status==='aufzuhaengen'){
       btns+=`<button class="btn btn-p" style="flex:1" onclick="updatePlakat('${p.id}','haengt')">✅ Aufgehängt</button>`;
+      if(p.ist_vorlage) btns+=`<button class="btn btn-g" style="flex:1" onclick="updatePlakat('${p.id}','vorlage')">↩ Zur Vorlage</button>`;
       if(!p.ist_vorlage) btns+=`<button class="btn btn-g" style="flex:1" onclick="deletePlakat('${p.id}')">🗑 Entfernen</button>`;
     }
     if(p.status==='haengt'||p.status==='ersetzt'){
       btns+=`<button class="btn btn-p" style="flex:1" onclick="updatePlakat('${p.id}','abgehaengt')">✓ Abhängen</button>`;
       btns+=`<button class="btn" style="flex:1;background:var(--red);color:#fff" onclick="updatePlakat('${p.id}','zerstoert')">✗ Zerstört</button>`;
-      if(p.ist_vorlage) btns+=`<button class="btn btn-g" style="flex:1" onclick="updatePlakat('${p.id}','aufzuhaengen')">↩ Zur Vorlage</button>`;
+      if(p.ist_vorlage) btns+=`<button class="btn btn-g" style="flex:1" onclick="updatePlakat('${p.id}','vorlage')">↩ Zur Vorlage</button>`;
     }
     if(p.status==='zerstoert'){
       btns+=`<button class="btn btn-p" style="flex:1" onclick="updatePlakat('${p.id}','ersetzt')">🔄 Ersetzt (neu aufgehängt)</button>`;
-      if(p.ist_vorlage) btns+=`<button class="btn btn-g" style="flex:1" onclick="updatePlakat('${p.id}','aufzuhaengen')">↩ Zur Vorlage</button>`;
+      if(p.ist_vorlage) btns+=`<button class="btn btn-g" style="flex:1" onclick="updatePlakat('${p.id}','vorlage')">↩ Zur Vorlage</button>`;
       if(!p.ist_vorlage) btns+=`<button class="btn btn-g" style="flex:1" onclick="updatePlakat('${p.id}','haengt')">↩ Rückgängig (hängt)</button>`;
     }
     if(p.status==='abgehaengt'){
       if(p.ist_vorlage){
-        btns+=`<button class="btn btn-g" style="flex:1" onclick="updatePlakat('${p.id}','aufzuhaengen')">↩ Zur Vorlage</button>`;
+        btns+=`<button class="btn btn-g" style="flex:1" onclick="updatePlakat('${p.id}','vorlage')">↩ Zur Vorlage</button>`;
         btns+=`<button class="btn btn-p" style="flex:1" onclick="updatePlakat('${p.id}','haengt')">↩ Hängt wieder</button>`;
       } else {
         btns+=`<button class="btn" style="flex:1;background:var(--orange);color:#fff" onclick="updatePlakat('${p.id}','aufzuhaengen')">📋 Einplanen</button>`;
@@ -9754,8 +9758,8 @@ function openPlakatDetailModal(plakatId){
   const canDelete=canManage||p.aufhaenger_id===currentUser?.id||(curRole==='verteiler'&&p.status==='abgehaengt');
   if(canDelete&&!p.ist_vorlage){
     deleteBtn=`<button class="btn" style="width:100%;margin-top:8px;background:transparent;color:var(--red);border:1px solid var(--red);font-size:.75rem" onclick="deletePlakat('${p.id}')">🗑 Plakat löschen</button>`;
-  } else if(p.ist_vorlage&&p.status!=='aufzuhaengen'&&!isBasis){
-    deleteBtn=`<button class="btn" style="width:100%;margin-top:8px;background:transparent;color:#8e8e93;border:1px solid #ccc;font-size:.75rem" onclick="updatePlakat('${p.id}','aufzuhaengen')">↩ Vorlage zurücksetzen</button>`;
+  } else if(p.ist_vorlage&&p.status!=='vorlage'&&!isBasis){
+    deleteBtn=`<button class="btn" style="width:100%;margin-top:8px;background:transparent;color:#8e8e93;border:1px solid #ccc;font-size:.75rem" onclick="updatePlakat('${p.id}','vorlage')">↩ Vorlage zurücksetzen</button>`;
   }
 
   // Navigation-Button
@@ -9990,11 +9994,10 @@ function renderListPlakate(){
     const gName=p.gebiet_id?(getG(p.gebiet_id)?.name||'?'):'Außerhalb';
     const statusLabels={aufzuhaengen:'Geplant',haengt:'Hängt',abgehaengt:'Abgehängt',zerstoert:'Zerstört',ersetzt:'Ersetzt',vorlage:'Vorlage'};
     const vorlageIcon=p.ist_vorlage?'📍 ':'';
-    const isVorlageStatus=p.status==='vorlage'||(p.ist_vorlage&&p.status==='aufzuhaengen');
-    const displayStatus=isVorlageStatus?'Vorlage':(statusLabels[p.status]||p.status);
-    const borderColor=isVorlageStatus?'#aeaeb2':({aufzuhaengen:'#ff9500',haengt:'#42a5f5',abgehaengt:'#9c27b0',zerstoert:'#ff3b30',ersetzt:'#42a5f5'})[p.status]||'#ccc';
+    const displayStatus=statusLabels[p.status]||p.status;
+    const borderColor=({aufzuhaengen:'#ff9500',haengt:'#42a5f5',abgehaengt:'#9c27b0',zerstoert:'#ff3b30',ersetzt:'#42a5f5',vorlage:'#aeaeb2'})[p.status]||'#ccc';
     return `<div class="g-card ${selPlakatId===p.id?'sel':''}" onclick="selectPlakat('${p.id}')" style="border-left:3px solid ${borderColor}">
-      <div class="g-top"><span class="g-name">${vorlageIcon}${gName}</span><span class="plakat-chip c-${isVorlageStatus?'vorlage':p.status}">${displayStatus}</span></div>
+      <div class="g-top"><span class="g-name">${vorlageIcon}${gName}</span><span class="plakat-chip c-${p.status}">${displayStatus}</span></div>
       <div class="g-meta"><span>👤 ${p.aufhaenger_name||'?'}</span><span>${new Date(p.created_at).toLocaleDateString('de')}</span>${p.kategorie==='banner'?'<span>🏳️</span>':''}${p.ort_typ==='privat'?'<span>🏠</span>':''}${p.ersetzt_count>0?'<span>🔄'+p.ersetzt_count+'</span>':''}${p.foto_url?'<span>📷</span>':''}</div>
     </div>`;
   }).join('');
@@ -10115,7 +10118,7 @@ function updateTourIdOptions(){
     label.textContent='Regionen';
     // Nur Regionen mit Plakaten UND im Kampagnen-Bereich
     const regionenMitPlakaten=new Set();
-    plakate.filter(p=>p.gebiet_id&&!p.ist_vorlage).forEach(p=>{
+    plakate.filter(p=>p.gebiet_id&&p.status!=='vorlage').forEach(p=>{
       for(const [rk,r] of Object.entries(regionen)){
         if(r.gebiete.some(g=>g.id===p.gebiet_id)){regionenMitPlakaten.add(rk);break;}
       }
@@ -10132,7 +10135,7 @@ function updateTourIdOptions(){
     ).join('');
   } else if(typ==='gebiet'){
     label.textContent='Gebiete';
-    const gebieteMitPlakaten=new Set(plakate.filter(p=>p.gebiet_id&&!p.ist_vorlage).map(p=>p.gebiet_id));
+    const gebieteMitPlakaten=new Set(plakate.filter(p=>p.gebiet_id&&p.status!=='vorlage').map(p=>p.gebiet_id));
     const gebiete=[...gebieteMitPlakaten].map(gId=>({id:gId,name:getG(gId)?.name||gId})).filter(g=>g.name).sort((a,b)=>a.name.localeCompare(b.name));
     if(gebiete.length===0){sel.innerHTML='<div style="padding:6px;font-size:.72rem;color:var(--text4)">Keine Gebiete mit Plakaten</div>';updateTourPreview();return;}
     sel.innerHTML=gebiete.map(g=>
@@ -10152,7 +10155,7 @@ function getSelectedTourIds(){
 function getTourPlakate(){
   const bereichTyp=document.getElementById('tourBereichTyp').value;
   const statusFilter=document.getElementById('tourStatusFilter').value;
-  let targets=plakate.filter(p=>!p.ist_vorlage);
+  let targets=plakate.filter(p=>p.status!=='vorlage');
   // Bereichs-Filter
   if(bereichTyp==='region'){
     const selRegions=getSelectedTourIds();
@@ -10168,7 +10171,7 @@ function getTourPlakate(){
       targets=targets.filter(p=>p.gebiet_id&&gSet.has(p.gebiet_id));
     } else targets=[];
   } else {
-    targets=getVisiblePlakate().filter(p=>!p.ist_vorlage);
+    targets=getVisiblePlakate().filter(p=>p.status!=='vorlage');
   }
   // Status-Filter
   if(statusFilter==='aufzuhaengen') targets=targets.filter(p=>p.status==='aufzuhaengen');
@@ -10577,7 +10580,7 @@ function exportTourGPX(){
 // Tour-FAB: ein-/ausblenden je nach Modus
 function updateTourFab(){
   const fab=document.getElementById('tourFab');
-  const echte=plakate.filter(p=>!p.ist_vorlage);
+  const echte=plakate.filter(p=>p.status!=='vorlage');
   if(fab) fab.classList.toggle('show',curMode==='plakate'&&echte.length>0);
   // FAB-Label anpassen wenn nur geplante da sind
   if(fab&&echte.length>0){
