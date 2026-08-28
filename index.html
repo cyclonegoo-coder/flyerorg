@@ -832,7 +832,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v228 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v230 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -9752,8 +9752,10 @@ function openPlakatDetailModal(plakatId){
   let deleteBtn='';
   // Löschen erlaubt für: Manager, eigene Plakate, oder Verteiler bei abgehängten Plakaten in ihren Gebieten
   const canDelete=canManage||p.aufhaenger_id===currentUser?.id||(curRole==='verteiler'&&p.status==='abgehaengt');
-  if(canDelete){
+  if(canDelete&&!p.ist_vorlage){
     deleteBtn=`<button class="btn" style="width:100%;margin-top:8px;background:transparent;color:var(--red);border:1px solid var(--red);font-size:.75rem" onclick="deletePlakat('${p.id}')">🗑 Plakat löschen</button>`;
+  } else if(p.ist_vorlage&&p.status!=='aufzuhaengen'&&!isBasis){
+    deleteBtn=`<button class="btn" style="width:100%;margin-top:8px;background:transparent;color:#8e8e93;border:1px solid #ccc;font-size:.75rem" onclick="updatePlakat('${p.id}','aufzuhaengen')">↩ Vorlage zurücksetzen</button>`;
   }
 
   // Navigation-Button
