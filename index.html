@@ -155,7 +155,7 @@ header{min-height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturat
 .pk-soll span{font-size:.72rem;font-weight:700;color:#fff}
 
 /* ── BODY ── */
-.app-body{display:flex;flex:1;overflow:hidden}
+.app-body{display:flex;flex:1;overflow:hidden;min-height:0}
 
 /* ── SIDEBAR ── */
 .sidebar{width:292px;background:var(--bg);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;border-right:1px solid var(--sep)}
@@ -232,7 +232,7 @@ header{min-height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturat
 .leg-dot{width:9px;height:9px;border-radius:2px;flex-shrink:0}
 
 /* ── DETAIL ── */
-.detail-panel{width:292px;background:var(--bg);border-left:1px solid var(--sep);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;min-height:0;transform:translateX(292px);transition:transform .3s cubic-bezier(.32,.72,0,1)}
+.detail-panel{width:292px;height:100%;background:var(--bg);border-left:1px solid var(--sep);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;min-height:0;transform:translateX(292px);transition:transform .3s cubic-bezier(.32,.72,0,1)}
 .detail-panel.open{transform:translateX(0)}
 .d-header{padding:13px 14px 11px;background:var(--bg);border-bottom:1px solid var(--sep);display:flex;align-items:flex-start;gap:10px;flex-shrink:0}
 .d-hinfo{flex:1}
@@ -832,7 +832,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v232 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v235 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -9732,7 +9732,7 @@ function openPlakatDetailModal(plakatId){
     }
   }
 
-  // Vorlage-Toggle (nur für Verwalter+)
+  // Vorlage-Toggle (für Verwalter+)
   const canManage=curRole==='admin'||istVerwalterOderKreisverwalter();
   let vorlageBtn='';
   if(canManage){
@@ -9758,6 +9758,8 @@ function openPlakatDetailModal(plakatId){
   const canDelete=canManage||p.aufhaenger_id===currentUser?.id||(curRole==='verteiler'&&p.status==='abgehaengt');
   if(canDelete&&!p.ist_vorlage){
     deleteBtn=`<button class="btn" style="width:100%;margin-top:8px;background:transparent;color:var(--red);border:1px solid var(--red);font-size:.75rem" onclick="deletePlakat('${p.id}')">🗑 Plakat löschen</button>`;
+  } else if(p.ist_vorlage&&isBasis&&canManage){
+    deleteBtn=`<button class="btn" style="width:100%;margin-top:8px;background:transparent;color:var(--red);border:1px solid var(--red);font-size:.75rem" onclick="deletePlakat('${p.id}')">🗑 Vorlage löschen</button>`;
   } else if(p.ist_vorlage&&p.status!=='vorlage'&&!isBasis){
     deleteBtn=`<button class="btn" style="width:100%;margin-top:8px;background:transparent;color:#8e8e93;border:1px solid #ccc;font-size:.75rem" onclick="updatePlakat('${p.id}','vorlage')">↩ Vorlage zurücksetzen</button>`;
   }
