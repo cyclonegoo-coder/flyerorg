@@ -155,10 +155,11 @@ header{min-height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturat
 .pk-soll span{font-size:.72rem;font-weight:700;color:#fff}
 
 /* ── BODY ── */
-.app-body{display:flex;flex:1;overflow:hidden;min-height:0}
+.app-body{display:flex;flex:1;overflow:hidden;min-height:0;position:relative}
 
 /* ── SIDEBAR ── */
-.sidebar{width:292px;background:var(--bg);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;border-right:1px solid var(--sep)}
+.sidebar{width:292px;background:var(--bg);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;border-right:1px solid var(--sep);transition:width .25s ease,margin .25s ease}
+.sidebar.collapsed{width:0;border-right:none;overflow:hidden}
 .sb-top{padding:10px 10px 6px;background:var(--bg);border-bottom:1px solid var(--sep)}
 .pills{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:9px}
 .pill{font-size:.7rem;font-weight:500;padding:5px 11px;border-radius:20px;border:1px solid var(--sep);background:var(--surface);color:var(--text3);cursor:pointer;transition:all .15s}
@@ -232,7 +233,7 @@ header{min-height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturat
 .leg-dot{width:9px;height:9px;border-radius:2px;flex-shrink:0}
 
 /* ── DETAIL ── */
-.detail-panel{width:292px;height:100%;background:var(--bg);border-left:1px solid var(--sep);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;min-height:0;transform:translateX(292px);transition:transform .3s cubic-bezier(.32,.72,0,1)}
+.detail-panel{position:absolute;right:0;top:0;bottom:0;width:292px;background:var(--bg);border-left:1px solid var(--sep);display:flex;flex-direction:column;overflow:hidden;z-index:500;transform:translateX(292px);transition:transform .3s cubic-bezier(.32,.72,0,1)}
 .detail-panel.open{transform:translateX(0)}
 .d-header{padding:13px 14px 11px;background:var(--bg);border-bottom:1px solid var(--sep);display:flex;align-items:flex-start;gap:10px;flex-shrink:0}
 .d-hinfo{flex:1}
@@ -832,7 +833,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v235 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v236 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -7378,6 +7379,8 @@ function openDetail(id){
   }
   document.getElementById('detailBody').innerHTML=h;
   document.getElementById('detailPanel').classList.add('open');
+  // Sidebar einklappen wenn Platz knapp (< 1200px)
+  if(window.innerWidth>768&&window.innerWidth<1200) document.getElementById('sidebar').classList.add('collapsed');
   // Mobile: Nav-Bar ausblenden
   const mobNav=document.getElementById('mobNav');
   if(mobNav&&window.innerWidth<=768) mobNav.classList.add('mob-hidden');
@@ -7394,6 +7397,9 @@ function closeDetail(){
   document.getElementById('detailPanel').classList.remove('open','full');
   document.getElementById('detailPanel').style.height='';
   selId=null;Object.values(layers).forEach(l=>l.setStyle({fillOpacity:.35,weight:2}));renderList();
+  // Desktop: Sidebar wieder einblenden
+  const sb=document.getElementById('sidebar');
+  if(sb) sb.classList.remove('collapsed');
   // Mobile: Nav-Bar wieder einblenden
   const mobNav=document.getElementById('mobNav');
   if(mobNav&&window.innerWidth<=768) mobNav.classList.remove('mob-hidden');
