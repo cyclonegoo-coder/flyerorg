@@ -155,11 +155,14 @@ header{min-height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturat
 .pk-soll span{font-size:.72rem;font-weight:700;color:#fff}
 
 /* ── BODY ── */
-.app-body{display:flex;flex:1;overflow:hidden;min-height:0;position:relative}
+.app-body{display:flex;flex:1;overflow:hidden;min-height:0}
 
 /* ── SIDEBAR ── */
 .sidebar{width:292px;background:var(--bg);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;border-right:1px solid var(--sep);transition:width .25s ease,margin .25s ease}
 .sidebar.collapsed{width:0;border-right:none;overflow:hidden}
+.sb-toggle{display:none;position:absolute;left:0;top:50%;transform:translateY(-50%);z-index:501;width:20px;height:44px;background:var(--bg);border:1px solid var(--sep);border-left:none;border-radius:0 8px 8px 0;cursor:pointer;align-items:center;justify-content:center;font-size:.7rem;color:var(--text3);padding:0;box-shadow:var(--sh-sm)}
+.sb-toggle:hover{background:var(--surface3);color:var(--text)}
+@media(min-width:769px){.sb-toggle{display:flex}}
 .sb-top{padding:10px 10px 6px;background:var(--bg);border-bottom:1px solid var(--sep)}
 .pills{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:9px}
 .pill{font-size:.7rem;font-weight:500;padding:5px 11px;border-radius:20px;border:1px solid var(--sep);background:var(--surface);color:var(--text3);cursor:pointer;transition:all .15s}
@@ -233,7 +236,7 @@ header{min-height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturat
 .leg-dot{width:9px;height:9px;border-radius:2px;flex-shrink:0}
 
 /* ── DETAIL ── */
-.detail-panel{position:absolute;right:0;top:0;bottom:0;width:292px;background:var(--bg);border-left:1px solid var(--sep);display:flex;flex-direction:column;overflow:hidden;z-index:500;transform:translateX(292px);transition:transform .3s cubic-bezier(.32,.72,0,1)}
+.detail-panel{position:fixed;right:0;top:60px;bottom:0;width:292px;background:var(--bg);border-left:1px solid var(--sep);display:flex;flex-direction:column;overflow:hidden;z-index:500;transform:translateX(292px);transition:transform .3s cubic-bezier(.32,.72,0,1)}
 .detail-panel.open{transform:translateX(0)}
 .d-header{padding:13px 14px 11px;background:var(--bg);border-bottom:1px solid var(--sep);display:flex;align-items:flex-start;gap:10px;flex-shrink:0}
 .d-hinfo{flex:1}
@@ -409,7 +412,7 @@ textarea{min-height:68px}
 /* Step 7: TABLET */
 @media(min-width:769px) and (max-width:1024px){
   .sidebar{width:220px}
-  .detail-panel{position:absolute;right:0;top:0;bottom:0;z-index:600;width:292px;box-shadow:var(--sh-lg)}
+  .detail-panel{position:fixed;right:0;top:60px;bottom:0;z-index:600;width:292px;box-shadow:var(--sh-lg)}
   .stat-n{font-size:1rem}
   .prog-wrap{padding:6px 8px 4px}
   .h-right{gap:4px}
@@ -593,6 +596,7 @@ textarea{min-height:68px}
 
   <!-- MAP -->
   <div style="position:relative;flex:1;min-width:0;min-height:0;display:flex;flex-direction:column">
+    <button class="sb-toggle" id="sbToggle" onclick="toggleSidebarDesktop()" title="Sidebar ein-/ausblenden">◀</button>
     <div id="map"></div>
     <!-- DRAW TOOLBAR (only shown for admin/verwalter on >=768px) -->
     <div class="draw-toolbar" id="drawToolbar">
@@ -833,7 +837,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v236 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v238 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -7379,8 +7383,9 @@ function openDetail(id){
   }
   document.getElementById('detailBody').innerHTML=h;
   document.getElementById('detailPanel').classList.add('open');
-  // Sidebar einklappen wenn Platz knapp (< 1200px)
-  if(window.innerWidth>768&&window.innerWidth<1200) document.getElementById('sidebar').classList.add('collapsed');
+  // Sidebar einklappen wenn Detail-Panel offen (Desktop)
+  if(window.innerWidth>768) document.getElementById('sidebar').classList.add('collapsed');
+  updateSbToggle();
   // Mobile: Nav-Bar ausblenden
   const mobNav=document.getElementById('mobNav');
   if(mobNav&&window.innerWidth<=768) mobNav.classList.add('mob-hidden');
@@ -7400,9 +7405,25 @@ function closeDetail(){
   // Desktop: Sidebar wieder einblenden
   const sb=document.getElementById('sidebar');
   if(sb) sb.classList.remove('collapsed');
+  updateSbToggle();
   // Mobile: Nav-Bar wieder einblenden
   const mobNav=document.getElementById('mobNav');
   if(mobNav&&window.innerWidth<=768) mobNav.classList.remove('mob-hidden');
+}
+
+function toggleSidebarDesktop(){
+  const sb=document.getElementById('sidebar');
+  if(!sb) return;
+  sb.classList.toggle('collapsed');
+  updateSbToggle();
+  // Karte nach kurzer Verzögerung aktualisieren (wegen Transition)
+  setTimeout(()=>{if(map)map.invalidateSize();},300);
+}
+function updateSbToggle(){
+  const btn=document.getElementById('sbToggle');
+  if(!btn) return;
+  const collapsed=document.getElementById('sidebar')?.classList.contains('collapsed');
+  btn.textContent=collapsed?'▶':'◀';
 }
 
 // ============================================================
