@@ -160,7 +160,7 @@ header{min-height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturat
 /* ── SIDEBAR ── */
 .sidebar{width:292px;background:var(--bg);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;border-right:1px solid var(--sep);transition:width .25s ease,margin .25s ease}
 .sidebar.collapsed{width:0;border-right:none;overflow:hidden}
-.sb-toggle{display:none;position:absolute;left:0;top:50%;transform:translateY(-50%);z-index:501;width:20px;height:44px;background:var(--bg);border:1px solid var(--sep);border-left:none;border-radius:0 8px 8px 0;cursor:pointer;align-items:center;justify-content:center;font-size:.7rem;color:var(--text3);padding:0;box-shadow:var(--sh-sm)}
+.sb-toggle{display:none;position:absolute;left:0;top:50%;transform:translateY(-50%);z-index:501;width:24px;height:48px;background:var(--bg);border:1px solid var(--sep);border-left:none;border-radius:0 10px 10px 0;cursor:pointer;align-items:center;justify-content:center;font-size:.8rem;color:var(--text2);padding:0;box-shadow:2px 0 8px rgba(0,0,0,.1)}
 .sb-toggle:hover{background:var(--surface3);color:var(--text)}
 @media(min-width:769px){.sb-toggle{display:flex}}
 .sb-top{padding:10px 10px 6px;background:var(--bg);border-bottom:1px solid var(--sep)}
@@ -236,7 +236,7 @@ header{min-height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturat
 .leg-dot{width:9px;height:9px;border-radius:2px;flex-shrink:0}
 
 /* ── DETAIL ── */
-.detail-panel{position:fixed;right:0;top:60px;bottom:0;width:292px;background:var(--bg);border-left:1px solid var(--sep);display:flex;flex-direction:column;overflow:hidden;z-index:500;transform:translateX(292px);transition:transform .3s cubic-bezier(.32,.72,0,1)}
+.detail-panel{position:fixed;right:0;top:60px;bottom:0;width:292px;background:var(--bg);border-left:1px solid var(--sep);overflow:hidden;z-index:500;transform:translateX(292px);transition:transform .3s cubic-bezier(.32,.72,0,1)}
 .detail-panel.open{transform:translateX(0)}
 .d-header{padding:13px 14px 11px;background:var(--bg);border-bottom:1px solid var(--sep);display:flex;align-items:flex-start;gap:10px;flex-shrink:0}
 .d-hinfo{flex:1}
@@ -244,7 +244,9 @@ header{min-height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturat
 .d-name{font-size:.95rem;font-weight:600;letter-spacing:-.01em}
 .d-close{background:var(--surface3);border:none;color:var(--text3);width:26px;height:26px;border-radius:50%;cursor:pointer;font-size:.78rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px}
 .d-close:hover{color:var(--text)}
-.d-scroll{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px;min-height:0}
+.d-scroll{overflow-y:auto;-webkit-overflow-scrolling:touch;padding:10px;min-height:0}
+.d-scroll>.d-sec{margin-bottom:8px}
+.d-scroll>.d-sec:last-child{margin-bottom:0}
 .d-scroll::-webkit-scrollbar{width:5px}
 .d-scroll::-webkit-scrollbar-track{background:transparent}
 .d-scroll::-webkit-scrollbar-thumb{background:var(--surface3);border-radius:3px}
@@ -837,7 +839,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v238 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v239 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -7383,6 +7385,8 @@ function openDetail(id){
   }
   document.getElementById('detailBody').innerHTML=h;
   document.getElementById('detailPanel').classList.add('open');
+  // Scrollbereich Höhe explizit setzen
+  fixDetailScroll();
   // Sidebar einklappen wenn Detail-Panel offen (Desktop)
   if(window.innerWidth>768) document.getElementById('sidebar').classList.add('collapsed');
   updateSbToggle();
@@ -7401,6 +7405,8 @@ function mobToggle(hd){
 function closeDetail(){
   document.getElementById('detailPanel').classList.remove('open','full');
   document.getElementById('detailPanel').style.height='';
+  const _ds=document.getElementById('detailBody');
+  if(_ds){_ds.style.height='';_ds.style.overflowY='';}
   selId=null;Object.values(layers).forEach(l=>l.setStyle({fillOpacity:.35,weight:2}));renderList();
   // Desktop: Sidebar wieder einblenden
   const sb=document.getElementById('sidebar');
@@ -7425,6 +7431,25 @@ function updateSbToggle(){
   const collapsed=document.getElementById('sidebar')?.classList.contains('collapsed');
   btn.textContent=collapsed?'▶':'◀';
 }
+
+function fixDetailScroll(){
+  const panel=document.getElementById('detailPanel');
+  const hdr=panel?.querySelector('.d-header');
+  const scroll=document.getElementById('detailBody');
+  if(!panel||!hdr||!scroll) return;
+  const doFix=()=>{
+    const pr=panel.getBoundingClientRect();
+    const hr=hdr.getBoundingClientRect();
+    scroll.style.height=(pr.height-hr.height)+'px';
+    scroll.style.overflowY='auto';
+  };
+  // Sofort + nach Transition
+  doFix();
+  setTimeout(doFix,350);
+}
+window.addEventListener('resize',()=>{
+  if(document.getElementById('detailPanel')?.classList.contains('open')) fixDetailScroll();
+});
 
 // ============================================================
 // ACTIONS (write to Supabase + local update)
