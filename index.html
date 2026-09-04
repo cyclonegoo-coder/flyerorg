@@ -839,7 +839,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;right:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v242 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v246 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -1188,7 +1188,7 @@ textarea{min-height:68px}
     <div class="m-title" id="kampFormTitle">📋 Neue Kampagne</div>
     <input type="hidden" id="editKampagneId" value="">
     <div style="display:flex;flex-direction:column;gap:7px;max-height:55vh;overflow-y:auto;padding:2px">
-      <input type="text" id="newKampName" placeholder="Name der Kampagne">
+      <input type="text" id="newKampName" placeholder="Name der Kampagne" maxlength="20">
       <input type="text" id="newKampBeschr" placeholder="Beschreibung (optional)">
       <div id="kampTypRow" style="display:flex;flex-direction:column;gap:2px">
         <label style="font-size:.65rem;font-weight:600;color:var(--text3)">Kampagnen-Typ</label>
@@ -1974,7 +1974,7 @@ function kampagneAlsVorlage(kampId){
   if(!k)return;
   resetKampForm();
   _kampVorlageQuellId=kampId;
-  document.getElementById('newKampName').value=(k.name||'')+' (Kopie)';
+  document.getElementById('newKampName').value=((k.name||'')+' (Kopie)').slice(0,20);
   document.getElementById('newKampBeschr').value=k.beschreibung||'';
   document.getElementById('newKampTyp').value=k.typ||'flyer';
   // Geltungsbereiche übernehmen
@@ -2390,6 +2390,7 @@ async function saveKampagne() {
   const name = document.getElementById('newKampName').value.trim();
   const beschr = document.getElementById('newKampBeschr').value.trim();
   if (!name) { toast('⚠️ Bitte Namen eingeben'); return; }
+  if (name.length>20) { toast('⚠️ Name max. 20 Zeichen'); return; }
 
   // Grundzuweisung: Typ immer 'beides'
   const editingK=editId?kampagnen.find(k=>String(k.id)===String(editId)):null;
@@ -4715,7 +4716,17 @@ function vmNavigateToMyGebiete(){
   const zielGebiete=meineGebiete.length>0?meineGebiete:aktiveGebiete;
 
   if(zielGebiete.length===0){
-    // Keine aktiven Gebiete in dieser Kampagne → Filter nicht ändern
+    // Keine aktiven Gebiete → Kampagnen-Geltungsbereich nutzen
+    const bi=curKampagne?.bereich_items||[];
+    if(bi.length>0){
+      const bRegions=expandBereichToRegions(bi).map(b=>b.id);
+      const bGVs=[...new Set(bRegions.map(rk=>regionen[rk]?.gebietsverband_id).filter(Boolean))];
+      const bLKs=[...new Set(bGVs.map(gk=>gebietsverbaende[gk]?.landkreis_id).filter(Boolean))];
+      if(bRegions.length===1){curReg=bRegions[0];curGV=regionen[bRegions[0]]?.gebietsverband_id||'alle';const gv=gebietsverbaende[curGV];curLK=gv?.landkreis_id||'alle';}
+      else if(bGVs.length===1){curGV=bGVs[0];curReg='alle';const gv=gebietsverbaende[bGVs[0]];curLK=gv?.landkreis_id||'alle';}
+      else if(bLKs.length===1){curLK=bLKs[0];curGV='alle';curReg='alle';}
+      else{curLK='alle';curGV='alle';curReg='alle';}
+    }
     renderBreadcrumb(); renderList(); renderStats(); drawPolygons(); showDrawToolbar();
     return;
   }
@@ -10093,9 +10104,11 @@ function renderStatsPlakate(){
   if(mG)mG.textContent=tot+' Ges.';
   if(mV)mV.textContent=haengt+' Hängen';
   if(mO)mO.textContent=(abgeh+zerst)+' Erledigt';
-  // Im Plakat-Modus fehlende Verteiler ausblenden
+  // Im Plakat-Modus fehlende Verteiler und Soll/Ist ausblenden
   const mF=document.getElementById('mobStatFehlt');
   if(mF) mF.style.display='none';
+  const pkStat=document.getElementById('mobStatPlakat');
+  if(pkStat) pkStat.style.display='none';
 }
 
 // ── Plakat-Routen: Google Maps + GPX ──
