@@ -839,7 +839,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v253 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v254 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -1032,6 +1032,7 @@ textarea{min-height:68px}
       <div id="editUserGVWrap" style="display:none">
         <div style="font-size:.65rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:2px">Gebietsverbände</div>
         <div id="editUserGVList" style="max-height:200px;overflow-y:auto;border:1px solid var(--sep);border-radius:var(--r8);padding:4px"></div>
+        <div id="editUserGVHint" style="display:none;font-size:.7rem;color:var(--text4);padding:4px 4px 0">ℹ️ Regionen im Verband automatisch zugeordnet</div>
       </div>
       <!-- Telefon -->
       <div id="editUserTelWrap" style="display:none">
@@ -1054,6 +1055,7 @@ textarea{min-height:68px}
       <div id="editUserLKWrap" style="display:none">
         <div style="font-size:.65rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:2px">Landkreise</div>
         <div id="editUserLKList" style="max-height:200px;overflow-y:auto;border:1px solid var(--sep);border-radius:var(--r8);padding:4px"></div>
+        <div id="editUserLKHint" style="display:none;font-size:.7rem;color:var(--text4);padding:4px 4px 0">ℹ️ Verbände + Regionen im Kreis automatisch zugeordnet</div>
       </div>
       <div id="editUserRegWrap" style="display:none">
         <div style="font-size:.65rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:2px">Regionen</div>
@@ -3872,12 +3874,12 @@ function openEditUserModal(userId){
       if(isKV||isAdmin) opts+=`<option value="verteiler" ${u.rolle==='verteiler'?'selected':''}>Verteiler</option><option value="regionalverwalter" ${u.rolle==='regionalverwalter'?'selected':''}>Regionalverwalter</option><option value="verwalter" ${u.rolle==='verwalter'?'selected':''}>Verbandsverwalter</option><option value="kreisverwalter" ${u.rolle==='kreisverwalter'?'selected':''}>Kreisverwalter</option>`;
       if(isAdmin) opts+=`<option value="admin" ${u.rolle==='admin'?'selected':''}>Admin</option>`;
     }
-    rc.innerHTML=`<select id="editUserRolle" style="width:100%;font-size:.8rem;padding:6px 8px;border:1px solid var(--sep);border-radius:var(--r8)">${opts}</select>`;
+    rc.innerHTML=`<select id="editUserRolle" onchange="updateRoleSections()" style="width:100%;font-size:.8rem;padding:6px 8px;border:1px solid var(--sep);border-radius:var(--r8)">${opts}</select>`;
   }
 
-  // GV-Zuordnung (Multi-Select, Admin/KV, nicht für Admins)
+  // GV-Zuordnung (Multi-Select, Admin/KV)
   const gvWrap=document.getElementById('editUserGVWrap');
-  if(!isSelf&&(isAdmin||isKV)&&u.rolle!=='admin'){
+  if(!isSelf&&(isAdmin||isKV)){
     gvWrap.style.display='block';
     const gvList=document.getElementById('editUserGVList');
     const userGVs=new Set(u.verwaltete_gebietsverbaende||[]);
@@ -3939,7 +3941,7 @@ function openEditUserModal(userId){
 
   // Landkreise (für KV)
   const lkWrap=document.getElementById('editUserLKWrap');
-  const canEditLK=!isSelf&&(isAdmin||isKV)&&u.rolle==='kreisverwalter';
+  const canEditLK=!isSelf&&(isAdmin||isKV);
   if(canEditLK){
     lkWrap.style.display='block';
     const lkList=document.getElementById('editUserLKList');
@@ -3954,7 +3956,7 @@ function openEditUserModal(userId){
 
   // Regionen (für RV)
   const regWrap=document.getElementById('editUserRegWrap');
-  const canEditReg=!isSelf&&(isAdmin||isKV||isGV)&&u.rolle==='regionalverwalter';
+  const canEditReg=!isSelf&&(isAdmin||isKV||isGV);
   if(canEditReg){
     regWrap.style.display='block';
     const regList=document.getElementById('editUserRegList');
@@ -3985,7 +3987,53 @@ function openEditUserModal(userId){
   const canDelete=!isSelf&&(isAdmin?!false:(isKV?!istAdmin:false));
   document.getElementById('editUserDeleteBtn').style.display=canDelete?'block':'none';
 
+  updateRoleSections();
   document.getElementById('editUserModalOv').classList.add('open');
+}
+
+function updateRoleSections(){
+  const rolleEl=document.getElementById('editUserRolle');
+  const rolle=rolleEl?rolleEl.value:(document.getElementById('editUserId')?.dataset?.rolle||'verteiler');
+  const lkW=document.getElementById('editUserLKWrap');
+  const gvW=document.getElementById('editUserGVWrap');
+  const regW=document.getElementById('editUserRegWrap');
+  const lkH=document.getElementById('editUserLKHint');
+  const gvH=document.getElementById('editUserGVHint');
+  // Prüfe ob Sektionen gerendert wurden (haben Kinder)
+  const lkOk=lkW&&document.getElementById('editUserLKList')?.children.length>0;
+  const gvOk=gvW&&document.getElementById('editUserGVList')?.children.length>0;
+  const regOk=regW&&document.getElementById('editUserRegList')?.children.length>0;
+  if(rolle==='kreisverwalter'){
+    if(lkW) lkW.style.display=lkOk?'block':'none';
+    if(gvW) gvW.style.display='none';
+    if(regW) regW.style.display='none';
+    if(lkH) lkH.style.display='block';
+    if(gvH) gvH.style.display='none';
+  } else if(rolle==='verwalter'){
+    if(lkW) lkW.style.display='none';
+    if(gvW) gvW.style.display=gvOk?'block':'none';
+    if(regW) regW.style.display='none';
+    if(lkH) lkH.style.display='none';
+    if(gvH) gvH.style.display='block';
+  } else if(rolle==='regionalverwalter'){
+    if(lkW) lkW.style.display='none';
+    if(gvW) gvW.style.display='none';
+    if(regW) regW.style.display=regOk?'block':'none';
+    if(lkH) lkH.style.display='none';
+    if(gvH) gvH.style.display='none';
+  } else if(rolle==='verteiler'){
+    if(lkW) lkW.style.display='none';
+    if(gvW) gvW.style.display=gvOk?'block':'none';
+    if(regW) regW.style.display='none';
+    if(lkH) lkH.style.display='none';
+    if(gvH) gvH.style.display='none';
+  } else {
+    if(lkW) lkW.style.display='none';
+    if(gvW) gvW.style.display='none';
+    if(regW) regW.style.display='none';
+    if(lkH) lkH.style.display='none';
+    if(gvH) gvH.style.display='none';
+  }
 }
 
 function closeEditUserModal(){
@@ -4018,6 +4066,10 @@ async function saveEditUser(){
       if(newRolle==='admin'&&curRole!=='admin'){toast('⚠️ Admin-Rolle kann nur von Admins vergeben werden');return;}
       if(u.rolle==='admin'&&curRole!=='admin'){toast('⚠️ Admins können nur von Admins geändert werden');return;}
       updates.rolle=newRolle;changed=true;
+      // Bei Rollenwechsel: nicht relevante Zuweisungen aufräumen
+      if(newRolle!=='kreisverwalter'){updates.verwalteter_landkreis=null;updates.verwaltete_landkreise=null;}
+      if(newRolle!=='regionalverwalter'){updates.verwaltete_regionen=null;}
+      if(newRolle!=='verwalter'&&newRolle!=='verteiler'){updates.verwaltete_gebietsverbaende=null;updates.gebietsverband_id=null;}
     }
   }
 
