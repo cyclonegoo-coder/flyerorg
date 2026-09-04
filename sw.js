@@ -1,4 +1,4 @@
-const CACHE_NAME = 'flyerorg-v248';
+const CACHE_NAME = 'flyerorg-v250';
 const OFFLINE_URL = 'offline.html';
 
 // Bei Installation: Offline-Seite cachen

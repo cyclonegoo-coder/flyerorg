@@ -839,7 +839,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v248 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v250 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -4700,7 +4700,21 @@ function setRollenbasierterFilter() {
 // Nach Kampagnenwechsel: Breadcrumb-Filter auf die Gebiete des Users setzen
 // Findet Gebiete wo der aktuelle User Verteiler ist und navigiert dorthin
 function vmNavigateToMyGebiete(){
-  // Finde aktive Gebiete in der aktuellen Kampagne (mit Verteiler oder Status != offen)
+  // 1. Kampagnen-Geltungsbereich als primäre Navigation
+  const bi=curKampagne&&!curKampagne.ist_basis?(curKampagne.bereich_items||[]):[];
+  if(bi.length>0){
+    const bRegions=expandBereichToRegions(bi).map(b=>b.id);
+    const bGVs=[...new Set(bRegions.map(rk=>regionen[rk]?.gebietsverband_id).filter(Boolean))];
+    const bLKs=[...new Set(bGVs.map(gk=>gebietsverbaende[gk]?.landkreis_id).filter(Boolean))];
+    if(bRegions.length===1){curReg=bRegions[0];curGV=regionen[bRegions[0]]?.gebietsverband_id||'alle';const gv=gebietsverbaende[curGV];curLK=gv?.landkreis_id||'alle';}
+    else if(bGVs.length===1){curGV=bGVs[0];curReg='alle';const gv=gebietsverbaende[bGVs[0]];curLK=gv?.landkreis_id||'alle';}
+    else if(bLKs.length===1){curLK=bLKs[0];curGV='alle';curReg='alle';}
+    else{curLK='alle';curGV='alle';curReg='alle';}
+    renderBreadcrumb(); renderList(); renderStats(); drawPolygons(); showDrawToolbar();
+    return;
+  }
+
+  // 2. Fallback: aktive Gebiete (mit Verteiler oder Status != offen)
   const aktiveGebiete=[];
   for(const [rKey,r] of Object.entries(regionen)){
     for(const g of r.gebiete){
@@ -4709,47 +4723,30 @@ function vmNavigateToMyGebiete(){
       }
     }
   }
-  // Eigene Gebiete bevorzugen (wenn kein Admin/Verwalter)
   const meineGebiete=aktiveGebiete.filter(a=>a.gebiet.verteilerId===currentUser?.id);
   const zielGebiete=meineGebiete.length>0?meineGebiete:aktiveGebiete;
 
   if(zielGebiete.length===0){
-    // Keine aktiven Gebiete → Kampagnen-Geltungsbereich nutzen
-    const bi=curKampagne?.bereich_items||[];
-    if(bi.length>0){
-      const bRegions=expandBereichToRegions(bi).map(b=>b.id);
-      const bGVs=[...new Set(bRegions.map(rk=>regionen[rk]?.gebietsverband_id).filter(Boolean))];
-      const bLKs=[...new Set(bGVs.map(gk=>gebietsverbaende[gk]?.landkreis_id).filter(Boolean))];
-      if(bRegions.length===1){curReg=bRegions[0];curGV=regionen[bRegions[0]]?.gebietsverband_id||'alle';const gv=gebietsverbaende[curGV];curLK=gv?.landkreis_id||'alle';}
-      else if(bGVs.length===1){curGV=bGVs[0];curReg='alle';const gv=gebietsverbaende[bGVs[0]];curLK=gv?.landkreis_id||'alle';}
-      else if(bLKs.length===1){curLK=bLKs[0];curGV='alle';curReg='alle';}
-      else{curLK='alle';curGV='alle';curReg='alle';}
-    }
     renderBreadcrumb(); renderList(); renderStats(); drawPolygons(); showDrawToolbar();
     return;
   }
 
-  // Navigation berechnen basierend auf den Ziel-Gebieten
   const regionKeys=[...new Set(zielGebiete.map(m=>m.regionKey))];
   const gvKeys=[...new Set(regionKeys.map(rk=>regionen[rk]?.gebietsverband_id).filter(Boolean))];
   const lkKeys=[...new Set(gvKeys.map(gk=>gebietsverbaende[gk]?.landkreis_id).filter(Boolean))];
 
   if(regionKeys.length===1){
-    // Alles in einer Region → direkt dorthin
     curReg=regionKeys[0];
     curGV=regionen[regionKeys[0]]?.gebietsverband_id||'alle';
     const gv=gebietsverbaende[curGV];
     curLK=gv?.landkreis_id||'alle';
   } else if(gvKeys.length===1){
-    // Eine GV, mehrere Regionen
     curGV=gvKeys[0]; curReg='alle';
     const gv=gebietsverbaende[gvKeys[0]];
     curLK=gv?.landkreis_id||'alle';
   } else if(lkKeys.length===1){
-    // Ein LK, mehrere GVs
     curLK=lkKeys[0]; curGV='alle'; curReg='alle';
   } else {
-    // Alles offen
     curLK='alle'; curGV='alle'; curReg='alle';
   }
 
@@ -7020,7 +7017,7 @@ function renderStats(){
   // Plakat Soll/Ist-Anzeige
   const pkStat=document.getElementById('mobStatPlakat');
   if(pkStat){
-    if(istPlakatKampagne()){
+    if(istPlakatKampagne()&&!curKampagne?.ist_basis){
       const sollT=gs.reduce((s,g)=>s+(g.soll_stueck||0),0);
       const istT=gs.reduce((s,g)=>s+(g.ist_stueck||0),0);
       if(sollT>0){pkStat.textContent=`📌 ${istT}/${sollT}`;pkStat.style.display='inline';}
