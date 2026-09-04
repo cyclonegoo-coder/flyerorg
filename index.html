@@ -839,7 +839,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v250 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v251 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -6534,8 +6534,8 @@ function getVisibleGebiete(){
   else if(curLK!=='alle'){ Object.values(regionen).forEach(r=>{ const gv=gebietsverbaende[r.gebietsverband_id]; if(gv&&gv.landkreis_id===curLK) gs=gs.concat(r.gebiete); }); }
   else gs=getAllGebiete();
 
-  // Verteiler: Problemgebiete aus dem gesamten Landkreis hinzufügen
-  if(curRole==='verteiler'){
+  // Verteiler: Problemgebiete hinzufügen — nur wenn kein spezifischer Filter aktiv
+  if(curRole==='verteiler'&&curReg==='alle'&&curGV==='alle'){
     const lkId=ermittleVerteilerLandkreis();
     if(lkId){
       const gsIds=new Set(gs.map(g=>g.id));
