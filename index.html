@@ -839,15 +839,36 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v254 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v255 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
   <div class="modal" style="max-width:420px;max-height:85vh;overflow-y:auto">
     <div class="m-handle"></div>
-    <div style="display:flex;gap:8px;margin-bottom:12px">
+    <div style="display:flex;gap:6px;margin-bottom:12px">
+      <button id="impTabHelp" onclick="showImpTab('help')" style="flex:1;padding:6px 0;font-size:.75rem;font-weight:600;border:none;border-radius:var(--r8);cursor:pointer;background:var(--surface2);color:var(--text3)">🎬 Hilfe</button>
       <button id="impTabImp" onclick="showImpTab('imp')" style="flex:1;padding:6px 0;font-size:.75rem;font-weight:600;border:none;border-radius:var(--r8);cursor:pointer;background:var(--blue);color:white">Impressum</button>
       <button id="impTabDs" onclick="showImpTab('ds')" style="flex:1;padding:6px 0;font-size:.75rem;font-weight:600;border:none;border-radius:var(--r8);cursor:pointer;background:var(--surface2);color:var(--text3)">Datenschutz</button>
+    </div>
+    <div id="impContentHelp" style="display:none;font-size:.82rem;line-height:1.6;color:var(--text2)">
+      <strong style="font-size:.92rem">📖 Video-Anleitungen</strong><br><br>
+      <a href="https://youtu.be/ugrlrauinUw" target="_blank" rel="noopener" style="display:block;padding:10px 12px;background:var(--surface2);border-radius:var(--r8);margin-bottom:8px;text-decoration:none;color:var(--text)">
+        <strong>🎬 Erste Schritte</strong><br>
+        <span style="font-size:.75rem;color:var(--text3)">Login, Navigation & Grundbedienung — für alle Nutzer</span>
+      </a>
+      <a href="YOUTUBE_FLYER" target="_blank" rel="noopener" style="display:block;padding:10px 12px;background:var(--surface2);border-radius:var(--r8);margin-bottom:8px;text-decoration:none;color:var(--text)">
+        <strong>📬 Flyerverteilung</strong><br>
+        <span style="font-size:.75rem;color:var(--text3)">Gebiete, Status melden & GPS-Verteilmodus</span>
+      </a>
+      <a href="https://youtu.be/J4KO-Y6pUf4" target="_blank" rel="noopener" style="display:block;padding:10px 12px;background:var(--surface2);border-radius:var(--r8);margin-bottom:8px;text-decoration:none;color:var(--text)">
+        <strong>📌 Plakatverteilung</strong><br>
+        <span style="font-size:.75rem;color:var(--text3)">Standorte, Tour planen & Status melden</span>
+      </a>
+      <a href="#" target="_blank" rel="noopener" style="display:block;padding:10px 12px;background:var(--surface2);border-radius:var(--r8);margin-bottom:8px;text-decoration:none;color:var(--text);opacity:.5;pointer-events:none">
+        <strong>👔 Für Verwalter</strong><br>
+        <span style="font-size:.75rem;color:var(--text3)">Kampagnen, Gebiete & Plakate verwalten — kommt bald</span>
+      </a>
+      <div style="font-size:.7rem;color:var(--text4);margin-top:8px">💡 Tipp: Schau zuerst „Erste Schritte", dann das Video für deine Rolle.</div>
     </div>
     <div id="impContentImp" style="font-size:.82rem;line-height:1.6;color:var(--text2)">
       <strong>FlyerOrg</strong> – Verwaltungstool für Flyerverteilungen<br><br>
@@ -9538,14 +9559,15 @@ window.addEventListener('appinstalled', () => {
   document.getElementById('pwaInstallBanner').style.display = 'none';
 });
 
-// Impressum/Datenschutz Tab-Umschaltung
+// Impressum/Datenschutz/Hilfe Tab-Umschaltung
 function showImpTab(tab) {
   document.getElementById('impContentImp').style.display = tab === 'imp' ? '' : 'none';
   document.getElementById('impContentDs').style.display = tab === 'ds' ? '' : 'none';
-  document.getElementById('impTabImp').style.background = tab === 'imp' ? 'var(--blue)' : 'var(--surface2)';
-  document.getElementById('impTabImp').style.color = tab === 'imp' ? 'white' : 'var(--text3)';
-  document.getElementById('impTabDs').style.background = tab === 'ds' ? 'var(--blue)' : 'var(--surface2)';
-  document.getElementById('impTabDs').style.color = tab === 'ds' ? 'white' : 'var(--text3)';
+  document.getElementById('impContentHelp').style.display = tab === 'help' ? '' : 'none';
+  ['imp','ds','help'].forEach(t=>{
+    const btn=document.getElementById('impTab'+(t==='imp'?'Imp':t==='ds'?'Ds':'Help'));
+    if(btn){btn.style.background=t===tab?'var(--blue)':'var(--surface2)';btn.style.color=t===tab?'white':'var(--text3)';}
+  });
 }
 
 /// ============================================================
@@ -9926,7 +9948,6 @@ function openPlakatDetailModal(plakatId){
     if(p.status==='aufzuhaengen'){
       btns+=`<button class="btn btn-p" style="flex:1" onclick="updatePlakat('${p.id}','haengt')">✅ Aufgehängt</button>`;
       if(p.ist_vorlage) btns+=`<button class="btn btn-g" style="flex:1" onclick="updatePlakat('${p.id}','vorlage')">↩ Zur Vorlage</button>`;
-      if(!p.ist_vorlage) btns+=`<button class="btn btn-g" style="flex:1" onclick="deletePlakat('${p.id}')">🗑 Entfernen</button>`;
     }
     if(p.status==='haengt'||p.status==='ersetzt'){
       btns+=`<button class="btn btn-p" style="flex:1" onclick="updatePlakat('${p.id}','abgehaengt')">✓ Abhängen</button>`;
@@ -9947,6 +9968,8 @@ function openPlakatDetailModal(plakatId){
         btns+=`<button class="btn btn-g" style="flex:1" onclick="updatePlakat('${p.id}','haengt')">↩ Hängt wieder</button>`;
       }
     }
+    // Entfernen immer möglich (außer bei Vorlagen)
+    if(!p.ist_vorlage) btns+=`<button class="btn btn-g" style="flex:1" onclick="deletePlakat('${p.id}')">🗑 Entfernen</button>`;
   }
 
   // Vorlage-Toggle (für Verwalter+)
