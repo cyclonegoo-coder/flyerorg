@@ -606,6 +606,7 @@ textarea{min-height:68px}
       <button class="draw-btn" id="drawUndoBtn" onclick="drawUndo()" title="Letzten Punkt entfernen" disabled>↩️</button>
       <button class="draw-btn" id="drawFinishBtn" onclick="drawFinish()" title="Polygon abschließen" disabled>✅</button>
       <button class="draw-btn" id="drawCancelBtn" onclick="drawCancel()" title="Abbrechen" disabled>❌</button>
+      <button class="draw-btn" id="suggestBtn" onclick="suggestGebieteForRegion(curReg)" title="Gebiete per OSM vorschlagen" style="display:none;margin-left:8px;font-size:15px">🪄</button>
     </div>
     <div class="draw-info" id="drawInfo"></div>
     <button class="leg-toggle" onclick="toggleLegend()">ℹ️</button>
@@ -705,6 +706,19 @@ textarea{min-height:68px}
     <div class="m-actions" style="margin-top:13px">
       <button class="btn btn-g" onclick="drawCancel()">Abbrechen</button>
       <button class="btn btn-p" onclick="drawSave()">Gebiet speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- SUGGEST GEBIETE MODAL -->
+<div class="modal-ov" id="suggestGebietModalOv" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="modal" style="max-width:520px">
+    <div class="m-handle"></div>
+    <div class="m-title">🪄 Gebiete vorschlagen</div>
+    <div id="suggestGebietContent"><p style="text-align:center;padding:20px">⏳ Laden…</p></div>
+    <div class="m-actions" style="margin-top:10px">
+      <button class="btn btn-g" onclick="document.getElementById('suggestGebietModalOv').classList.remove('open')">Abbrechen</button>
+      <button class="btn btn-b" id="suggestGebietAcceptBtn" onclick="acceptSuggestedGebiete()" disabled>Übernehmen</button>
     </div>
   </div>
 </div>
@@ -843,7 +857,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v259 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v260 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -8850,6 +8864,9 @@ function showDrawToolbar(){
   } else {
     document.getElementById('drawToolbar').classList.remove('visible');
   }
+  // 🪄 Suggest-Button nur im Flyer-Modus + wenn Region gewählt + Zugriffsrecht
+  const sugBtn=document.getElementById('suggestBtn');
+  if(sugBtn) sugBtn.style.display=(hatZugriff&&curMode==='flyer'&&curReg!=='alle')?'':'none';
 }
 
 // Prüft ob ein Nutzer im Landkreis des aktuellen KV aktiv ist
@@ -9341,7 +9358,8 @@ async function estimateHouseholdsForPolygon(coords){
   coords.forEach(c=>{if(c[0]<minLat)minLat=c[0];if(c[0]>maxLat)maxLat=c[0];if(c[1]<minLng)minLng=c[1];if(c[1]>maxLng)maxLng=c[1];});
   const bbox=`${minLat},${minLng},${maxLat},${maxLng}`;
   // Overpass: Wohngebäude in BBox zählen
-  const query=`[out:json][timeout:20];(way["building"~"^(yes|residential|apartments|house|detached|semidetached_house|terrace|farm|dormitory)$"](${bbox});relation["building"~"^(yes|residential|apartments|house|detached|semidetached_house|terrace|farm|dormitory)$"](${bbox}););out center;`;
+  // Nur Gebäude MIT Hausnummer zählen (filtert Garagen, Schuppen etc.)
+  const query=`[out:json][timeout:20];(way["building"]["addr:housenumber"](${bbox});relation["building"]["addr:housenumber"](${bbox}););out center;`;
   const resp=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:'data='+encodeURIComponent(query)});
   if(!resp.ok) throw new Error('Overpass-Fehler: '+resp.status);
   const data=await resp.json();
@@ -9396,6 +9414,184 @@ async function estimateForGebiet(gebietId){
     if(btn){btn.disabled=false;btn.textContent='💡';}
     toast('⚠️ '+e.message);
   }
+}
+
+// ── Auto-Gebiete per OSM vorschlagen ──
+let suggestedGebiete=[];
+
+async function suggestGebieteForRegion(regionId){
+  if(!regionId||regionId==='alle'){toast('⚠️ Bitte eine Region auswählen');return;}
+  const reg=regionen[regionId];
+  if(!reg){toast('⚠️ Region nicht gefunden');return;}
+
+  document.getElementById('suggestGebietModalOv').classList.add('open');
+  document.getElementById('suggestGebietContent').innerHTML='<p style="text-align:center;padding:20px">⏳ Analysiere Verwaltungsgrenzen…</p>';
+  document.getElementById('suggestGebietAcceptBtn').disabled=true;
+
+  try{
+    // Grenzen laden falls nötig
+    if(!grenzenData){
+      document.getElementById('suggestGebietContent').innerHTML='<p style="text-align:center;padding:20px">⏳ Verwaltungsgrenzen werden geladen…</p>';
+      await toggleVerwaltungsgrenzen(true);
+      if(!grenzenData) throw new Error('Verwaltungsgrenzen nicht verfügbar');
+    }
+
+    const lat=reg.center[0],lng=reg.center[1];
+
+    // Gemeinde finden, die Region-Center enthält
+    const gemeinden=grenzenData.filter(g=>g.level==='8'&&g.coords&&g.coords.length>=3);
+    let gem=null;
+    for(const g of gemeinden){if(pointInPolygon(lat,lng,g.coords)){gem=g;break;}}
+    // Fallback: nächste Gemeinde <10km
+    if(!gem){
+      let best=10;
+      for(const g of gemeinden){
+        const cx=g.coords.reduce((s,c)=>s+c[0],0)/g.coords.length;
+        const cy=g.coords.reduce((s,c)=>s+c[1],0)/g.coords.length;
+        const d=Math.sqrt((lat-cx)**2+(lng-cy)**2)*111;
+        if(d<best){best=d;gem=g;}
+      }
+    }
+    if(!gem) throw new Error('Keine Gemeinde in der Nähe gefunden');
+
+    // Ortsteile innerhalb dieser Gemeinde
+    const ots=grenzenData.filter(g=>(g.level==='9'||g.level==='10')&&g.coords&&g.coords.length>=3).filter(o=>{
+      const cx=o.coords.reduce((s,c)=>s+c[0],0)/o.coords.length;
+      const cy=o.coords.reduce((s,c)=>s+c[1],0)/o.coords.length;
+      return pointInPolygon(cx,cy,gem.coords);
+    });
+
+    let candidates=ots.length>0
+      ?ots.map(o=>({name:o.name||'Unbenannt',coords:o.coords}))
+      :[{name:gem.name||'Unbenannt',coords:gem.coords}];
+
+    // Gebäude für ganze Gemeinde per Overpass laden (1 Query)
+    document.getElementById('suggestGebietContent').innerHTML=`<p style="text-align:center;padding:20px">⏳ Schätze Haushalte für ${esc(gem.name)}…<br><small>(${candidates.length} Gebiet${candidates.length>1?'e':''} gefunden)</small></p>`;
+
+    let minLat=Infinity,maxLat=-Infinity,minLng=Infinity,maxLng=-Infinity;
+    gem.coords.forEach(c=>{if(c[0]<minLat)minLat=c[0];if(c[0]>maxLat)maxLat=c[0];if(c[1]<minLng)minLng=c[1];if(c[1]>maxLng)maxLng=c[1];});
+    const bbox=`${minLat},${minLng},${maxLat},${maxLng}`;
+    const query=`[out:json][timeout:30];(way["building"]["addr:housenumber"](${bbox});relation["building"]["addr:housenumber"](${bbox}););out center;`;
+    const resp=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:'data='+encodeURIComponent(query)});
+    if(!resp.ok) throw new Error('Overpass-Fehler: '+resp.status);
+    const data=await resp.json();
+
+    const bldgs=(data.elements||[]).map(el=>({
+      lat:el.center?el.center.lat:el.lat,
+      lng:el.center?el.center.lon:el.lon,
+      type:el.tags?.building||'yes'
+    })).filter(b=>b.lat&&b.lng);
+
+    // Gebäude den Kandidaten zuordnen + ggf. aufteilen
+    const targetHH=400;
+    suggestedGebiete=[];
+
+    for(const c of candidates){
+      const inP=bldgs.filter(b=>pointInPolygon(b.lat,b.lng,c.coords));
+      const mfh=inP.filter(b=>b.type==='apartments'||b.type==='dormitory').length;
+      const est=inP.length+mfh*3;
+
+      if(est>targetHH){
+        // Aufteilen
+        const N=Math.min(Math.ceil(est/targetHH),6);
+        const parts=splitPolygonIntoN(c.coords,N);
+        const dirs=N===2?['Nord','Süd']:N===3?['Nord','Mitte','Süd']:N===4?['Nordwest','Nordost','Südwest','Südost']:Array.from({length:N},(_,i)=>'Teil '+(i+1));
+        parts.forEach((pc,i)=>{
+          const pb=inP.filter(b=>pointInPolygon(b.lat,b.lng,pc));
+          const pm=pb.filter(b=>b.type==='apartments'||b.type==='dormitory').length;
+          suggestedGebiete.push({name:`${c.name} ${dirs[i]}`,coords:pc,buildings:pb.length,mfh:pm,estimate:pb.length+pm*3,checked:true,split:true});
+        });
+      } else {
+        suggestedGebiete.push({name:c.name,coords:c.coords,buildings:inP.length,mfh,estimate:est,checked:est>0,split:false});
+      }
+    }
+
+    renderSuggestedGebiete(gem.name);
+  }catch(e){
+    document.getElementById('suggestGebietContent').innerHTML=`<p style="color:var(--red);padding:12px">⚠️ ${e.message}</p>`;
+    document.getElementById('suggestGebietAcceptBtn').disabled=true;
+  }
+}
+
+function splitPolygonIntoN(coords,N){
+  let minLat=Infinity,maxLat=-Infinity;
+  coords.forEach(c=>{if(c[0]<minLat)minLat=c[0];if(c[0]>maxLat)maxLat=c[0];});
+  const h=(maxLat-minLat)/N;
+  const parts=[];
+  for(let i=0;i<N;i++){
+    const sMin=minLat+i*h;
+    const sMax=(i===N-1)?maxLat+0.0001:minLat+(i+1)*h;
+    const cl=clipPolyH(coords,sMin,sMax);
+    if(cl.length>=3) parts.push(cl);
+  }
+  return parts.length>0?parts:[coords];
+}
+function clipPolyH(coords,lo,hi){
+  let o=clipEdge(coords,p=>p[0]>=lo,(a,b)=>{const t=(lo-a[0])/(b[0]-a[0]);return[lo,a[1]+t*(b[1]-a[1])];});
+  o=clipEdge(o,p=>p[0]<=hi,(a,b)=>{const t=(hi-a[0])/(b[0]-a[0]);return[hi,a[1]+t*(b[1]-a[1])];});
+  return o;
+}
+function clipEdge(poly,inside,intersect){
+  if(!poly||poly.length<3)return[];
+  const out=[];
+  for(let i=0;i<poly.length;i++){
+    const c=poly[i],n=poly[(i+1)%poly.length];
+    const cI=inside(c),nI=inside(n);
+    if(cI){out.push(c);if(!nI)out.push(intersect(c,n));}
+    else if(nI){out.push(intersect(c,n));}
+  }
+  return out;
+}
+
+function renderSuggestedGebiete(gemeindeName){
+  const existing=regionen[curReg]?.gebiete?.length||0;
+  let html=`<div style="font-size:.78rem;color:var(--text3);margin-bottom:8px">Basierend auf OSM-Grenzen für <strong>${esc(gemeindeName)}</strong>${existing>0?`<br>⚠️ Diese Region hat bereits ${existing} Gebiete`:''}</div>`;
+  html+='<div style="max-height:50vh;overflow-y:auto">';
+  suggestedGebiete.forEach((sg,i)=>{
+    const badge=sg.split?' <span style="font-size:.63rem;background:#e3f2fd;color:#1565c0;padding:1px 4px;border-radius:3px">aufgeteilt</span>':'';
+    const empty=sg.buildings===0?' <span style="font-size:.63rem;color:var(--text4)">(leer)</span>':'';
+    html+=`<label style="display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid var(--border);cursor:pointer">
+      <input type="checkbox" ${sg.checked?'checked':''} onchange="suggestedGebiete[${i}].checked=this.checked;updSugCount()" style="width:18px;height:18px;flex-shrink:0">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:.82rem">${esc(sg.name)}${badge}${empty}</div>
+        <div style="font-size:.72rem;color:var(--text3)">🏠 ${sg.buildings} Gebäude (${sg.mfh} MFH) → ~${sg.estimate} Briefkästen</div>
+      </div>
+    </label>`;
+  });
+  html+='</div>';
+  html+=`<div id="sugCount" style="font-size:.72rem;color:var(--text3);margin-top:6px;text-align:right">${suggestedGebiete.filter(s=>s.checked).length} / ${suggestedGebiete.length} ausgewählt</div>`;
+  document.getElementById('suggestGebietContent').innerHTML=html;
+  document.getElementById('suggestGebietAcceptBtn').disabled=false;
+}
+function updSugCount(){
+  const el=document.getElementById('sugCount');
+  if(el) el.textContent=suggestedGebiete.filter(s=>s.checked).length+' / '+suggestedGebiete.length+' ausgewählt';
+}
+
+async function acceptSuggestedGebiete(){
+  const toCreate=suggestedGebiete.filter(sg=>sg.checked&&sg.coords&&sg.coords.length>=3);
+  if(toCreate.length===0){toast('⚠️ Keine Gebiete ausgewählt');return;}
+  const regionId=curReg;
+  const btn=document.getElementById('suggestGebietAcceptBtn');
+  btn.disabled=true;btn.textContent='⏳ Erstelle…';
+  let ok=0,fail=0;
+  for(const sg of toCreate){
+    const id=crypto.randomUUID();
+    const stueck=sg.estimate||100;
+    try{
+      const{error}=await sb.from('gebiete').insert({id,name:sg.name,region_id:regionId,stueckzahl:stueck,kml_coords:JSON.stringify(sg.coords)});
+      if(error){fail++;console.warn('DB:',error);continue;}
+      kmlP[id]=sg.coords;
+      regionen[regionId].gebiete.push({id,name:sg.name,verteiler:'',verteilerId:null,whatsapp:false,stueckzahl:stueck,status:'offen',hinweise:[]});
+      ok++;
+    }catch(e){fail++;console.warn('Save:',e);}
+  }
+  btn.textContent='Übernehmen';btn.disabled=false;
+  document.getElementById('suggestGebietModalOv').classList.remove('open');
+  renderBreadcrumb();renderList();renderStats();drawPolygons();
+  if(fail>0)toast(`⚠️ ${ok} erstellt, ${fail} Fehler`);
+  else toast(`✅ ${ok} Gebiete erstellt`);
+  logAction('gebiet',`${ok} Gebiete per Auto-Vorschlag erstellt`,null,regionId);
 }
 
 async function drawSave(){
