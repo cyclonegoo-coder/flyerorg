@@ -857,7 +857,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v260 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v262 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -4751,12 +4751,16 @@ async function loadHierarchy() {
     if (gvRes.error) console.warn('gebietsverbaende load failed:', gvRes.error);
     if (regRes.error) console.warn('regionen load failed:', regRes.error);
     landkreise = {};
-    (lkRes.data || []).forEach(lk => { landkreise[lk.id] = lk; });
+    (lkRes.data || []).forEach(lk => {
+      landkreise[lk.id] = lk;
+      if(lk.kml_coords){try{landkreise[lk.id].polygon=JSON.parse(lk.kml_coords);}catch(e){}}
+    });
     gebietsverbaende = {};
     (gvRes.data || []).forEach(gv => { gebietsverbaende[gv.id] = gv; });
     regionen = {};
     (regRes.data || []).forEach(r => {
       regionen[r.id] = { ...r, center: [r.center_lat, r.center_lng], gebiete: [] };
+      if(r.kml_coords){try{regionen[r.id].polygon=JSON.parse(r.kml_coords);}catch(e){}}
     });
     console.log('loadHierarchy:', Object.keys(landkreise).length, 'LK,', Object.keys(gebietsverbaende).length, 'GV,', Object.keys(regionen).length, 'Reg. verwaltete_landkreise:', kvGetLandkreise(currentProfile));
     const lkKeys = Object.keys(landkreise);
@@ -6017,9 +6021,34 @@ function renderGrenzen(){
   grenzenLayer.addTo(map);
 }
 
+let regionLayers={},lkLayers={};
 function drawPolygons(){
   if(!map) return;
   Object.values(layers).forEach(l=>map.removeLayer(l));layers={};
+  // LK-Polygone (Umriss, nur wenn >1 LK oder kein spezifischer LK gewählt)
+  Object.values(lkLayers).forEach(l=>map.removeLayer(l));lkLayers={};
+  if(curMode==='flyer'){
+    const visLKs=curLK!=='alle'?[curLK]:Object.keys(landkreise);
+    visLKs.forEach(lkId=>{
+      const lk=landkreise[lkId];
+      if(!lk||!lk.polygon||lk.polygon.length<3)return;
+      const ll=L.polygon(lk.polygon,{color:'#b71c1c',fillColor:'#ef5350',fillOpacity:.04,weight:3,dashArray:'12,6',interactive:false}).addTo(map);
+      ll.bindTooltip(lk.name||'',{sticky:true,className:'grenzen-tooltip',direction:'center',permanent:false});
+      lkLayers[lkId]=ll;
+    });
+  }
+  // Region-Polygone (Umrisse)
+  Object.values(regionLayers).forEach(l=>map.removeLayer(l));regionLayers={};
+  if(curMode==='flyer'){
+    const visRegs=curReg!=='alle'?[curReg]:getFilteredReg().map(([k])=>k);
+    visRegs.forEach(rk=>{
+      const r=regionen[rk];
+      if(!r||!r.polygon||r.polygon.length<3)return;
+      const rl=L.polygon(r.polygon,{color:'#e65100',fillColor:'#ff9800',fillOpacity:.06,weight:2.5,dashArray:'8,5',interactive:false}).addTo(map);
+      rl.bindTooltip(r.name||'',{sticky:true,className:'grenzen-tooltip',direction:'center',permanent:false});
+      regionLayers[rk]=rl;
+    });
+  }
   const gs=getVisibleGebiete();
   const allBounds=[];
   gs.forEach(g=>{
@@ -8714,13 +8743,51 @@ async function hDrop(e){
 
 // ── Add functions (quick-add from tree header) ──
 async function hTreeAddLK(){
-  const name=await appPrompt('🏛 Neuer Landkreis','Name eingeben…','Erstellen');
-  if(!name) return;
   if(curRole!=='admin'){toast('⚠️ Nur Admins');return;}
-  const {data,error}=await sb.from('landkreise').insert({name:name.trim()}).select().single();
+  const src=await appChoice('🏛 Neuer Landkreis — Grenze','Wie soll der Landkreis definiert werden?',[
+    {label:'🗺 OSM-Verwaltungsgrenze wählen',value:'osm'},
+    {label:'⏭ Nur Name (ohne Polygon)',value:'none'}
+  ]);
+  if(!src) return;
+
+  let lkPoly=null,lkName='',centerLat=null,centerLng=null;
+
+  if(src==='osm'){
+    if(!grenzenData){toast('⏳ Verwaltungsgrenzen laden…');await toggleVerwaltungsgrenzen(true);}
+    if(!grenzenData){toast('⚠️ Grenzen nicht verfügbar');return;}
+    const lkCandidates=grenzenData.filter(g=>g.level==='6'&&g.name&&g.coords&&g.coords.length>=3)
+      .sort((a,b)=>a.name.localeCompare(b.name));
+    if(lkCandidates.length===0){toast('⚠️ Keine Landkreis-Grenzen (Level 6) geladen');return;}
+    const items=lkCandidates.map((c,i)=>({id:''+i,label:c.name}));
+    const picked=await hTreePickFromList('Landkreis-Grenze wählen',items);
+    if(picked===null||picked==='') return;
+    const sel=lkCandidates[parseInt(picked)];
+    lkPoly=sel.coords;
+    lkName=sel.name;
+    const cx=sel.coords.reduce((s,c)=>s+c[0],0)/sel.coords.length;
+    const cy=sel.coords.reduce((s,c)=>s+c[1],0)/sel.coords.length;
+    centerLat=cx;centerLng=cy;
+    const custom=await appPrompt('🏛 Landkreis-Name',lkName,'Erstellen');
+    if(!custom) return;
+    lkName=custom.trim()||lkName;
+  } else {
+    const name=await appPrompt('🏛 Neuer Landkreis','Name eingeben…','Erstellen');
+    if(!name||!name.trim()) return;
+    lkName=name.trim();
+  }
+
+  const insertObj={name:lkName,kml_coords:lkPoly?JSON.stringify(lkPoly):null};
+  if(centerLat){insertObj.center_lat=centerLat;insertObj.center_lng=centerLng;}
+  const {data,error}=await sb.from('landkreise').insert(insertObj).select().single();
   if(error){toast('⚠️ '+error.message);return;}
-  landkreise[data.id]=data;
-  renderHTree();renderBreadcrumb();toast('✅ Landkreis erstellt');
+  landkreise[data.id]={...data};
+  if(lkPoly) landkreise[data.id].polygon=lkPoly;
+  renderHTree();renderBreadcrumb();drawPolygons();
+  if(lkPoly){
+    const bounds=L.latLngBounds(lkPoly.map(c=>[c[0],c[1]]));
+    map.fitBounds(bounds,{padding:[30,30]});
+  }
+  toast('✅ Landkreis „'+lkName+'" erstellt');
 }
 async function hTreeAddGV(){
   const lkOpts=Object.entries(landkreise).sort((a,b)=>a[1].name.localeCompare(b[1].name));
@@ -8788,20 +8855,110 @@ async function hTreeAddReg(){
     }
   }
   if(!gvId) return;
-  const name=await appPrompt('🗺 Neue Region','Name eingeben…','Erstellen');
-  if(!name||!name.trim()) return;
+  // Polygon-Quelle wählen
+  const polySource=await appChoice('🗺 Neue Region — Grenze','Wie soll die Region-Grenze definiert werden?',[
+    {label:'🗺 OSM-Verwaltungsgrenze wählen',value:'osm'},
+    {label:'✏️ Manuell zeichnen',value:'draw'},
+    {label:'⏭ Ohne Polygon (nur Name)',value:'none'}
+  ]);
+  if(!polySource) return;
+
+  let regionPolygon=null,regionName='',centerLat=null,centerLng=null;
+
+  if(polySource==='osm'){
+    // OSM-Grenze aus grenzenData wählen
+    if(!grenzenData){toast('⏳ Verwaltungsgrenzen laden…');await toggleVerwaltungsgrenzen(true);}
+    if(!grenzenData){toast('⚠️ Grenzen nicht verfügbar');return;}
+    // Nur Grenzen innerhalb des Landkreis-Polygons anzeigen (falls vorhanden)
+    const gvObj=gebietsverbaende[gvId];
+    const lkId2=gvObj?.landkreis_id;
+    const lkPoly2=lkId2&&landkreise[lkId2]?landkreise[lkId2].polygon:null;
+    const candidates=grenzenData.filter(g=>(g.level==='7'||g.level==='8'||g.level==='9'||g.level==='10')&&g.name&&g.coords&&g.coords.length>=3)
+      .filter(g=>{
+        if(!lkPoly2||lkPoly2.length<3) return true; // kein LK-Polygon → alles zeigen
+        const cx=g.coords.reduce((s,c)=>s+c[0],0)/g.coords.length;
+        const cy=g.coords.reduce((s,c)=>s+c[1],0)/g.coords.length;
+        return pointInPolygon(cx,cy,lkPoly2);
+      })
+      .map(g=>({name:g.name,level:g.level,coords:g.coords}))
+      .sort((a,b)=>a.name.localeCompare(b.name));
+    if(candidates.length===0){toast('⚠️ Keine Grenzen im Landkreis gefunden');return;}
+    // Deduplizieren: gleichnamige mit Level
+    const levelLabel={'7':'VG','8':'Gem.','9':'OT','10':'OT'};
+    const items=candidates.map((c,i)=>({id:''+i,label:`${c.name} (${levelLabel[c.level]||c.level})`}));
+    const picked=await hTreePickFromList('OSM-Grenze wählen',items);
+    if(picked===null||picked==='') return;
+    const sel=candidates[parseInt(picked)];
+    regionPolygon=sel.coords;
+    regionName=sel.name;
+    const cx=sel.coords.reduce((s,c)=>s+c[0],0)/sel.coords.length;
+    const cy=sel.coords.reduce((s,c)=>s+c[1],0)/sel.coords.length;
+    centerLat=cx;centerLng=cy;
+    // Name ggf. überschreiben
+    const customName=await appPrompt('🗺 Region-Name',regionName,'Erstellen');
+    if(!customName) return;
+    regionName=customName.trim()||regionName;
+  } else if(polySource==='draw'){
+    const name=await appPrompt('🗺 Neue Region','Name eingeben…','Weiter zum Zeichnen');
+    if(!name||!name.trim()) return;
+    regionName=name.trim();
+    // Draw-Modus starten, Region wird nach drawSave gespeichert
+    pendingRegionDraw={gvId,name:regionName};
+    toast('✏️ Zeichne die Region-Grenze auf der Karte, dann ✅ zum Abschließen');
+    toggleDraw();
+    return; // Rest passiert in drawSaveRegion()
+  } else {
+    const name=await appPrompt('🗺 Neue Region','Name eingeben…','Erstellen');
+    if(!name||!name.trim()) return;
+    regionName=name.trim();
+  }
+
   const gv=gebietsverbaende[gvId];
-  const insertObj={name:name.trim(),short:name.trim(),gebietsverband_id:gvId,center_lat:gv?.center_lat||50.94,center_lng:gv?.center_lng||12.10,zoom:13};
+  const insertObj={name:regionName,short:regionName,gebietsverband_id:gvId,
+    center_lat:centerLat||gv?.center_lat||50.94,center_lng:centerLng||gv?.center_lng||12.10,zoom:13,
+    kml_coords:regionPolygon?JSON.stringify(regionPolygon):null};
   let data,error;
   ({data,error}=await sb.from('regionen').insert(insertObj).select().single());
   if(error){
     const r2=await sb.from('regionen').insert(insertObj);
     if(r2.error){toast('⚠️ '+r2.error.message);return;}
-    const r3=await sb.from('regionen').select('*').eq('name',name.trim()).eq('gebietsverband_id',gvId).order('created_at',{ascending:false}).limit(1).single();
+    const r3=await sb.from('regionen').select('*').eq('name',regionName).eq('gebietsverband_id',gvId).order('created_at',{ascending:false}).limit(1).single();
     data=r3.data||{id:crypto.randomUUID(),...insertObj};
   }
-  regionen[data.id]={...data,center:[data.center_lat,data.center_lng],gebiete:[]};
-  renderHTree();renderBreadcrumb();toast('✅ Region erstellt');
+  regionen[data.id]={...data,center:[data.center_lat||50.94,data.center_lng||12.10],gebiete:[]};
+  if(regionPolygon) regionen[data.id].polygon=regionPolygon;
+  renderHTree();renderBreadcrumb();renderStats();drawPolygons();
+  if(regionPolygon){
+    // Auf Region zoomen
+    const bounds=L.latLngBounds(regionPolygon.map(c=>[c[0],c[1]]));
+    map.fitBounds(bounds,{padding:[30,30]});
+  }
+  toast('✅ Region „'+regionName+'" erstellt');
+}
+
+let pendingRegionDraw=null;
+async function drawSaveRegion(){
+  if(!pendingRegionDraw||!drawPoints||drawPoints.length<3) return false;
+  const{gvId,name}=pendingRegionDraw;
+  pendingRegionDraw=null;
+  const coords=drawPoints.slice();
+  const cx=coords.reduce((s,c)=>s+c[0],0)/coords.length;
+  const cy=coords.reduce((s,c)=>s+c[1],0)/coords.length;
+  const gv=gebietsverbaende[gvId];
+  const insertObj={name,short:name,gebietsverband_id:gvId,center_lat:cx,center_lng:cy,zoom:13,kml_coords:JSON.stringify(coords)};
+  let data,error;
+  ({data,error}=await sb.from('regionen').insert(insertObj).select().single());
+  if(error){
+    const r2=await sb.from('regionen').insert(insertObj);
+    if(r2.error){toast('⚠️ '+r2.error.message);return true;}
+    const r3=await sb.from('regionen').select('*').eq('name',name).eq('gebietsverband_id',gvId).order('created_at',{ascending:false}).limit(1).single();
+    data=r3.data||{id:crypto.randomUUID(),...insertObj};
+  }
+  regionen[data.id]={...data,center:[cx,cy],polygon:coords,gebiete:[]};
+  drawCancel();
+  renderHTree();renderBreadcrumb();renderStats();drawPolygons();
+  toast('✅ Region „'+name+'" erstellt');
+  return true;
 }
 // Picker-Helper: zeigt Auswahl-Buttons statt prompt()
 function hTreePickFromList(title,items){
@@ -9075,6 +9232,13 @@ function drawFinish(){
   map.getContainer().style.cursor='';
   setDrawInfo('');
 
+  // Region-Zeichnen-Modus? → Region speichern statt Gebiet-Modal
+  if(pendingRegionDraw){
+    if(drawPolyline)map.removeLayer(drawPolyline);
+    drawSaveRegion();
+    return;
+  }
+
   // Show preview polygon
   if(drawPolyline)map.removeLayer(drawPolyline);
   drawPolyline=L.polygon(drawPoints,{color:'#009ee0',fillColor:'#009ee0',fillOpacity:.25,weight:2,dashArray:'6,4'}).addTo(map);
@@ -9108,7 +9272,7 @@ function drawFinish(){
 }
 
 function drawCancel(){
-  drawMode=false;drawEditId=null;
+  drawMode=false;drawEditId=null;pendingRegionDraw=null;
   map.off('click',onDrawClick);
   map.off('mousemove',onDrawMouseMove);
   map.getContainer().style.cursor='';
@@ -9436,40 +9600,39 @@ async function suggestGebieteForRegion(regionId){
       if(!grenzenData) throw new Error('Verwaltungsgrenzen nicht verfügbar');
     }
 
-    const lat=reg.center[0],lng=reg.center[1];
-
-    // Gemeinde finden, die Region-Center enthält
-    const gemeinden=grenzenData.filter(g=>g.level==='8'&&g.coords&&g.coords.length>=3);
-    let gem=null;
-    for(const g of gemeinden){if(pointInPolygon(lat,lng,g.coords)){gem=g;break;}}
-    // Fallback: nächste Gemeinde <10km
-    if(!gem){
-      let best=10;
-      for(const g of gemeinden){
-        const cx=g.coords.reduce((s,c)=>s+c[0],0)/g.coords.length;
-        const cy=g.coords.reduce((s,c)=>s+c[1],0)/g.coords.length;
-        const d=Math.sqrt((lat-cx)**2+(lng-cy)**2)*111;
-        if(d<best){best=d;gem=g;}
-      }
+    // Region-Polygon als Suchbereich (bevorzugt), Fallback: Gemeinde um Center
+    const regPoly=reg.polygon;
+    let searchPoly,searchName;
+    if(regPoly&&regPoly.length>=3){
+      searchPoly=regPoly;
+      searchName=reg.name||'Region';
+    } else {
+      const lat=reg.center[0],lng=reg.center[1];
+      const gemeinden=grenzenData.filter(g=>g.level==='8'&&g.coords&&g.coords.length>=3);
+      let gem=null;
+      for(const g of gemeinden){if(pointInPolygon(lat,lng,g.coords)){gem=g;break;}}
+      if(!gem){let best=10;for(const g of gemeinden){const cx=g.coords.reduce((s,c)=>s+c[0],0)/g.coords.length;const cy=g.coords.reduce((s,c)=>s+c[1],0)/g.coords.length;const d=Math.sqrt((lat-cx)**2+(lng-cy)**2)*111;if(d<best){best=d;gem=g;}}}
+      if(!gem) throw new Error('Kein Region-Polygon und keine Gemeinde gefunden.\nBitte Region mit Polygon erstellen (+ Region → OSM-Grenze wählen).');
+      searchPoly=gem.coords;
+      searchName=gem.name||'Gemeinde';
     }
-    if(!gem) throw new Error('Keine Gemeinde in der Nähe gefunden');
 
-    // Ortsteile innerhalb dieser Gemeinde
+    // Ortsteile innerhalb des Suchbereichs
     const ots=grenzenData.filter(g=>(g.level==='9'||g.level==='10')&&g.coords&&g.coords.length>=3).filter(o=>{
       const cx=o.coords.reduce((s,c)=>s+c[0],0)/o.coords.length;
       const cy=o.coords.reduce((s,c)=>s+c[1],0)/o.coords.length;
-      return pointInPolygon(cx,cy,gem.coords);
+      return pointInPolygon(cx,cy,searchPoly);
     });
 
     let candidates=ots.length>0
       ?ots.map(o=>({name:o.name||'Unbenannt',coords:o.coords}))
-      :[{name:gem.name||'Unbenannt',coords:gem.coords}];
+      :[{name:searchName,coords:searchPoly}];
 
-    // Gebäude für ganze Gemeinde per Overpass laden (1 Query)
-    document.getElementById('suggestGebietContent').innerHTML=`<p style="text-align:center;padding:20px">⏳ Schätze Haushalte für ${esc(gem.name)}…<br><small>(${candidates.length} Gebiet${candidates.length>1?'e':''} gefunden)</small></p>`;
+    // Gebäude per Overpass laden (1 Query für den gesamten Suchbereich)
+    document.getElementById('suggestGebietContent').innerHTML=`<p style="text-align:center;padding:20px">⏳ Schätze Haushalte für ${esc(searchName)}…<br><small>(${candidates.length} Gebiet${candidates.length>1?'e':''} gefunden)</small></p>`;
 
     let minLat=Infinity,maxLat=-Infinity,minLng=Infinity,maxLng=-Infinity;
-    gem.coords.forEach(c=>{if(c[0]<minLat)minLat=c[0];if(c[0]>maxLat)maxLat=c[0];if(c[1]<minLng)minLng=c[1];if(c[1]>maxLng)maxLng=c[1];});
+    searchPoly.forEach(c=>{if(c[0]<minLat)minLat=c[0];if(c[0]>maxLat)maxLat=c[0];if(c[1]<minLng)minLng=c[1];if(c[1]>maxLng)maxLng=c[1];});
     const bbox=`${minLat},${minLng},${maxLat},${maxLng}`;
     const query=`[out:json][timeout:30];(way["building"]["addr:housenumber"](${bbox});relation["building"]["addr:housenumber"](${bbox}););out center;`;
     const resp=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:'data='+encodeURIComponent(query)});
