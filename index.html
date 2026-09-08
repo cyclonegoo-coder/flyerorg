@@ -694,7 +694,11 @@ textarea{min-height:68px}
       </div>
       <div>
         <div style="font-size:.6rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:3px">Stückzahl</div>
-        <input type="number" id="newGebietStueck" placeholder="z.B. 200" value="100">
+        <div style="display:flex;gap:6px;align-items:center">
+          <input type="number" id="newGebietStueck" placeholder="z.B. 200" value="100" style="flex:1">
+          <button class="btn btn-g" onclick="estimateNewGebiet()" style="font-size:.7rem;padding:8px 10px;white-space:nowrap" title="Haushalte per OpenStreetMap schätzen">💡 Schätzen</button>
+        </div>
+        <div id="newGebietEstimate" style="font-size:.68rem;color:var(--text4);padding:2px 0;display:none"></div>
       </div>
       <div id="newGebietCoordInfo" style="font-size:.7rem;color:var(--text3);padding:6px 0"></div>
     </div>
@@ -839,7 +843,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v258 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v259 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -7306,7 +7310,7 @@ function openDetail(id){
         </div>
         <div style="background:var(--surface2);border-radius:var(--r8);padding:8px 10px">
           <div style="font-size:.7rem;font-weight:600;color:var(--text2);margin-bottom:5px">📦 Stückzahl ändern</div>
-          <div style="display:flex;gap:6px;align-items:center"><input type="number" id="inpS" value="${g.stueckzahl}" style="width:80px;min-width:80px;font-size:16px;font-weight:700;padding:10px 12px;color:#1c1c1e;text-align:center;border:1.5px solid var(--sep);border-radius:var(--r8);background:var(--surface2)"><button class="btn btn-g" onclick="saveSt2('${g.id}')" style="flex:1;padding:10px 14px;font-size:.78rem;white-space:nowrap">Ändern</button></div>
+          <div style="display:flex;gap:6px;align-items:center"><input type="number" id="inpS" value="${g.stueckzahl}" style="width:80px;min-width:80px;font-size:16px;font-weight:700;padding:10px 12px;color:#1c1c1e;text-align:center;border:1.5px solid var(--sep);border-radius:var(--r8);background:var(--surface2)"><button class="btn btn-g" onclick="saveSt2('${g.id}')" style="flex:1;padding:10px 14px;font-size:.78rem;white-space:nowrap">Ändern</button><button class="btn btn-g" onclick="estimateForGebiet('${g.id}')" style="padding:10px;font-size:.78rem" title="Haushalte per OSM schätzen">💡</button></div>
         </div>
         ${istPlakatKampagne()?`<div style="background:var(--surface2);border-radius:var(--r8);padding:8px 10px">
           <div style="font-size:.7rem;font-weight:600;color:var(--text2);margin-bottom:5px">📌 Plakat-Kontingent</div>
@@ -7458,7 +7462,7 @@ function openDetail(id){
         <button class="btn btn-p" onclick="saveZ('${g.id}')">Speichern</button>
       </div></div>
       <div class="d-sec"><div class="sec-hd">Stückzahl</div><div class="f-stack">
-        <input type="number" id="inpS" value="${g.stueckzahl}"><button class="btn btn-g" onclick="saveSt2('${g.id}')">Ändern</button>
+        <input type="number" id="inpS" value="${g.stueckzahl}"><button class="btn btn-g" onclick="saveSt2('${g.id}')">Ändern</button><button class="btn btn-g" onclick="estimateForGebiet('${g.id}')" style="padding:8px" title="Haushalte per OSM schätzen">💡</button>
       </div></div>`;
       if(istPlakatKampagne()){
         h+=`<div class="d-sec"><div class="sec-hd">📌 Plakat-Kontingent</div><div class="f-stack" style="flex-direction:row;gap:6px;align-items:center">
@@ -9327,6 +9331,71 @@ function cleanupEditMode(){
   editingGebietId=null;editOrigCoords=null;
   document.getElementById('drawInfo').style.display='none';
   document.getElementById('drawInfo').innerHTML='';
+}
+
+// ── Haushalt-Schätzung via Overpass (OSM) ──
+async function estimateHouseholdsForPolygon(coords){
+  if(!coords||coords.length<3) return null;
+  // Bounding Box berechnen
+  let minLat=Infinity,maxLat=-Infinity,minLng=Infinity,maxLng=-Infinity;
+  coords.forEach(c=>{if(c[0]<minLat)minLat=c[0];if(c[0]>maxLat)maxLat=c[0];if(c[1]<minLng)minLng=c[1];if(c[1]>maxLng)maxLng=c[1];});
+  const bbox=`${minLat},${minLng},${maxLat},${maxLng}`;
+  // Overpass: Wohngebäude in BBox zählen
+  const query=`[out:json][timeout:20];(way["building"~"^(yes|residential|apartments|house|detached|semidetached_house|terrace|farm|dormitory)$"](${bbox});relation["building"~"^(yes|residential|apartments|house|detached|semidetached_house|terrace|farm|dormitory)$"](${bbox}););out center;`;
+  const resp=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:'data='+encodeURIComponent(query)});
+  if(!resp.ok) throw new Error('Overpass-Fehler: '+resp.status);
+  const data=await resp.json();
+  // Gebäude-Mittelpunkte im Polygon filtern
+  let count=0;
+  (data.elements||[]).forEach(el=>{
+    const lat=el.center?el.center.lat:el.lat;
+    const lng=el.center?el.center.lon:el.lon;
+    if(lat&&lng&&pointInPolygon(lat,lng,coords)) count++;
+  });
+  // Mehrfamilienhäuser: apartments/dormitory zählen doppelt
+  let mfh=0;
+  (data.elements||[]).forEach(el=>{
+    const lat=el.center?el.center.lat:el.lat;
+    const lng=el.center?el.center.lon:el.lon;
+    if(lat&&lng&&pointInPolygon(lat,lng,coords)){
+      const bt=el.tags?.building||'';
+      if(bt==='apartments'||bt==='dormitory') mfh++;
+    }
+  });
+  // Schätzung: jedes Gebäude = 1 Briefkasten, Mehrfamilienhäuser +3 extra
+  return {buildings:count, estimate:count+mfh*3, mfh};
+}
+
+async function estimateNewGebiet(){
+  const coords=drawCoords&&drawCoords.length>=3?drawCoords:null;
+  if(!coords){toast('⚠️ Erst Polygon zeichnen');return;}
+  const info=document.getElementById('newGebietEstimate');
+  info.style.display='block';info.textContent='⏳ Lade OSM-Gebäudedaten…';
+  try{
+    const r=await estimateHouseholdsForPolygon(coords);
+    if(!r||r.buildings===0){info.textContent='ℹ️ Keine Gebäude in OSM gefunden';return;}
+    info.innerHTML=`🏠 ~${r.buildings} Gebäude (${r.mfh} MFH) → <strong>~${r.estimate} Briefkästen</strong> <a href="#" onclick="document.getElementById('newGebietStueck').value=${r.estimate};return false" style="color:var(--blue);font-size:.68rem">übernehmen</a>`;
+  }catch(e){info.textContent='⚠️ Fehler: '+e.message;}
+}
+
+async function estimateForGebiet(gebietId){
+  const coords=kmlP[gebietId];
+  if(!coords||coords.length<3){toast('⚠️ Kein Polygon vorhanden');return;}
+  const btn=event?.target;
+  if(btn){btn.disabled=true;btn.textContent='⏳…';}
+  try{
+    const r=await estimateHouseholdsForPolygon(coords);
+    if(btn){btn.disabled=false;btn.textContent='💡';}
+    if(!r||r.buildings===0){toast('ℹ️ Keine Gebäude in OSM gefunden');return;}
+    const ok=await appConfirm('🏠 Schätzung',`~${r.buildings} Gebäude (davon ${r.mfh} Mehrfamilienhäuser)\n\n→ geschätzt ~${r.estimate} Briefkästen\n\nAls Stückzahl übernehmen?`,'Übernehmen','Abbrechen');
+    if(ok){
+      const inp=document.getElementById('inpS');
+      if(inp){inp.value=r.estimate;saveSt2(gebietId);}
+    }
+  }catch(e){
+    if(btn){btn.disabled=false;btn.textContent='💡';}
+    toast('⚠️ '+e.message);
+  }
 }
 
 async function drawSave(){
