@@ -839,7 +839,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v257 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v258 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -10321,12 +10321,9 @@ function renderStatsPlakate(){
   if(mG){mG.textContent=gesText+' Ges.';mG.style.color='var(--blue)';}
   if(mV){mV.textContent=haengt+' Hängen';mV.style.color='#007aff';}
   if(mO){mO.textContent=abgeh+' Abgeh.';mO.style.color='#af52de';}
-  // 📌 Soll/Ist im Plakat-Modus: aktive (nicht vorlage, nicht gelöscht) zählen
+  // 📌 immer ausblenden — Soll/Ist steht bereits in "Gesamt"
   const pkStat=document.getElementById('mobStatPlakat');
-  if(pkStat){
-    if(sollT>0&&!curKampagne?.ist_basis){pkStat.textContent=`📌 ${tot}/${sollT}`;pkStat.style.display='inline';}
-    else{pkStat.style.display='none';}
-  }
+  if(pkStat) pkStat.style.display='none';
   // Fehlende Verteiler ausblenden
   const mF=document.getElementById('mobStatFehlt');
   if(mF) mF.style.display='none';
