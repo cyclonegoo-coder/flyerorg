@@ -839,7 +839,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v255 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v257 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -7160,9 +7160,12 @@ async function msBulkPdf(){
 function sl(s){return{offen:'Nicht zugestellt',zugeteilt:'Zugestellt',fertig:'Verteilt ✓'}[s]||s}
 function renderStats(){
   if(curMode==='plakate'){renderStatsPlakate();return;}
-  // Flyer-Labels zurücksetzen
+  // Flyer-Labels + Farben zurücksetzen
   const labels=document.querySelectorAll('.stat-l');
   if(labels.length>=3){labels[0].textContent='Gesamt';labels[1].textContent='Verteilt';labels[2].textContent='Offen';}
+  document.getElementById('statFlyer').style.color='var(--blue)';
+  document.getElementById('statVerteilt').style.color='var(--green)';
+  document.getElementById('statOffen').style.color='var(--orange)';
   const gs=getVisibleGebiete();
   const tot=gs.reduce((a,g)=>a+g.stueckzahl,0),
     vert=gs.filter(g=>g.status==='fertig').reduce((a,g)=>a+g.stueckzahl,0),fn=gs.filter(g=>g.status==='fertig').length;
@@ -7175,9 +7178,9 @@ function renderStats(){
   const mG=document.getElementById('mobStatGesamt');
   const mV=document.getElementById('mobStatVerteilt');
   const mO=document.getElementById('mobStatOffen');
-  if(mG)mG.textContent=tot.toLocaleString('de')+' Ges.';
-  if(mV)mV.textContent=vert.toLocaleString('de')+' Vert.';
-  if(mO)mO.textContent=(tot-vert).toLocaleString('de')+' Offen';
+  if(mG){mG.textContent=tot.toLocaleString('de')+' Ges.';mG.style.color='var(--blue)';}
+  if(mV){mV.textContent=vert.toLocaleString('de')+' Vert.';mV.style.color='var(--green)';}
+  if(mO){mO.textContent=(tot-vert).toLocaleString('de')+' Offen';mO.style.color='var(--orange)';}
   // Fehlende Verteiler (nur Manager)
   const mF=document.getElementById('mobStatFehlt');
   if(mF){
@@ -7188,16 +7191,9 @@ function renderStats(){
       mF.style.display=missing>0?'inline':'none';
     } else { mF.style.display='none'; }
   }
-  // Plakat Soll/Ist-Anzeige
+  // 📌 im Flyer-Modus immer ausblenden (wird nur in renderStatsPlakate gezeigt)
   const pkStat=document.getElementById('mobStatPlakat');
-  if(pkStat){
-    if(istPlakatKampagne()&&!curKampagne?.ist_basis){
-      const sollT=gs.reduce((s,g)=>s+(g.soll_stueck||0),0);
-      const istT=gs.reduce((s,g)=>s+(g.ist_stueck||0),0);
-      if(sollT>0){pkStat.textContent=`📌 ${istT}/${sollT}`;pkStat.style.display='inline';}
-      else{pkStat.style.display='none';}
-    } else {pkStat.style.display='none';}
-  }
+  if(pkStat) pkStat.style.display='none';
 }
 
 // ============================================================
@@ -9673,13 +9669,27 @@ function pointInPolygon(lat,lng,polygon){
 }
 
 function detectGebietForPoint(lat,lng){
+  // 1. Exakt im Polygon?
   for(const r of Object.values(regionen)){
     for(const g of r.gebiete){
       const coords=kmlP[g.id];
       if(coords&&coords.length>=3&&pointInPolygon(lat,lng,coords)) return g.id;
     }
   }
-  return null;
+  // 2. Fallback: nächstgelegenes Gebiet (max 2 km)
+  let best=null,bestDist=2;
+  for(const r of Object.values(regionen)){
+    for(const g of r.gebiete){
+      const coords=kmlP[g.id];
+      if(!coords||coords.length<3) continue;
+      // Abstand zum Polygon-Centroid
+      const cx=coords.reduce((s,c)=>s+c[0],0)/coords.length;
+      const cy=coords.reduce((s,c)=>s+c[1],0)/coords.length;
+      const d=Math.sqrt((lat-cx)**2+(lng-cy)**2)*111; // grobe km
+      if(d<bestDist){bestDist=d;best=g.id;}
+    }
+  }
+  return best;
 }
 
 // ── Map-Klick für Plakat-Platzierung ──
@@ -9853,11 +9863,34 @@ function drawPlakatMarkers(){
   if(curMode!=='plakate') return;
   const visible=getVisiblePlakate();
   visible.forEach(p=>{
-    const marker=L.marker([p.lat,p.lng],{icon:getPlakatIcon(p.status,p.id)}).addTo(map);
+    const marker=L.marker([p.lat,p.lng],{icon:getPlakatIcon(p.status,p.id),draggable:false}).addTo(map);
     marker.on('click',function(e){
       L.DomEvent.stopPropagation(e);
       if(tourPickStartMode){onPlakatPickedAsStart(p.id);return;}
       openPlakatDetailModal(p.id);
+    });
+    // Long-press → Drag-Modus aktivieren
+    let lpTimer=null;
+    marker.on('mousedown touchstart',function(){
+      lpTimer=setTimeout(()=>{
+        lpTimer=null;
+        marker.dragging.enable();
+        marker.setOpacity(0.6);
+        toast('📌 Plakat verschieben — loslassen zum Speichern');
+      },600);
+    });
+    marker.on('mouseup touchend click',function(){if(lpTimer){clearTimeout(lpTimer);lpTimer=null;}});
+    marker.on('dragend',async function(){
+      marker.dragging.disable();
+      marker.setOpacity(1);
+      const ll=marker.getLatLng();
+      const newGebiet=detectGebietForPoint(ll.lat,ll.lng);
+      const {error}=await sb.from('plakate').update({lat:ll.lat,lng:ll.lng,gebiet_id:newGebiet}).eq('id',p.id);
+      if(error){toast('⚠️ Fehler: '+error.message);marker.setLatLng([p.lat,p.lng]);return;}
+      p.lat=ll.lat;p.lng=ll.lng;p.gebiet_id=newGebiet;
+      const gName=newGebiet?getG(newGebiet)?.name||'?':'Außerhalb';
+      toast(`✅ Plakat verschoben → ${gName}`);
+      renderStats();
     });
     plakatMarkers[p.id]=marker;
   });
@@ -10256,31 +10289,47 @@ function selectPlakat(id){
 
 function renderStatsPlakate(){
   const visible=getVisiblePlakate();
-  const tot=visible.length;
-  const haengt=visible.filter(p=>p.status==='haengt'||p.status==='ersetzt').length;
-  const abgeh=visible.filter(p=>p.status==='abgehaengt').length;
-  const zerst=visible.filter(p=>p.status==='zerstoert').length;
-  document.getElementById('statFlyer').textContent=tot;
+  // #3: Vorlagen (grau) NICHT mitzählen
+  const aktiv=visible.filter(p=>p.status!=='vorlage');
+  const tot=aktiv.length;
+  const haengt=aktiv.filter(p=>p.status==='haengt'||p.status==='ersetzt').length;
+  // #4: abgehängt zählt weiter als "aktiv", wird separat gezählt
+  const abgeh=aktiv.filter(p=>p.status==='abgehaengt').length;
+  const zerst=aktiv.filter(p=>p.status==='zerstoert').length;
+  // #7: Soll aus Kontingenten berechnen
+  const gs=getVisibleGebiete();
+  const sollT=gs.reduce((s,g)=>s+(g.soll_stueck||0),0);
+  const gesText=sollT>0?`${tot}/${sollT}`:`${tot}`;
+  document.getElementById('statFlyer').textContent=gesText;
   document.getElementById('statVerteilt').textContent=haengt;
-  document.getElementById('statOffen').textContent=abgeh+zerst;
-  // Labels anpassen
+  document.getElementById('statOffen').textContent=abgeh;
+  // #2+#6: Labels + Farben anpassen
   const labels=document.querySelectorAll('.stat-l');
-  if(labels.length>=3){labels[0].textContent='Gesamt';labels[1].textContent='Hängen';labels[2].textContent='Erledigt';}
-  // Progress: Wie viele sind abgehängt?
-  document.getElementById('progText').textContent=`${abgeh} / ${tot} abgehängt`;
-  document.getElementById('progFill').style.width=(tot?abgeh/tot*100:0)+'%';
+  if(labels.length>=3){labels[0].textContent='Gesamt';labels[1].textContent='Hängen';labels[2].textContent='Abgehängt';}
+  // Farben: Gesamt=blau, Hängen=blau(hängt), Abgehängt=lila
+  document.getElementById('statFlyer').style.color='var(--blue)';
+  document.getElementById('statVerteilt').style.color='#007aff';
+  document.getElementById('statOffen').style.color='#af52de';
+  // Progress: Hängen + Abgehängt von Gesamt
+  const done=haengt+abgeh;
+  document.getElementById('progText').textContent=`${done} / ${tot} erledigt`;
+  document.getElementById('progFill').style.width=(tot?done/tot*100:0)+'%';
   // Mobile stats
   const mG=document.getElementById('mobStatGesamt');
   const mV=document.getElementById('mobStatVerteilt');
   const mO=document.getElementById('mobStatOffen');
-  if(mG)mG.textContent=tot+' Ges.';
-  if(mV)mV.textContent=haengt+' Hängen';
-  if(mO)mO.textContent=(abgeh+zerst)+' Erledigt';
-  // Im Plakat-Modus fehlende Verteiler und Soll/Ist ausblenden
+  if(mG){mG.textContent=gesText+' Ges.';mG.style.color='var(--blue)';}
+  if(mV){mV.textContent=haengt+' Hängen';mV.style.color='#007aff';}
+  if(mO){mO.textContent=abgeh+' Abgeh.';mO.style.color='#af52de';}
+  // 📌 Soll/Ist im Plakat-Modus: aktive (nicht vorlage, nicht gelöscht) zählen
+  const pkStat=document.getElementById('mobStatPlakat');
+  if(pkStat){
+    if(sollT>0&&!curKampagne?.ist_basis){pkStat.textContent=`📌 ${tot}/${sollT}`;pkStat.style.display='inline';}
+    else{pkStat.style.display='none';}
+  }
+  // Fehlende Verteiler ausblenden
   const mF=document.getElementById('mobStatFehlt');
   if(mF) mF.style.display='none';
-  const pkStat=document.getElementById('mobStatPlakat');
-  if(pkStat) pkStat.style.display='none';
 }
 
 // ── Plakat-Routen: Google Maps + GPX ──
