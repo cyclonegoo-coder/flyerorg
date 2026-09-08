@@ -8776,12 +8776,28 @@ async function hTreeAddLK(){
     lkName=name.trim();
   }
 
-  const insertObj={name:lkName,kml_coords:lkPoly?JSON.stringify(lkPoly):null};
-  if(centerLat){insertObj.center_lat=centerLat;insertObj.center_lng=centerLng;}
-  const {data,error}=await sb.from('landkreise').insert(insertObj).select().single();
+  const insertObj={name:lkName};
+  // kml_coords + center nur wenn Spalten existieren (Migration nötig)
+  if(lkPoly) insertObj.kml_coords=JSON.stringify(lkPoly);
+  let data,error;
+  ({data,error}=await sb.from('landkreise').insert(insertObj).select().single());
+  if(error&&lkPoly){
+    // Fallback: ohne kml_coords (Spalte existiert evtl. noch nicht)
+    console.warn('LK insert mit kml_coords fehlgeschlagen, versuche ohne:',error.message);
+    delete insertObj.kml_coords;
+    ({data,error}=await sb.from('landkreise').insert(insertObj).select().single());
+  }
   if(error){toast('⚠️ '+error.message);return;}
   landkreise[data.id]={...data};
-  if(lkPoly) landkreise[data.id].polygon=lkPoly;
+  if(lkPoly){
+    landkreise[data.id].polygon=lkPoly;
+    // Polygon nachträglich speichern (falls erster Versuch fehlschlug)
+    if(!data.kml_coords){
+      sb.from('landkreise').update({kml_coords:JSON.stringify(lkPoly)}).eq('id',data.id).then(r=>{
+        if(r.error) console.warn('kml_coords update failed (Migration nötig?):', r.error.message);
+      });
+    }
+  }
   renderHTree();renderBreadcrumb();drawPolygons();
   if(lkPoly){
     const bounds=L.latLngBounds(lkPoly.map(c=>[c[0],c[1]]));
@@ -8915,10 +8931,16 @@ async function hTreeAddReg(){
 
   const gv=gebietsverbaende[gvId];
   const insertObj={name:regionName,short:regionName,gebietsverband_id:gvId,
-    center_lat:centerLat||gv?.center_lat||50.94,center_lng:centerLng||gv?.center_lng||12.10,zoom:13,
-    kml_coords:regionPolygon?JSON.stringify(regionPolygon):null};
+    center_lat:centerLat||gv?.center_lat||50.94,center_lng:centerLng||gv?.center_lng||12.10,zoom:13};
+  if(regionPolygon) insertObj.kml_coords=JSON.stringify(regionPolygon);
   let data,error;
   ({data,error}=await sb.from('regionen').insert(insertObj).select().single());
+  if(error&&regionPolygon){
+    // Fallback: ohne kml_coords (Spalte existiert evtl. noch nicht)
+    console.warn('Region insert mit kml_coords fehlgeschlagen, versuche ohne:',error.message);
+    delete insertObj.kml_coords;
+    ({data,error}=await sb.from('regionen').insert(insertObj).select().single());
+  }
   if(error){
     const r2=await sb.from('regionen').insert(insertObj);
     if(r2.error){toast('⚠️ '+r2.error.message);return;}
@@ -8926,7 +8948,14 @@ async function hTreeAddReg(){
     data=r3.data||{id:crypto.randomUUID(),...insertObj};
   }
   regionen[data.id]={...data,center:[data.center_lat||50.94,data.center_lng||12.10],gebiete:[]};
-  if(regionPolygon) regionen[data.id].polygon=regionPolygon;
+  if(regionPolygon){
+    regionen[data.id].polygon=regionPolygon;
+    if(!data.kml_coords){
+      sb.from('regionen').update({kml_coords:JSON.stringify(regionPolygon)}).eq('id',data.id).then(r=>{
+        if(r.error) console.warn('Region kml_coords update failed (Migration nötig?):', r.error.message);
+      });
+    }
+  }
   renderHTree();renderBreadcrumb();renderStats();drawPolygons();
   if(regionPolygon){
     // Auf Region zoomen
@@ -8945,16 +8974,29 @@ async function drawSaveRegion(){
   const cx=coords.reduce((s,c)=>s+c[0],0)/coords.length;
   const cy=coords.reduce((s,c)=>s+c[1],0)/coords.length;
   const gv=gebietsverbaende[gvId];
-  const insertObj={name,short:name,gebietsverband_id:gvId,center_lat:cx,center_lng:cy,zoom:13,kml_coords:JSON.stringify(coords)};
+  const insertObj={name,short:name,gebietsverband_id:gvId,center_lat:cx,center_lng:cy,zoom:13};
+  insertObj.kml_coords=JSON.stringify(coords);
   let data,error;
   ({data,error}=await sb.from('regionen').insert(insertObj).select().single());
   if(error){
-    const r2=await sb.from('regionen').insert(insertObj);
-    if(r2.error){toast('⚠️ '+r2.error.message);return true;}
-    const r3=await sb.from('regionen').select('*').eq('name',name).eq('gebietsverband_id',gvId).order('created_at',{ascending:false}).limit(1).single();
-    data=r3.data||{id:crypto.randomUUID(),...insertObj};
+    // Fallback ohne kml_coords
+    console.warn('drawSaveRegion mit kml_coords fehlgeschlagen:',error.message);
+    delete insertObj.kml_coords;
+    ({data,error}=await sb.from('regionen').insert(insertObj).select().single());
+    if(error){
+      const r2=await sb.from('regionen').insert(insertObj);
+      if(r2.error){toast('⚠️ '+r2.error.message);return true;}
+      const r3=await sb.from('regionen').select('*').eq('name',name).eq('gebietsverband_id',gvId).order('created_at',{ascending:false}).limit(1).single();
+      data=r3.data||{id:crypto.randomUUID(),...insertObj};
+    }
   }
   regionen[data.id]={...data,center:[cx,cy],polygon:coords,gebiete:[]};
+  // Polygon nachträglich speichern falls erster Insert ohne kml_coords war
+  if(!data.kml_coords){
+    sb.from('regionen').update({kml_coords:JSON.stringify(coords)}).eq('id',data.id).then(r=>{
+      if(r.error) console.warn('Region kml_coords update failed:', r.error.message);
+    });
+  }
   drawCancel();
   renderHTree();renderBreadcrumb();renderStats();drawPolygons();
   toast('✅ Region „'+name+'" erstellt');
