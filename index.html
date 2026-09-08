@@ -857,7 +857,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v262 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v264 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -8570,9 +8570,12 @@ function renderHTree(){
           <span class="htree-icon">${rOpen?'▾':'▸'}</span>
           <span class="htree-icon">📁</span>
           <span class="htree-label">${r.name} <span style="font-size:.6rem;color:var(--text4)">(${r.short||''})</span></span>
+          ${r.polygon&&r.polygon.length>=3?'<span title="Polygon vorhanden" style="font-size:.6rem;cursor:default">🗺</span>':
+            (canEditReg?`<button onclick="event.stopPropagation();hTreeAssignPoly('reg','${rId}')" title="Polygon zuweisen" style="font-size:.55rem;background:none;border:none;cursor:pointer;padding:0 2px">⚠️</button>`:'')}
           <span class="htree-badge">${rCount} Geb.</span>
           <span class="htree-actions">
             ${canEditReg?`<button onclick="event.stopPropagation();hTreeRenameStart(this.closest('.htree-row'),'regionen','${rId}')" title="Umbenennen">✏️</button>
+            ${r.polygon&&r.polygon.length>=3?`<button onclick="event.stopPropagation();hTreeAssignPoly('reg','${rId}')" title="Polygon ändern" style="font-size:.55rem">🗺</button>`:''}
             <button onclick="event.stopPropagation();deleteRegion('${rId}')" title="Löschen" style="color:var(--red)">🗑</button>`:''}
           </span>
         </div><div class="htree-children${rOpen?'':' collapsed'}">${rChildHtml}</div></div>`;
@@ -8601,9 +8604,12 @@ function renderHTree(){
       <span class="htree-icon">${lkOpen?'▾':'▸'}</span>
       <span class="htree-icon">🏛</span>
       <span class="htree-label" style="font-weight:600">${lk.name}</span>
+      ${lk.polygon&&lk.polygon.length>=3?'<span title="Polygon vorhanden" style="font-size:.65rem;cursor:default">🗺</span>':
+        (isAdmin?`<button onclick="event.stopPropagation();hTreeAssignPoly('lk','${lkId}')" title="Polygon zuweisen" style="font-size:.6rem;background:none;border:none;cursor:pointer;padding:0 2px">⚠️</button>`:'')}
       <span class="htree-badge">${gvEntries.length} GV · ${lkGebietCount} Geb.</span>
       <span class="htree-actions">
         ${isAdmin?`<button onclick="event.stopPropagation();hTreeRenameStart(this.closest('.htree-row'),'landkreise','${lkId}')" title="Umbenennen">✏️</button>
+        ${lk.polygon&&lk.polygon.length>=3?`<button onclick="event.stopPropagation();hTreeAssignPoly('lk','${lkId}')" title="Polygon ändern" style="font-size:.6rem">🗺</button>`:''}
         <button onclick="event.stopPropagation();deleteLandkreis('${lkId}')" title="Löschen" style="color:var(--red)">🗑</button>`:''}
       </span>
     </div><div class="htree-children${lkOpen?'':' collapsed'}">${childrenHtml}</div></div>`;
@@ -8784,6 +8790,7 @@ async function hTreeAddLK(){
   if(error&&lkPoly){
     // Fallback: ohne kml_coords (Spalte existiert evtl. noch nicht)
     console.warn('LK insert mit kml_coords fehlgeschlagen, versuche ohne:',error.message);
+    toast('ℹ️ Polygon konnte nicht direkt gespeichert werden — wird nachträglich versucht');
     delete insertObj.kml_coords;
     ({data,error}=await sb.from('landkreise').insert(insertObj).select().single());
   }
@@ -8938,6 +8945,7 @@ async function hTreeAddReg(){
   if(error&&regionPolygon){
     // Fallback: ohne kml_coords (Spalte existiert evtl. noch nicht)
     console.warn('Region insert mit kml_coords fehlgeschlagen, versuche ohne:',error.message);
+    toast('ℹ️ Polygon konnte nicht direkt gespeichert werden — wird nachträglich versucht');
     delete insertObj.kml_coords;
     ({data,error}=await sb.from('regionen').insert(insertObj).select().single());
   }
@@ -8968,11 +8976,28 @@ async function hTreeAddReg(){
 let pendingRegionDraw=null;
 async function drawSaveRegion(){
   if(!pendingRegionDraw||!drawPoints||drawPoints.length<3) return false;
-  const{gvId,name}=pendingRegionDraw;
+  const{gvId,name,updateId}=pendingRegionDraw;
   pendingRegionDraw=null;
   const coords=drawPoints.slice();
   const cx=coords.reduce((s,c)=>s+c[0],0)/coords.length;
   const cy=coords.reduce((s,c)=>s+c[1],0)/coords.length;
+
+  // Update-Modus: nur Polygon für bestehende Region aktualisieren
+  if(updateId){
+    const r=regionen[updateId];
+    if(r) r.polygon=coords;
+    const{error}=await sb.from('regionen').update({kml_coords:JSON.stringify(coords)}).eq('id',updateId);
+    drawCancel();
+    renderHTree();drawPolygons();
+    if(error){
+      console.warn('Region-Polygon-Update fehlgeschlagen:',error.message);
+      toast('⚠️ Polygon konnte nicht gespeichert werden (Migration nötig?)');
+    } else {
+      toast('✅ Polygon für „'+name+'" gespeichert');
+    }
+    return true;
+  }
+
   const gv=gebietsverbaende[gvId];
   const insertObj={name,short:name,gebietsverband_id:gvId,center_lat:cx,center_lng:cy,zoom:13};
   insertObj.kml_coords=JSON.stringify(coords);
@@ -8981,6 +9006,7 @@ async function drawSaveRegion(){
   if(error){
     // Fallback ohne kml_coords
     console.warn('drawSaveRegion mit kml_coords fehlgeschlagen:',error.message);
+    toast('ℹ️ Polygon konnte nicht direkt gespeichert werden — wird nachträglich versucht');
     delete insertObj.kml_coords;
     ({data,error}=await sb.from('regionen').insert(insertObj).select().single());
     if(error){
@@ -9002,6 +9028,87 @@ async function drawSaveRegion(){
   toast('✅ Region „'+name+'" erstellt');
   return true;
 }
+// ── Nachträgliche Polygon-Zuweisung für LK/Region ──
+async function hTreeAssignPoly(type,id){
+  // type: 'lk' oder 'reg'
+  const isLK=type==='lk';
+  const entity=isLK?landkreise[id]:regionen[id];
+  if(!entity){toast('⚠️ Eintrag nicht gefunden');return;}
+  const hasPoly=entity.polygon&&entity.polygon.length>=3;
+
+  const opts=[{label:'🗺 OSM-Verwaltungsgrenze wählen',value:'osm'}];
+  if(!isLK) opts.push({label:'✏️ Manuell zeichnen',value:'draw'});
+  if(hasPoly) opts.push({label:'🗑 Polygon entfernen',value:'remove'});
+  opts.push({label:'⏭ Abbrechen',value:'cancel'});
+
+  const title=isLK?'🏛 Polygon — '+entity.name:'🗺 Polygon — '+entity.name;
+  const src=await appChoice(title,hasPoly?'Polygon ändern oder neu zuweisen:':'Polygon zuweisen:',opts);
+  if(!src||src==='cancel') return;
+
+  if(src==='remove'){
+    entity.polygon=null;
+    const tbl=isLK?'landkreise':'regionen';
+    await sb.from(tbl).update({kml_coords:null}).eq('id',id);
+    renderHTree();drawPolygons();
+    toast('✅ Polygon entfernt');
+    return;
+  }
+
+  if(src==='osm'){
+    if(!grenzenData){toast('⏳ Verwaltungsgrenzen laden…');await toggleVerwaltungsgrenzen(true);}
+    if(!grenzenData){toast('⚠️ Grenzen nicht verfügbar');return;}
+    let candidates;
+    if(isLK){
+      candidates=grenzenData.filter(g=>g.level==='6'&&g.name&&g.coords&&g.coords.length>=3)
+        .sort((a,b)=>a.name.localeCompare(b.name));
+    } else {
+      // Region: Level 7-10, gefiltert nach LK-Polygon
+      const gvObj=gebietsverbaende[entity.gebietsverband_id];
+      const lkId2=gvObj?.landkreis_id;
+      const lkPoly2=lkId2&&landkreise[lkId2]?landkreise[lkId2].polygon:null;
+      candidates=grenzenData.filter(g=>(g.level==='7'||g.level==='8'||g.level==='9'||g.level==='10')&&g.name&&g.coords&&g.coords.length>=3)
+        .filter(g=>{
+          if(!lkPoly2||lkPoly2.length<3) return true;
+          const cx=g.coords.reduce((s,c)=>s+c[0],0)/g.coords.length;
+          const cy=g.coords.reduce((s,c)=>s+c[1],0)/g.coords.length;
+          return pointInPolygon(cx,cy,lkPoly2);
+        }).sort((a,b)=>a.name.localeCompare(b.name));
+    }
+    if(candidates.length===0){toast('⚠️ Keine passenden Grenzen gefunden');return;}
+    const levelLabel={'6':'LK','7':'VG','8':'Gem.','9':'OT','10':'OT'};
+    const items=candidates.map((c,i)=>({id:''+i,label:`${c.name} (${levelLabel[c.level]||c.level})`}));
+    const picked=await hTreePickFromList('Grenze wählen',items);
+    if(picked===null||picked==='') return;
+    const sel=candidates[parseInt(picked)];
+    const poly=sel.coords;
+    const cx=poly.reduce((s,c)=>s+c[0],0)/poly.length;
+    const cy=poly.reduce((s,c)=>s+c[1],0)/poly.length;
+    entity.polygon=poly;
+    const tbl=isLK?'landkreise':'regionen';
+    const upd={kml_coords:JSON.stringify(poly)};
+    const{error}=await sb.from(tbl).update(upd).eq('id',id);
+    if(error){
+      console.warn('Polygon-Update fehlgeschlagen:',error.message);
+      toast('⚠️ Polygon konnte nicht in DB gespeichert werden (Migration nötig?)');
+    } else {
+      toast('✅ Polygon zugewiesen');
+    }
+    renderHTree();drawPolygons();
+    if(poly.length>=3){
+      const bounds=L.latLngBounds(poly.map(c=>[c[0],c[1]]));
+      map.fitBounds(bounds,{padding:[30,30]});
+    }
+    return;
+  }
+
+  if(src==='draw'&&!isLK){
+    // Manuell zeichnen für Region
+    pendingRegionDraw={gvId:entity.gebietsverband_id,name:entity.name,updateId:id};
+    toast('✏️ Zeichne die Region-Grenze auf der Karte, dann ✅ zum Abschließen');
+    toggleDraw();
+  }
+}
+
 // Picker-Helper: zeigt Auswahl-Buttons statt prompt()
 function hTreePickFromList(title,items){
   return new Promise(resolve=>{
