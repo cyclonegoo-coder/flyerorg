@@ -857,7 +857,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v264 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v265 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -8773,7 +8773,7 @@ async function hTreeAddLK(){
     const cx=sel.coords.reduce((s,c)=>s+c[0],0)/sel.coords.length;
     const cy=sel.coords.reduce((s,c)=>s+c[1],0)/sel.coords.length;
     centerLat=cx;centerLng=cy;
-    const custom=await appPrompt('🏛 Landkreis-Name',lkName,'Erstellen');
+    const custom=await appPrompt('🏛 Landkreis-Name','Name…','Erstellen','Abbrechen',lkName);
     if(!custom) return;
     lkName=custom.trim()||lkName;
   } else {
@@ -8889,38 +8889,66 @@ async function hTreeAddReg(){
   let regionPolygon=null,regionName='',centerLat=null,centerLng=null;
 
   if(polySource==='osm'){
-    // OSM-Grenze aus grenzenData wählen
+    // OSM-Grenzen aus grenzenData wählen (Multi-Select)
     if(!grenzenData){toast('⏳ Verwaltungsgrenzen laden…');await toggleVerwaltungsgrenzen(true);}
     if(!grenzenData){toast('⚠️ Grenzen nicht verfügbar');return;}
-    // Nur Grenzen innerhalb des Landkreis-Polygons anzeigen (falls vorhanden)
     const gvObj=gebietsverbaende[gvId];
     const lkId2=gvObj?.landkreis_id;
     const lkPoly2=lkId2&&landkreise[lkId2]?landkreise[lkId2].polygon:null;
-    const candidates=grenzenData.filter(g=>(g.level==='7'||g.level==='8'||g.level==='9'||g.level==='10')&&g.name&&g.coords&&g.coords.length>=3)
+    const raw=grenzenData.filter(g=>(g.level==='7'||g.level==='8'||g.level==='9'||g.level==='10')&&g.name&&g.coords&&g.coords.length>=3)
       .filter(g=>{
-        if(!lkPoly2||lkPoly2.length<3) return true; // kein LK-Polygon → alles zeigen
-        const cx=g.coords.reduce((s,c)=>s+c[0],0)/g.coords.length;
-        const cy=g.coords.reduce((s,c)=>s+c[1],0)/g.coords.length;
-        return pointInPolygon(cx,cy,lkPoly2);
+        if(!lkPoly2||lkPoly2.length<3) return true;
+        const cx2=g.coords.reduce((s,c)=>s+c[0],0)/g.coords.length;
+        const cy2=g.coords.reduce((s,c)=>s+c[1],0)/g.coords.length;
+        return pointInPolygon(cx2,cy2,lkPoly2);
       })
       .map(g=>({name:g.name,level:g.level,coords:g.coords}))
       .sort((a,b)=>a.name.localeCompare(b.name));
+    // Deduplizieren: gleicher Name+Level → nur einmal
+    const seen=new Set();
+    const candidates=raw.filter(g=>{const k=g.name+'_'+g.level;if(seen.has(k))return false;seen.add(k);return true;});
     if(candidates.length===0){toast('⚠️ Keine Grenzen im Landkreis gefunden');return;}
-    // Deduplizieren: gleichnamige mit Level
+    // Bereits vorhandene Regionen markieren
+    const existingNames=new Set(Object.values(regionen).filter(r=>r.gebietsverband_id===gvId).map(r=>r.name));
     const levelLabel={'7':'VG','8':'Gem.','9':'OT','10':'OT'};
-    const items=candidates.map((c,i)=>({id:''+i,label:`${c.name} (${levelLabel[c.level]||c.level})`}));
-    const picked=await hTreePickFromList('OSM-Grenze wählen',items);
-    if(picked===null||picked==='') return;
-    const sel=candidates[parseInt(picked)];
-    regionPolygon=sel.coords;
-    regionName=sel.name;
-    const cx=sel.coords.reduce((s,c)=>s+c[0],0)/sel.coords.length;
-    const cy=sel.coords.reduce((s,c)=>s+c[1],0)/sel.coords.length;
-    centerLat=cx;centerLng=cy;
-    // Name ggf. überschreiben
-    const customName=await appPrompt('🗺 Region-Name',regionName,'Erstellen');
-    if(!customName) return;
-    regionName=customName.trim()||regionName;
+    const items=candidates.map((c,i)=>({id:''+i,label:`${c.name} (${levelLabel[c.level]||c.level})${existingNames.has(c.name)?' ✓':''}`}));
+    const picked=await hTreePickMulti('OSM-Regionen wählen (Mehrfachauswahl)',items);
+    if(!picked) return;
+    // Batch-Erstellung
+    const gv=gebietsverbaende[gvId];
+    let created=0,failed=0;
+    for(const idx of picked){
+      const sel=candidates[parseInt(idx)];
+      const cx3=sel.coords.reduce((s,c)=>s+c[0],0)/sel.coords.length;
+      const cy3=sel.coords.reduce((s,c)=>s+c[1],0)/sel.coords.length;
+      const insObj={name:sel.name,short:sel.name,gebietsverband_id:gvId,
+        center_lat:cx3,center_lng:cy3,zoom:13};
+      insObj.kml_coords=JSON.stringify(sel.coords);
+      let data,error;
+      ({data,error}=await sb.from('regionen').insert(insObj).select().single());
+      if(error){
+        console.warn('Region insert fehlgeschlagen für '+sel.name+':',error.message);
+        delete insObj.kml_coords;
+        ({data,error}=await sb.from('regionen').insert(insObj).select().single());
+        if(error){
+          const r2=await sb.from('regionen').insert(insObj);
+          if(r2.error){failed++;continue;}
+          const r3=await sb.from('regionen').select('*').eq('name',sel.name).eq('gebietsverband_id',gvId).order('created_at',{ascending:false}).limit(1).single();
+          data=r3.data||{id:crypto.randomUUID(),...insObj};
+        }
+      }
+      regionen[data.id]={...data,center:[cx3,cy3],polygon:sel.coords,gebiete:[]};
+      if(!data.kml_coords){
+        sb.from('regionen').update({kml_coords:JSON.stringify(sel.coords)}).eq('id',data.id).then(r=>{
+          if(r.error) console.warn('kml_coords update failed:',r.error.message);
+        });
+      }
+      created++;
+    }
+    renderHTree();renderBreadcrumb();renderStats();drawPolygons();
+    if(lkPoly2&&lkPoly2.length>=3){map.fitBounds(L.latLngBounds(lkPoly2.map(c=>[c[0],c[1]])),{padding:[30,30]});}
+    toast(`✅ ${created} Region${created!==1?'en':''} erstellt`+(failed>0?` (${failed} fehlgeschlagen)`:''));
+    return;
   } else if(polySource==='draw'){
     const name=await appPrompt('🗺 Neue Region','Name eingeben…','Weiter zum Zeichnen');
     if(!name||!name.trim()) return;
@@ -9057,16 +9085,15 @@ async function hTreeAssignPoly(type,id){
   if(src==='osm'){
     if(!grenzenData){toast('⏳ Verwaltungsgrenzen laden…');await toggleVerwaltungsgrenzen(true);}
     if(!grenzenData){toast('⚠️ Grenzen nicht verfügbar');return;}
-    let candidates;
+    let rawCandidates;
     if(isLK){
-      candidates=grenzenData.filter(g=>g.level==='6'&&g.name&&g.coords&&g.coords.length>=3)
+      rawCandidates=grenzenData.filter(g=>g.level==='6'&&g.name&&g.coords&&g.coords.length>=3)
         .sort((a,b)=>a.name.localeCompare(b.name));
     } else {
-      // Region: Level 7-10, gefiltert nach LK-Polygon
       const gvObj=gebietsverbaende[entity.gebietsverband_id];
       const lkId2=gvObj?.landkreis_id;
       const lkPoly2=lkId2&&landkreise[lkId2]?landkreise[lkId2].polygon:null;
-      candidates=grenzenData.filter(g=>(g.level==='7'||g.level==='8'||g.level==='9'||g.level==='10')&&g.name&&g.coords&&g.coords.length>=3)
+      rawCandidates=grenzenData.filter(g=>(g.level==='7'||g.level==='8'||g.level==='9'||g.level==='10')&&g.name&&g.coords&&g.coords.length>=3)
         .filter(g=>{
           if(!lkPoly2||lkPoly2.length<3) return true;
           const cx=g.coords.reduce((s,c)=>s+c[0],0)/g.coords.length;
@@ -9074,6 +9101,8 @@ async function hTreeAssignPoly(type,id){
           return pointInPolygon(cx,cy,lkPoly2);
         }).sort((a,b)=>a.name.localeCompare(b.name));
     }
+    const seenAP=new Set();
+    const candidates=rawCandidates.filter(g=>{const k=g.name+'_'+g.level;if(seenAP.has(k))return false;seenAP.add(k);return true;});
     if(candidates.length===0){toast('⚠️ Keine passenden Grenzen gefunden');return;}
     const levelLabel={'6':'LK','7':'VG','8':'Gem.','9':'OT','10':'OT'};
     const items=candidates.map((c,i)=>({id:''+i,label:`${c.name} (${levelLabel[c.level]||c.level})`}));
@@ -9126,6 +9155,40 @@ function hTreePickFromList(title,items){
         resolve(btn.dataset.pickId||null);
       });
     });
+  });
+}
+
+// Multi-Select Picker: Checkboxen + "Alle" Toggle
+function hTreePickMulti(title,items){
+  return new Promise(resolve=>{
+    const c=document.getElementById('hTreeContainer');
+    const old=c.innerHTML;
+    let h=`<div style="padding:12px"><div style="font-weight:600;margin-bottom:4px;font-size:.82rem">${title}</div>`;
+    h+=`<div style="margin-bottom:6px;display:flex;gap:6px">`;
+    h+=`<button class="pill" id="hMultiAll" style="font-size:.65rem;padding:2px 8px">Alle wählen</button>`;
+    h+=`<button class="pill" id="hMultiNone" style="font-size:.65rem;padding:2px 8px">Keine</button>`;
+    h+=`</div>`;
+    h+=`<div style="max-height:55vh;overflow-y:auto">`;
+    items.forEach(it=>{
+      h+=`<label style="display:flex;align-items:center;gap:6px;padding:4px 6px;font-size:.78rem;cursor:pointer;border-radius:6px" class="hm-item">
+        <input type="checkbox" data-mid="${it.id}" style="margin:0"> ${it.label}
+      </label>`;
+    });
+    h+=`</div>`;
+    h+=`<div style="display:flex;gap:8px;margin-top:10px">`;
+    h+=`<button class="btn btn-g" id="hMultiCancel" style="flex:1;font-size:.78rem">Abbrechen</button>`;
+    h+=`<button class="btn btn-b" id="hMultiOk" style="flex:1;font-size:.78rem">Übernehmen</button>`;
+    h+=`</div></div>`;
+    c.innerHTML=h;
+    const boxes=c.querySelectorAll('[data-mid]');
+    document.getElementById('hMultiAll').onclick=()=>boxes.forEach(b=>b.checked=true);
+    document.getElementById('hMultiNone').onclick=()=>boxes.forEach(b=>b.checked=false);
+    document.getElementById('hMultiCancel').onclick=()=>{c.innerHTML=old;resolve(null);};
+    document.getElementById('hMultiOk').onclick=()=>{
+      const sel=[];boxes.forEach(b=>{if(b.checked)sel.push(b.dataset.mid);});
+      c.innerHTML=old;
+      resolve(sel.length>0?sel:null);
+    };
   });
 }
 
@@ -10038,7 +10101,7 @@ function appConfirm(title, msg, okText='OK', cancelText='Abbrechen'){
   });
 }
 
-function appPrompt(title, placeholder='', okText='OK', cancelText='Abbrechen'){
+function appPrompt(title, placeholder='', okText='OK', cancelText='Abbrechen', defaultValue=''){
   return new Promise(resolve=>{
     let ov=document.getElementById('appPromptOv');
     if(ov) ov.remove();
@@ -10056,7 +10119,8 @@ function appPrompt(title, placeholder='', okText='OK', cancelText='Abbrechen'){
     </div>`;
     document.body.appendChild(ov);
     const inp=document.getElementById('appPromptInput');
-    setTimeout(()=>inp.focus(),100);
+    if(defaultValue) inp.value=defaultValue;
+    setTimeout(()=>{inp.focus();if(defaultValue)inp.select();},100);
     inp.addEventListener('keydown',e=>{if(e.key==='Enter'){const v=inp.value.trim();ov.remove();resolve(v||null);}if(e.key==='Escape'){ov.remove();resolve(null);}});
     document.getElementById('appPromptOk').onclick=()=>{const v=inp.value.trim();ov.remove();resolve(v||null);};
     document.getElementById('appPromptCancel').onclick=()=>{ov.remove();resolve(null);};
