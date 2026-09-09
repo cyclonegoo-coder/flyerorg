@@ -857,7 +857,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v288 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v289 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -9040,13 +9040,23 @@ async function hTreeAddReg(){
         const cy2=g.coords.reduce((s,c)=>s+c[1],0)/g.coords.length;
         return pointInPolygon(cx2,cy2,lkPoly2);
       });
-    // Level-8-Gemeinden rausfiltern, deren Schwerpunkt in einem Level-7-Polygon liegt (= Teil einer VG)
-    const vgPolys=inLK.filter(g=>g.level==='7');
+    // Level-8-Gemeinden rausfiltern, deren Fläche komplett in einem Level-7-Polygon liegt (= Teil einer VG)
+    // Nur geschlossene VG-Ringe verwenden (offene Ringe geben falsche pointInPolygon-Ergebnisse)
+    const vgPolys=inLK.filter(g=>{
+      if(g.level!=='7'||g.coords.length<10) return false;
+      const f=g.coords[0],l=g.coords[g.coords.length-1];
+      return Math.abs(f[0]-l[0])<0.001&&Math.abs(f[1]-l[1])<0.001; // Ring geschlossen?
+    });
     const raw=inLK.filter(g=>{
       if(g.level==='7') return true;
-      const cx2=g.coords.reduce((s,c)=>s+c[0],0)/g.coords.length;
-      const cy2=g.coords.reduce((s,c)=>s+c[1],0)/g.coords.length;
-      return !vgPolys.some(vg=>pointInPolygon(cx2,cy2,vg.coords));
+      // Centroid + BBox-Ecken prüfen — nur filtern wenn ALLE Punkte in einer VG liegen
+      const c=g.coords;
+      const cx2=c.reduce((s,p)=>s+p[0],0)/c.length;
+      const cy2=c.reduce((s,p)=>s+p[1],0)/c.length;
+      let minLa=Infinity,maxLa=-Infinity,minLo=Infinity,maxLo=-Infinity;
+      c.forEach(p=>{if(p[0]<minLa)minLa=p[0];if(p[0]>maxLa)maxLa=p[0];if(p[1]<minLo)minLo=p[1];if(p[1]>maxLo)maxLo=p[1];});
+      const pts=[[cx2,cy2],[minLa,minLo],[minLa,maxLo],[maxLa,minLo],[maxLa,maxLo]];
+      return !vgPolys.some(vg=>pts.every(p=>pointInPolygon(p[0],p[1],vg.coords)));
     })
       .map(g=>({name:g.name,level:g.level,coords:g.coords}))
       .sort((a,b)=>a.name.localeCompare(b.name));
@@ -9245,13 +9255,21 @@ async function hTreeAssignPoly(type,id){
           const cy=g.coords.reduce((s,c)=>s+c[1],0)/g.coords.length;
           return pointInPolygon(cx,cy,lkPoly2);
         });
-      // Level-8 rausfiltern wenn Schwerpunkt in einer Level-7-VG liegt
-      const vgPolys2=inLK2.filter(g=>g.level==='7');
+      // Level-8 rausfiltern wenn Fläche komplett in einer VG liegt (nur geschlossene Ringe)
+      const vgPolys2=inLK2.filter(g=>{
+        if(g.level!=='7'||g.coords.length<10) return false;
+        const f=g.coords[0],l=g.coords[g.coords.length-1];
+        return Math.abs(f[0]-l[0])<0.001&&Math.abs(f[1]-l[1])<0.001;
+      });
       rawCandidates=inLK2.filter(g=>{
         if(g.level==='7') return true;
-        const cx=g.coords.reduce((s,c)=>s+c[0],0)/g.coords.length;
-        const cy=g.coords.reduce((s,c)=>s+c[1],0)/g.coords.length;
-        return !vgPolys2.some(vg=>pointInPolygon(cx,cy,vg.coords));
+        const c=g.coords;
+        const cx=c.reduce((s,p)=>s+p[0],0)/c.length;
+        const cy=c.reduce((s,p)=>s+p[1],0)/c.length;
+        let minLa=Infinity,maxLa=-Infinity,minLo=Infinity,maxLo=-Infinity;
+        c.forEach(p=>{if(p[0]<minLa)minLa=p[0];if(p[0]>maxLa)maxLa=p[0];if(p[1]<minLo)minLo=p[1];if(p[1]>maxLo)maxLo=p[1];});
+        const pts=[[cx,cy],[minLa,minLo],[minLa,maxLo],[maxLa,minLo],[maxLa,maxLo]];
+        return !vgPolys2.some(vg=>pts.every(p=>pointInPolygon(p[0],p[1],vg.coords)));
       }).sort((a,b)=>a.name.localeCompare(b.name));
     }
     const seenAP=new Set();
