@@ -857,7 +857,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v268 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v269 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -9907,14 +9907,14 @@ async function suggestGebieteForRegion(regionId){
     }
 
     // Untergebiete innerhalb des Suchbereichs finden
-    // 1. Gemeinden (Level 8) — ideal für VG-Regionen (Level 7)
-    const gem8=grenzenData.filter(g=>g.level==='8'&&g.name&&g.coords&&g.coords.length>=3).filter(o=>{
+    // Alle relevanten Sub-Grenzen laden
+    const allOsm=grenzenData.filter(g=>g.name&&g.coords&&g.coords.length>=3);
+    const gem8=allOsm.filter(g=>g.level==='8').filter(o=>{
       const cx=o.coords.reduce((s,c)=>s+c[0],0)/o.coords.length;
       const cy=o.coords.reduce((s,c)=>s+c[1],0)/o.coords.length;
       return pointInPolygon(cx,cy,searchPoly);
     });
-    // 2. Ortsteile (Level 9/10) — Fallback oder für Gemeinde-Regionen
-    const ots=grenzenData.filter(g=>(g.level==='9'||g.level==='10')&&g.coords&&g.coords.length>=3).filter(o=>{
+    const ots=allOsm.filter(g=>g.level==='9'||g.level==='10').filter(o=>{
       const cx=o.coords.reduce((s,c)=>s+c[0],0)/o.coords.length;
       const cy=o.coords.reduce((s,c)=>s+c[1],0)/o.coords.length;
       return pointInPolygon(cx,cy,searchPoly);
@@ -9922,10 +9922,27 @@ async function suggestGebieteForRegion(regionId){
     // Deduplizieren (gleicher Name → nur einmal)
     function dedup(arr){const s=new Set();return arr.filter(o=>{if(s.has(o.name))return false;s.add(o.name);return true;});}
 
-    // Gemeinden bevorzugen, Fallback auf Ortsteile, dann ganzes Polygon
-    let candidates;
+    // Gemeinden auflösen: wenn eine Gemeinde Ortsteile enthält → Ortsteile nehmen
+    let candidates=[];
     if(gem8.length>=2){
-      candidates=dedup(gem8).map(o=>({name:o.name,coords:o.coords}));
+      for(const g of dedup(gem8)){
+        // Ortsteile innerhalb dieser Gemeinde?
+        const subOts=ots.filter(o=>{
+          const cx=o.coords.reduce((s,c)=>s+c[0],0)/o.coords.length;
+          const cy=o.coords.reduce((s,c)=>s+c[1],0)/o.coords.length;
+          return pointInPolygon(cx,cy,g.coords);
+        });
+        if(subOts.length>=2){
+          // Gemeinde hat Ortsteile → jedes Dorf einzeln
+          for(const ot of dedup(subOts)) candidates.push({name:ot.name,coords:ot.coords});
+        } else {
+          // Kleine Gemeinde ohne Unterteilung → als ganzes Gebiet
+          candidates.push({name:g.name,coords:g.coords});
+        }
+      }
+      // Deduplizieren über alle Kandidaten
+      const seen=new Set();
+      candidates=candidates.filter(c=>{if(seen.has(c.name))return false;seen.add(c.name);return true;});
     } else if(ots.length>0){
       candidates=dedup(ots).map(o=>({name:o.name||'Unbenannt',coords:o.coords}));
     } else {
