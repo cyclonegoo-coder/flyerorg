@@ -857,7 +857,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v269 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v270 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -9906,77 +9906,135 @@ async function suggestGebieteForRegion(regionId){
       searchName=gem.name||'Gemeinde';
     }
 
-    // Untergebiete innerhalb des Suchbereichs finden
-    // Alle relevanten Sub-Grenzen laden
-    const allOsm=grenzenData.filter(g=>g.name&&g.coords&&g.coords.length>=3);
-    const gem8=allOsm.filter(g=>g.level==='8').filter(o=>{
-      const cx=o.coords.reduce((s,c)=>s+c[0],0)/o.coords.length;
-      const cy=o.coords.reduce((s,c)=>s+c[1],0)/o.coords.length;
-      return pointInPolygon(cx,cy,searchPoly);
-    });
-    const ots=allOsm.filter(g=>g.level==='9'||g.level==='10').filter(o=>{
-      const cx=o.coords.reduce((s,c)=>s+c[0],0)/o.coords.length;
-      const cy=o.coords.reduce((s,c)=>s+c[1],0)/o.coords.length;
-      return pointInPolygon(cx,cy,searchPoly);
-    });
-    // Deduplizieren (gleicher Name → nur einmal)
-    function dedup(arr){const s=new Set();return arr.filter(o=>{if(s.has(o.name))return false;s.add(o.name);return true;});}
-
-    // Gemeinden auflösen: wenn eine Gemeinde Ortsteile enthält → Ortsteile nehmen
-    let candidates=[];
-    if(gem8.length>=2){
-      for(const g of dedup(gem8)){
-        // Ortsteile innerhalb dieser Gemeinde?
-        const subOts=ots.filter(o=>{
-          const cx=o.coords.reduce((s,c)=>s+c[0],0)/o.coords.length;
-          const cy=o.coords.reduce((s,c)=>s+c[1],0)/o.coords.length;
-          return pointInPolygon(cx,cy,g.coords);
-        });
-        if(subOts.length>=2){
-          // Gemeinde hat Ortsteile → jedes Dorf einzeln
-          for(const ot of dedup(subOts)) candidates.push({name:ot.name,coords:ot.coords});
-        } else {
-          // Kleine Gemeinde ohne Unterteilung → als ganzes Gebiet
-          candidates.push({name:g.name,coords:g.coords});
-        }
-      }
-      // Deduplizieren über alle Kandidaten
-      const seen=new Set();
-      candidates=candidates.filter(c=>{if(seen.has(c.name))return false;seen.add(c.name);return true;});
-    } else if(ots.length>0){
-      candidates=dedup(ots).map(o=>({name:o.name||'Unbenannt',coords:o.coords}));
-    } else {
-      candidates=[{name:searchName,coords:searchPoly}];
-    }
-
-    // Gebäude per Overpass laden (1 Query für den gesamten Suchbereich)
-    document.getElementById('suggestGebietContent').innerHTML=`<p style="text-align:center;padding:20px">⏳ Schätze Haushalte für ${esc(searchName)}…<br><small>(${candidates.length} Gebiet${candidates.length>1?'e':''} gefunden)</small></p>`;
+    // ── Schritt 1: Gebäude + Ortsnamen per Overpass laden ──
+    document.getElementById('suggestGebietContent').innerHTML=`<p style="text-align:center;padding:20px">⏳ Lade Gebäude & Ortsnamen für ${esc(searchName)}…</p>`;
 
     let minLat=Infinity,maxLat=-Infinity,minLng=Infinity,maxLng=-Infinity;
     searchPoly.forEach(c=>{if(c[0]<minLat)minLat=c[0];if(c[0]>maxLat)maxLat=c[0];if(c[1]<minLng)minLng=c[1];if(c[1]>maxLng)maxLng=c[1];});
     const bbox=`${minLat},${minLng},${maxLat},${maxLng}`;
-    const query=`[out:json][timeout:30];(way["building"]["addr:housenumber"](${bbox});relation["building"]["addr:housenumber"](${bbox}););out center;`;
+    // Gebäude + Orts-Nodes in einem Query
+    const query=`[out:json][timeout:45];(way["building"]["addr:housenumber"](${bbox});relation["building"]["addr:housenumber"](${bbox});node["place"~"^(city|town|village|hamlet|isolated_dwelling|suburb|quarter|neighbourhood)$"](${bbox}););out center;`;
     const resp=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:'data='+encodeURIComponent(query)});
     if(!resp.ok) throw new Error('Overpass-Fehler: '+resp.status);
     const data=await resp.json();
 
-    const bldgs=(data.elements||[]).map(el=>({
-      lat:el.center?el.center.lat:el.lat,
-      lng:el.center?el.center.lon:el.lon,
-      type:el.tags?.building||'yes'
-    })).filter(b=>b.lat&&b.lng);
+    const bldgs=[],placeNodes=[];
+    for(const el of (data.elements||[])){
+      if(el.tags?.place){
+        const lat=el.lat||el.center?.lat, lng=el.lon||el.center?.lon;
+        if(lat&&lng&&pointInPolygon(lat,lng,searchPoly)) placeNodes.push({name:el.tags.name||el.tags.place,lat,lng,type:el.tags.place});
+      } else {
+        const lat=el.center?el.center.lat:el.lat, lng=el.center?el.center.lon:el.lon;
+        if(lat&&lng) bldgs.push({lat,lng,type:el.tags?.building||'yes'});
+      }
+    }
+    // Nur Gebäude innerhalb des Region-Polygons
+    const regBldgs=bldgs.filter(b=>pointInPolygon(b.lat,b.lng,searchPoly));
 
-    // Gebäude den Kandidaten zuordnen + ggf. aufteilen
+    // ── Schritt 2: Gebäude räumlich clustern (Siedlungen erkennen) ──
+    document.getElementById('suggestGebietContent').innerHTML=`<p style="text-align:center;padding:20px">⏳ Erkenne Siedlungen…<br><small>(${regBldgs.length} Gebäude, ${placeNodes.length} Ortsnamen)</small></p>`;
+
+    // Grid-basiertes Clustering: ~300m Zellgröße
+    const gridSize=0.003;
+    const grid={};
+    for(const b of regBldgs){
+      const gx=Math.floor(b.lng/gridSize),gy=Math.floor(b.lat/gridSize);
+      const key=gx+','+gy;
+      if(!grid[key]) grid[key]={buildings:[],gx,gy};
+      grid[key].buildings.push(b);
+    }
+    // Connected Components via Flood-Fill (8-Nachbarn)
+    const visited=new Set();
+    const clusters=[];
+    for(const key of Object.keys(grid)){
+      if(visited.has(key)) continue;
+      const clusterBldgs=[];
+      const stack=[key];
+      while(stack.length>0){
+        const k=stack.pop();
+        if(visited.has(k)) continue;
+        visited.add(k);
+        clusterBldgs.push(...grid[k].buildings);
+        const [gx,gy]=k.split(',').map(Number);
+        for(let dx=-1;dx<=1;dx++) for(let dy=-1;dy<=1;dy++){
+          if(dx===0&&dy===0) continue;
+          const nk=(gx+dx)+','+(gy+dy);
+          if(grid[nk]&&!visited.has(nk)) stack.push(nk);
+        }
+      }
+      if(clusterBldgs.length>=2) clusters.push(clusterBldgs);
+    }
+
+    // Convex Hull pro Cluster (Graham Scan)
+    function convexHull(pts){
+      if(pts.length<3) return pts.slice();
+      pts.sort((a,b)=>a[1]-b[1]||a[0]-b[0]);
+      const cross=(O,A,B)=>(A[1]-O[1])*(B[0]-O[0])-(A[0]-O[0])*(B[1]-O[1]);
+      const lo=[];
+      for(const p of pts){while(lo.length>=2&&cross(lo[lo.length-2],lo[lo.length-1],p)<=0)lo.pop();lo.push(p);}
+      const hi=[];
+      for(let i=pts.length-1;i>=0;i--){const p=pts[i];while(hi.length>=2&&cross(hi[hi.length-2],hi[hi.length-1],p)<=0)hi.pop();hi.push(p);}
+      return lo.slice(0,-1).concat(hi.slice(0,-1));
+    }
+    // Convex Hull mit ~80m Puffer
+    function hullWithBuffer(bldgArr){
+      const pts=bldgArr.map(b=>[b.lat,b.lng]);
+      const hull=convexHull(pts);
+      if(hull.length<3) return hull;
+      const cx=hull.reduce((s,p)=>s+p[0],0)/hull.length;
+      const cy=hull.reduce((s,p)=>s+p[1],0)/hull.length;
+      const buf=0.0007; // ~80m
+      return hull.map(p=>{
+        const dx=p[0]-cx,dy=p[1]-cy;
+        const len=Math.sqrt(dx*dx+dy*dy)||0.0001;
+        return[p[0]+dx/len*buf,p[1]+dy/len*buf];
+      });
+    }
+
+    // Cluster benennen: nächsten Ortsnamen zuordnen
+    function nameCluster(bldgArr){
+      const cx=bldgArr.reduce((s,b)=>s+b.lat,0)/bldgArr.length;
+      const cy=bldgArr.reduce((s,b)=>s+b.lng,0)/bldgArr.length;
+      let best=null,bestD=Infinity;
+      for(const p of placeNodes){
+        const d=Math.sqrt((p.lat-cx)**2+(p.lng-cy)**2);
+        if(d<bestD){bestD=d;best=p;}
+      }
+      // Nur zuordnen wenn Ort nah genug ist (<2km ≈ 0.018°)
+      return(best&&bestD<0.018)?best.name:null;
+    }
+
+    // Kandidaten aus Clustern bauen
+    let candidates=[];
+    const usedNames=new Set();
+    // Nach Größe sortieren (größter Cluster zuerst für Namensvergabe)
+    clusters.sort((a,b)=>b.length-a.length);
+    for(const cl of clusters){
+      let name=nameCluster(cl);
+      if(!name||usedNames.has(name)){
+        // Fallback-Name: "Siedlung" + Nummer
+        let n=1;
+        while(usedNames.has('Siedlung '+n)) n++;
+        name=name&&usedNames.has(name)?name+' '+(n):'Siedlung '+n;
+      }
+      usedNames.add(name);
+      candidates.push({name,coords:hullWithBuffer(cl),_bldgs:cl});
+    }
+
+    if(candidates.length===0) candidates=[{name:searchName,coords:searchPoly,_bldgs:regBldgs}];
+
+    document.getElementById('suggestGebietContent').innerHTML=`<p style="text-align:center;padding:20px">⏳ ${candidates.length} Siedlung${candidates.length>1?'en':''} erkannt, berechne Haushalte…</p>`;
+
+    // ── Schritt 3: Haushalte schätzen + große Cluster aufteilen ──
     const targetHH=400;
     suggestedGebiete=[];
 
     for(const c of candidates){
-      const inP=bldgs.filter(b=>pointInPolygon(b.lat,b.lng,c.coords));
+      const inP=c._bldgs||bldgs.filter(b=>pointInPolygon(b.lat,b.lng,c.coords));
       const mfh=inP.filter(b=>b.type==='apartments'||b.type==='dormitory').length;
       const est=inP.length+mfh*3;
 
       if(est>targetHH){
-        // Aufteilen
         const N=Math.min(Math.ceil(est/targetHH),6);
         const parts=splitPolygonIntoN(c.coords,N);
         const dirs=N===2?['Nord','Süd']:N===3?['Nord','Mitte','Süd']:N===4?['Nordwest','Nordost','Südwest','Südost']:Array.from({length:N},(_,i)=>'Teil '+(i+1));
