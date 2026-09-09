@@ -857,7 +857,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v274 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v275 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -9966,44 +9966,77 @@ async function suggestGebieteForRegion(regionId){
       return points.length>=3?points:bldgArr.map(b=>[b.lat,b.lng]);
     }
 
-    // ── Place-Node-First: Jeder Ort bekommt sein eigenes Polygon ──
+    // Mehrere Polygone per Brücke zu einem verbinden (nearest-point connection)
+    function mergePolyBridge(polys){
+      if(polys.length===0) return[];
+      if(polys.length===1) return polys[0];
+      // Größtes zuerst
+      polys.sort((a,b)=>polyArea(b)-polyArea(a));
+      const result=[...polys[0]];
+      for(let i=1;i<polys.length;i++){
+        const p=polys[i];
+        // Nächstes Punkt-Paar zwischen result und p finden
+        let minD=Infinity,rIdx=0,pIdx=0;
+        for(let ri=0;ri<result.length;ri++){
+          for(let pi=0;pi<p.length;pi++){
+            const d=(result[ri][0]-p[pi][0])**2+(result[ri][1]-p[pi][1])**2;
+            if(d<minD){minD=d;rIdx=ri;pIdx=pi;}
+          }
+        }
+        // Brücke: result[rIdx] → p[pIdx] → rund um p → p[pIdx] → result[rIdx]
+        const rotated=[...p.slice(pIdx),...p.slice(0,pIdx),p[pIdx]];
+        result.splice(rIdx+1,0,...rotated,result[rIdx]);
+      }
+      return result;
+    }
+    // pointInPolygon-Check für merged Polygone (prüft ob Punkt in IRGENDEINEM Teil liegt)
+    function pointInAnyPoly(lat,lng,coords,subPolys){
+      if(!subPolys||subPolys.length<=1) return pointInPolygon(lat,lng,coords);
+      return subPolys.some(sp=>pointInPolygon(lat,lng,sp));
+    }
+
+    // ── Place-Node-First: Jeder Ort bekommt ALLE seine Wohngebiete ──
     let candidates=[];
     const usedNames=new Set();
     const usedResIdx=new Set();
 
     for(const pn of placeNodes){
-      // Größtes Wohngebiet (residential) innerhalb ~500m vom Ortsknoten finden
-      let bestRes=null,bestArea=0,bestIdx=-1;
+      // ALLE Wohngebiete innerhalb ~500m vom Ortsknoten sammeln
+      const matching=[];
       for(let ri=0;ri<resAreas.length;ri++){
+        if(usedResIdx.has(ri)) continue;
         const rp=resAreas[ri];
         const cx2=rp.coords.reduce((s,c)=>s+c[0],0)/rp.coords.length;
         const cy2=rp.coords.reduce((s,c)=>s+c[1],0)/rp.coords.length;
         const dist=Math.sqrt((pn.lat-cx2)**2+(pn.lng-cy2)**2);
-        if(dist<0.005){ // ~500m
-          const area=polyArea(rp.coords);
-          if(area>bestArea){bestArea=area;bestRes=rp;bestIdx=ri;}
-        }
+        if(dist<0.005) matching.push({ri,coords:rp.coords}); // ~500m
       }
 
-      let polyCoords;
-      if(bestRes){
-        polyCoords=bestRes.coords;
-        usedResIdx.add(bestIdx);
+      let polyCoords,subPolys=null;
+      if(matching.length>=1){
+        // Alle zuordnen
+        for(const m of matching) usedResIdx.add(m.ri);
+        if(matching.length===1){
+          polyCoords=matching[0].coords;
+        } else {
+          // Mehrere → per Brücke verbinden
+          subPolys=matching.map(m=>m.coords);
+          polyCoords=mergePolyBridge(subPolys);
+        }
       } else {
-        // Kein Wohngebiet → Gebäude im Umkreis ~500m suchen, Angular-Sweep
+        // Kein Wohngebiet → Gebäude im Umkreis ~500m, Angular-Sweep
         const nearBldgs=regBldgs.filter(b=>Math.sqrt((b.lat-pn.lat)**2+(b.lng-pn.lng)**2)<0.005);
         if(nearBldgs.length>=2){
           polyCoords=tightPoly(nearBldgs);
-        } else continue; // Ort ohne Gebäude/Wohngebiet überspringen
+        } else continue;
       }
 
       let name=pn.name;
       if(usedNames.has(name)){let n=2;while(usedNames.has(name+' '+n))n++;name=name+' '+n;}
       usedNames.add(name);
 
-      // Gebäude innerhalb des Polygons zählen
-      const insideBldgs=regBldgs.filter(b=>pointInPolygon(b.lat,b.lng,polyCoords));
-      candidates.push({name,coords:polyCoords,_bldgs:insideBldgs});
+      const insideBldgs=regBldgs.filter(b=>pointInAnyPoly(b.lat,b.lng,polyCoords,subPolys));
+      candidates.push({name,coords:polyCoords,_bldgs:insideBldgs,_subPolys:subPolys});
     }
 
     // Verwaiste Wohngebiete (keinem Ort zugeordnet) als eigene Gebiete
@@ -10011,7 +10044,6 @@ async function suggestGebieteForRegion(regionId){
       if(usedResIdx.has(ri)) continue;
       const rp=resAreas[ri];
       const insideBldgs=regBldgs.filter(b=>pointInPolygon(b.lat,b.lng,rp.coords));
-      // Nächsten Ortsnamen suchen
       const cx2=rp.coords.reduce((s,c)=>s+c[0],0)/rp.coords.length;
       const cy2=rp.coords.reduce((s,c)=>s+c[1],0)/rp.coords.length;
       let closestPN=null,closestD=Infinity;
