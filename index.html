@@ -857,7 +857,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v275 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v276 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -7596,12 +7596,14 @@ function openDetail(id){
     if(curRole==='admin'||(curRole==='kreisverwalter'&&verwalterHatGebietZugriff(id))){
       h+=`<div class="d-sec"><div class="sec-hd">Admin – Geodaten</div><div class="f-stack">
         ${kmlP[g.id]?`<button class="btn btn-g" onclick="editPolygon('${g.id}')">✏️ Polygon bearbeiten</button>`:''}
+        ${kmlP[g.id]?`<button class="btn btn-g" onclick="addAreaToGebiet('${g.id}')">➕ Fläche hinzufügen</button>`:''}
         <button class="btn btn-g" onclick="redrawGebiet('${g.id}')">🔄 Polygon neu zeichnen</button>
         <button class="btn btn-d" onclick="deleteGebiet('${g.id}')">Gebiet löschen</button>
       </div></div>`;
     } else if(istVerwalterOderKreisverwalter()&&verwalterHatGebietZugriff(id)){
       h+=`<div class="d-sec"><div class="sec-hd">Geodaten</div><div class="f-stack">
         ${kmlP[g.id]?`<button class="btn btn-g" onclick="editPolygon('${g.id}')">✏️ Polygon bearbeiten</button>`:''}
+        ${kmlP[g.id]?`<button class="btn btn-g" onclick="addAreaToGebiet('${g.id}')">➕ Fläche hinzufügen</button>`:''}
         <button class="btn btn-g" onclick="redrawGebiet('${g.id}')">🔄 Polygon neu zeichnen</button>
         <button class="btn btn-d" onclick="deleteGebiet('${g.id}')">Gebiet löschen</button>
       </div></div>`;
@@ -9528,6 +9530,13 @@ function drawFinish(){
     return;
   }
 
+  // Fläche-hinzufügen-Modus? → Bridge-Merge mit bestehendem Polygon
+  if(addAreaGebietId){
+    if(drawPolyline)map.removeLayer(drawPolyline);
+    addAreaFinish();
+    return;
+  }
+
   // Show preview polygon
   if(drawPolyline)map.removeLayer(drawPolyline);
   drawPolyline=L.polygon(drawPoints,{color:'#009ee0',fillColor:'#009ee0',fillOpacity:.25,weight:2,dashArray:'6,4'}).addTo(map);
@@ -9561,7 +9570,7 @@ function drawFinish(){
 }
 
 function drawCancel(){
-  drawMode=false;drawEditId=null;pendingRegionDraw=null;
+  drawMode=false;drawEditId=null;pendingRegionDraw=null;addAreaGebietId=null;
   map.off('click',onDrawClick);
   map.off('mousemove',onDrawMouseMove);
   map.getContainer().style.cursor='';
@@ -9869,6 +9878,103 @@ async function estimateForGebiet(gebietId){
   }
 }
 
+// ── Globale Polygon-Helfer ──
+function polyArea(c){let a=0;for(let i=0;i<c.length;i++){const j=(i+1)%c.length;a+=c[i][0]*c[j][1]-c[j][0]*c[i][1];}return Math.abs(a/2);}
+
+function mergePolyBridge(polys){
+  if(polys.length===0) return[];
+  if(polys.length===1) return polys[0];
+  polys.sort((a,b)=>polyArea(b)-polyArea(a));
+  const result=[...polys[0]];
+  for(let i=1;i<polys.length;i++){
+    const p=polys[i];
+    let minD=Infinity,rIdx=0,pIdx=0;
+    for(let ri=0;ri<result.length;ri++){
+      for(let pi=0;pi<p.length;pi++){
+        const d=(result[ri][0]-p[pi][0])**2+(result[ri][1]-p[pi][1])**2;
+        if(d<minD){minD=d;rIdx=ri;pIdx=pi;}
+      }
+    }
+    const rotated=[...p.slice(pIdx),...p.slice(0,pIdx),p[pIdx]];
+    result.splice(rIdx+1,0,...rotated,result[rIdx]);
+  }
+  return result;
+}
+
+// ── Fläche zu bestehendem Gebiet hinzufügen ──
+let addAreaGebietId=null;
+
+function addAreaToGebiet(id){
+  if(!kmlP[id]||kmlP[id].length<3){toast('⚠️ Gebiet hat noch kein Polygon');return;}
+  closeDetail();
+  addAreaGebietId=id;
+  // Start draw mode
+  drawMode=true;
+  drawPoints=[];drawMarkers=[];
+  document.getElementById('drawStartBtn').classList.add('active');
+  document.getElementById('drawCancelBtn').disabled=false;
+  map.getContainer().style.cursor='crosshair';
+  map.on('click',onDrawClick);
+  map.on('mousemove',onDrawMouseMove);
+  // Zoom to existing polygon
+  if(layers[id]) map.fitBounds(layers[id].getBounds().pad(0.5));
+  const rg=getG(id);
+  setDrawInfo(`➕ Zusätzliche Fläche für „${rg?rg.name:id}" zeichnen – min. 3 Punkte`);
+}
+
+async function addAreaFinish(){
+  if(drawPoints.length<3){toast('⚠️ Mindestens 3 Punkte nötig');return;}
+  const id=addAreaGebietId;
+  if(!id||!kmlP[id]){toast('⚠️ Gebiet nicht gefunden');addAreaCancel();return;}
+
+  const existingCoords=kmlP[id].slice();
+  const newCoords=drawPoints.slice();
+
+  // Bridge-Merge: bestehendes Polygon + neue Fläche verbinden
+  const merged=mergePolyBridge([existingCoords,newCoords]);
+  kmlP[id]=merged;
+
+  // In DB speichern
+  try{
+    const {error}=await sb.from('gebiete').update({
+      kml_coords:JSON.stringify(merged), updated_at:new Date()
+    }).eq('id',id);
+    if(error){
+      kmlP[id]=existingCoords; // Rollback
+      toast('⚠️ DB-Fehler: '+(error.message||error.code));
+      addAreaCancel();return;
+    }
+  }catch(e){
+    kmlP[id]=existingCoords;
+    toast('⚠️ Fehler beim Speichern');
+    addAreaCancel();return;
+  }
+
+  // Cleanup
+  addAreaCancel();
+  drawPolygons();
+  const rg=getG(id);
+  logAction('polygon','Fläche hinzugefügt',id,rg?.name||id);
+  toast('✅ Fläche hinzugefügt & verbunden');
+}
+
+function addAreaCancel(){
+  addAreaGebietId=null;
+  drawMode=false;
+  map.off('click',onDrawClick);
+  map.off('mousemove',onDrawMouseMove);
+  map.getContainer().style.cursor='';
+  drawMarkers.forEach(m=>map.removeLayer(m));
+  if(drawPolyline){map.removeLayer(drawPolyline);drawPolyline=null;}
+  if(drawPreviewLine){map.removeLayer(drawPreviewLine);drawPreviewLine=null;}
+  drawPoints=[];drawMarkers=[];
+  document.getElementById('drawStartBtn').classList.remove('active');
+  document.getElementById('drawUndoBtn').disabled=true;
+  document.getElementById('drawFinishBtn').disabled=true;
+  document.getElementById('drawCancelBtn').disabled=true;
+  setDrawInfo('');
+}
+
 // ── Auto-Gebiete per OSM vorschlagen ──
 let suggestedGebiete=[];
 
@@ -9943,9 +10049,6 @@ async function suggestGebieteForRegion(regionId){
     // ── Schritt 2: Place-Node-First — Orte als Basis für Gebiete ──
     document.getElementById('suggestGebietContent').innerHTML=`<p style="text-align:center;padding:20px">⏳ Ordne Siedlungen zu…<br><small>(${regBldgs.length} Gebäude, ${resAreas.length} Wohngebiete, ${placeNodes.length} Ortsnamen)</small></p>`;
 
-    // Polygon-Fläche berechnen (Shoelace)
-    function polyArea(c){let a=0;for(let i=0;i<c.length;i++){const j=(i+1)%c.length;a+=c[i][0]*c[j][1]-c[j][0]*c[i][1];}return Math.abs(a/2);}
-
     // Fallback: Angular-Sweep (48 Sektoren, eng an Gebäuden)
     function tightPoly(bldgArr){
       if(bldgArr.length<3) return bldgArr.map(b=>[b.lat,b.lng]);
@@ -9966,29 +10069,7 @@ async function suggestGebieteForRegion(regionId){
       return points.length>=3?points:bldgArr.map(b=>[b.lat,b.lng]);
     }
 
-    // Mehrere Polygone per Brücke zu einem verbinden (nearest-point connection)
-    function mergePolyBridge(polys){
-      if(polys.length===0) return[];
-      if(polys.length===1) return polys[0];
-      // Größtes zuerst
-      polys.sort((a,b)=>polyArea(b)-polyArea(a));
-      const result=[...polys[0]];
-      for(let i=1;i<polys.length;i++){
-        const p=polys[i];
-        // Nächstes Punkt-Paar zwischen result und p finden
-        let minD=Infinity,rIdx=0,pIdx=0;
-        for(let ri=0;ri<result.length;ri++){
-          for(let pi=0;pi<p.length;pi++){
-            const d=(result[ri][0]-p[pi][0])**2+(result[ri][1]-p[pi][1])**2;
-            if(d<minD){minD=d;rIdx=ri;pIdx=pi;}
-          }
-        }
-        // Brücke: result[rIdx] → p[pIdx] → rund um p → p[pIdx] → result[rIdx]
-        const rotated=[...p.slice(pIdx),...p.slice(0,pIdx),p[pIdx]];
-        result.splice(rIdx+1,0,...rotated,result[rIdx]);
-      }
-      return result;
-    }
+    // mergePolyBridge + polyArea → global definiert (siehe oben)
     // pointInPolygon-Check für merged Polygone (prüft ob Punkt in IRGENDEINEM Teil liegt)
     function pointInAnyPoly(lat,lng,coords,subPolys){
       if(!subPolys||subPolys.length<=1) return pointInPolygon(lat,lng,coords);
@@ -10084,6 +10165,21 @@ async function suggestGebieteForRegion(regionId){
       }
     }
 
+    // ── Duplikat-Check: Vorschläge die bestehende Gebiete überlappen markieren ──
+    const existingGebiete=(regionen[regionId]?.gebiete||[]).filter(g=>kmlP[g.id]&&kmlP[g.id].length>=3);
+    for(const sg of suggestedGebiete){
+      if(!sg.coords||sg.coords.length<3) continue;
+      const cx=sg.coords.reduce((s,c)=>s+c[0],0)/sg.coords.length;
+      const cy=sg.coords.reduce((s,c)=>s+c[1],0)/sg.coords.length;
+      for(const eg of existingGebiete){
+        if(pointInPolygon(cx,cy,kmlP[eg.id])){
+          sg.existing=eg.name||eg.id;
+          sg.checked=false;
+          break;
+        }
+      }
+    }
+
     renderSuggestedGebiete(searchName);
   }catch(e){
     document.getElementById('suggestGebietContent').innerHTML=`<p style="color:var(--red);padding:12px">⚠️ ${e.message}</p>`;
@@ -10128,10 +10224,11 @@ function renderSuggestedGebiete(gemeindeName){
   suggestedGebiete.forEach((sg,i)=>{
     const badge=sg.split?' <span style="font-size:.63rem;background:#e3f2fd;color:#1565c0;padding:1px 4px;border-radius:3px">aufgeteilt</span>':'';
     const empty=sg.buildings===0?' <span style="font-size:.63rem;color:var(--text4)">(leer)</span>':'';
-    html+=`<label style="display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid var(--border);cursor:pointer">
+    const dupBadge=sg.existing?` <span style="font-size:.63rem;background:#fff3e0;color:#e65100;padding:1px 4px;border-radius:3px">≈ ${esc(sg.existing)}</span>`:'';
+    html+=`<label style="display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid var(--border);cursor:pointer;${sg.existing?'opacity:.55':''}">
       <input type="checkbox" ${sg.checked?'checked':''} onchange="suggestedGebiete[${i}].checked=this.checked;updSugCount()" style="width:18px;height:18px;flex-shrink:0">
       <div style="flex:1;min-width:0">
-        <div style="font-weight:600;font-size:.82rem">${esc(sg.name)}${badge}${empty}</div>
+        <div style="font-weight:600;font-size:.82rem">${esc(sg.name)}${badge}${empty}${dupBadge}</div>
         <div style="font-size:.72rem;color:var(--text3)">🏠 ${sg.buildings} Gebäude (${sg.mfh} MFH) → ~${sg.estimate} Briefkästen</div>
       </div>
     </label>`;
