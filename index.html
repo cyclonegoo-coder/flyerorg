@@ -857,7 +857,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v282 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v285 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -9868,7 +9868,7 @@ function cleanupEditMode(){
 }
 
 // ── Haushalt-Schätzung via Overpass (OSM) ──
-async function estimateHouseholdsForPolygon(coords){
+async function estimateHouseholdsForPolygon(coords,statusCb){
   if(!coords||coords.length<3) return null;
   // Bounding Box berechnen
   let minLat=Infinity,maxLat=-Infinity,minLng=Infinity,maxLng=-Infinity;
@@ -9877,26 +9877,29 @@ async function estimateHouseholdsForPolygon(coords){
   // Overpass: Wohngebäude in BBox zählen
   // Nur Gebäude MIT Hausnummer zählen (filtert Garagen, Schuppen etc.)
   const query=`[out:json][timeout:20];(way["building"]["addr:housenumber"](${bbox});relation["building"]["addr:housenumber"](${bbox}););out center;`;
-  const data=await overpassFetch(query);
-  // Gebäude-Mittelpunkte im Polygon filtern
-  let count=0;
+  const data=await overpassFetch(query,{statusCb});
+  // Einzelpass: Gebäude zählen + Briefkästen schätzen
+  let count=0, mfh=0, estimate=0;
   (data.elements||[]).forEach(el=>{
     const lat=el.center?el.center.lat:el.lat;
     const lng=el.center?el.center.lon:el.lon;
-    if(lat&&lng&&pointInPolygon(lat,lng,coords)) count++;
-  });
-  // Mehrfamilienhäuser: apartments/dormitory zählen doppelt
-  let mfh=0;
-  (data.elements||[]).forEach(el=>{
-    const lat=el.center?el.center.lat:el.lat;
-    const lng=el.center?el.center.lon:el.lon;
-    if(lat&&lng&&pointInPolygon(lat,lng,coords)){
-      const bt=el.tags?.building||'';
-      if(bt==='apartments'||bt==='dormitory') mfh++;
+    if(!lat||!lng||!pointInPolygon(lat,lng,coords)) return;
+    count++;
+    const bt=el.tags?.building||'';
+    const isMfh=bt==='apartments'||bt==='dormitory';
+    if(isMfh) mfh++;
+    const levels=parseInt(el.tags?.['building:levels'])||0;
+    if(isMfh&&levels>=2){
+      // ~2 Wohnungen pro Stockwerk (typisch Plattenbau: 5×2=10, 11×2=22)
+      estimate+=levels*2;
+    }else if(isMfh){
+      // Kein Stockwerk-Tag → pauschal 4
+      estimate+=4;
+    }else{
+      estimate+=1;
     }
   });
-  // Schätzung: jedes Gebäude = 1 Briefkasten, Mehrfamilienhäuser +3 extra
-  return {buildings:count, estimate:count+mfh*3, mfh};
+  return {buildings:count, estimate:r25(estimate), mfh};
 }
 
 async function estimateNewGebiet(){
@@ -9905,7 +9908,7 @@ async function estimateNewGebiet(){
   const info=document.getElementById('newGebietEstimate');
   info.style.display='block';info.textContent='⏳ Lade OSM-Gebäudedaten…';
   try{
-    const r=await estimateHouseholdsForPolygon(coords);
+    const r=await estimateHouseholdsForPolygon(coords,msg=>{info.textContent=msg;});
     if(!r||r.buildings===0){info.textContent='ℹ️ Keine Gebäude in OSM gefunden';return;}
     info.innerHTML=`🏠 ~${r.buildings} Gebäude (${r.mfh} MFH) → <strong>~${r.estimate} Briefkästen</strong> <a href="#" onclick="document.getElementById('newGebietStueck').value=${r.estimate};return false" style="color:var(--blue);font-size:.68rem">übernehmen</a>`;
   }catch(e){info.textContent='⚠️ Fehler: '+e.message;}
@@ -9917,7 +9920,7 @@ async function estimateForGebiet(gebietId){
   const btn=event?.target;
   if(btn){btn.disabled=true;btn.textContent='⏳…';}
   try{
-    const r=await estimateHouseholdsForPolygon(coords);
+    const r=await estimateHouseholdsForPolygon(coords,msg=>{if(btn)btn.textContent=msg;});
     if(btn){btn.disabled=false;btn.textContent='💡';}
     if(!r||r.buildings===0){toast('ℹ️ Keine Gebäude in OSM gefunden');return;}
     const ok=await appConfirm('🏠 Schätzung',`~${r.buildings} Gebäude (davon ${r.mfh} Mehrfamilienhäuser)\n\n→ geschätzt ~${r.estimate} Briefkästen\n\nAls Stückzahl übernehmen?`,'Übernehmen','Abbrechen');
@@ -9959,6 +9962,7 @@ async function overpassFetch(query,{method='POST',maxRetries=3,statusCb}={}){
 
 // ── Globale Polygon-Helfer ──
 function polyArea(c){let a=0;for(let i=0;i<c.length;i++){const j=(i+1)%c.length;a+=c[i][0]*c[j][1]-c[j][0]*c[i][1];}return Math.abs(a/2);}
+function r25(n){return Math.ceil(n/25)*25;} // Aufrunden auf 25er-Schritte (0,25,50,75,100…)
 
 function mergePolyBridge(polys){
   if(polys.length===0) return[];
@@ -10123,7 +10127,7 @@ async function suggestGebieteForRegion(regionId){
         }
       } else {
         const lat=el.center?el.center.lat:el.lat, lng=el.center?el.center.lon:el.lon;
-        if(lat&&lng) bldgs.push({lat,lng,type:el.tags?.building||'yes'});
+        if(lat&&lng) bldgs.push({lat,lng,type:el.tags?.building||'yes',levels:parseInt(el.tags?.['building:levels'])||0});
       }
     }
     const regBldgs=bldgs.filter(b=>pointInPolygon(b.lat,b.lng,searchPoly));
@@ -10226,8 +10230,9 @@ async function suggestGebieteForRegion(regionId){
     for(const c of candidates){
       const inP=c._bldgs||bldgs.filter(b=>pointInPolygon(b.lat,b.lng,c.coords));
       const mfh=inP.filter(b=>b.type==='apartments'||b.type==='dormitory').length;
-      const estRaw=inP.length+mfh*3;
-      const est=Math.ceil(estRaw/10)*10; // auf nächsten 10er aufrunden
+      // Levels-aware Schätzung: MFH mit Stockwerken → levels×2, MFH ohne → 4, sonst → 1
+      function estBldgs(bs){let s=0;bs.forEach(b=>{const m=b.type==='apartments'||b.type==='dormitory';if(m&&b.levels>=2)s+=b.levels*2;else if(m)s+=4;else s+=1;});return r25(s);}
+      const est=estBldgs(inP);
 
       if(est>targetHH){
         const N=Math.min(Math.ceil(est/targetHH),6);
@@ -10236,7 +10241,7 @@ async function suggestGebieteForRegion(regionId){
         parts.forEach((pc,i)=>{
           const pb=inP.filter(b=>pointInPolygon(b.lat,b.lng,pc));
           const pm=pb.filter(b=>b.type==='apartments'||b.type==='dormitory').length;
-          const subEst=Math.ceil((pb.length+pm*3)/10)*10;
+          const subEst=estBldgs(pb);
           suggestedGebiete.push({name:`${c.name} ${dirs[i]}`,coords:pc,buildings:pb.length,mfh:pm,estimate:subEst,checked:true,split:true});
         });
       } else {
