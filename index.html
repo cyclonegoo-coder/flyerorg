@@ -857,7 +857,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v276 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v277 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -7597,6 +7597,7 @@ function openDetail(id){
       h+=`<div class="d-sec"><div class="sec-hd">Admin – Geodaten</div><div class="f-stack">
         ${kmlP[g.id]?`<button class="btn btn-g" onclick="editPolygon('${g.id}')">✏️ Polygon bearbeiten</button>`:''}
         ${kmlP[g.id]?`<button class="btn btn-g" onclick="addAreaToGebiet('${g.id}')">➕ Fläche hinzufügen</button>`:''}
+        ${kmlP[g.id]?`<button class="btn btn-g" onclick="mergeGebiete('${g.id}')">🔗 Zusammenführen</button>`:''}
         <button class="btn btn-g" onclick="redrawGebiet('${g.id}')">🔄 Polygon neu zeichnen</button>
         <button class="btn btn-d" onclick="deleteGebiet('${g.id}')">Gebiet löschen</button>
       </div></div>`;
@@ -7604,6 +7605,7 @@ function openDetail(id){
       h+=`<div class="d-sec"><div class="sec-hd">Geodaten</div><div class="f-stack">
         ${kmlP[g.id]?`<button class="btn btn-g" onclick="editPolygon('${g.id}')">✏️ Polygon bearbeiten</button>`:''}
         ${kmlP[g.id]?`<button class="btn btn-g" onclick="addAreaToGebiet('${g.id}')">➕ Fläche hinzufügen</button>`:''}
+        ${kmlP[g.id]?`<button class="btn btn-g" onclick="mergeGebiete('${g.id}')">🔗 Zusammenführen</button>`:''}
         <button class="btn btn-g" onclick="redrawGebiet('${g.id}')">🔄 Polygon neu zeichnen</button>
         <button class="btn btn-d" onclick="deleteGebiet('${g.id}')">Gebiet löschen</button>
       </div></div>`;
@@ -8339,6 +8341,59 @@ async function deleteGebiet(id){
   renderBreadcrumb(); renderList(); renderStats();
   logAction('gebiet',`Gebiet gelöscht: ${_gName}`,null,_gName);
   toast(`🗑 Gebiet ${_gName} gelöscht`);
+}
+
+// ── Gebiete zusammenführen ──
+async function mergeGebiete(keepId){
+  const keepG=getG(keepId);
+  if(!keepG){toast('⚠️ Gebiet nicht gefunden');return;}
+  const rId=keepG.region_id;
+  const reg=regionen[rId];
+  if(!reg){toast('⚠️ Region nicht gefunden');return;}
+
+  // Andere Gebiete mit Polygon in gleicher Region
+  const others=reg.gebiete.filter(g=>g.id!==keepId&&kmlP[g.id]&&kmlP[g.id].length>=3);
+  if(others.length===0){toast('ℹ️ Keine anderen Gebiete mit Polygon in dieser Region');return;}
+
+  // Auswahl-Dialog bauen
+  const opts=others.map(g=>({label:`${g.name||g.id} (${g.stueckzahl||0} St.)`,value:g.id,style:'background:var(--blue);color:#fff'}));
+  const mergeId=await appChoice('🔗 Zusammenführen',`Welches Gebiet soll mit „${keepG.name}" verschmolzen werden?\n\nPolygone werden verbunden, Stückzahlen addiert.`,opts);
+  if(!mergeId) return;
+
+  const mergeG=getG(mergeId);
+  if(!mergeG||!kmlP[mergeId]||!kmlP[keepId]){toast('⚠️ Polygon nicht gefunden');return;}
+
+  // Polygone per Bridge-Merge verbinden
+  const merged=mergePolyBridge([kmlP[keepId].slice(),kmlP[mergeId].slice()]);
+  const newStueck=(keepG.stueckzahl||0)+(mergeG.stueckzahl||0);
+
+  // Beibehaltenes Gebiet updaten
+  try{
+    const{error}=await sb.from('gebiete').update({
+      kml_coords:JSON.stringify(merged),stueckzahl:newStueck,updated_at:new Date()
+    }).eq('id',keepId);
+    if(error){toast('⚠️ DB-Fehler: '+(error.message||error.code));return;}
+  }catch(e){toast('⚠️ Fehler beim Speichern');return;}
+
+  // Zusammengeführtes Gebiet löschen
+  try{
+    await sb.from('anfragen').delete().eq('gebiet_id',mergeId);
+    await sb.from('gebiet_status').delete().eq('gebiet_id',mergeId);
+    await sb.from('gebiete').delete().eq('id',mergeId);
+  }catch(e){console.warn('Delete merged gebiet:',e);}
+
+  // Lokal updaten
+  kmlP[keepId]=merged;
+  keepG.stueckzahl=newStueck;
+  const idx=reg.gebiete.findIndex(g=>g.id===mergeId);
+  if(idx>-1) reg.gebiete.splice(idx,1);
+  if(layers[mergeId]){map.removeLayer(layers[mergeId]);delete layers[mergeId];}
+  delete kmlP[mergeId];
+
+  closeDetail();
+  renderBreadcrumb();renderList();renderStats();drawPolygons();
+  logAction('gebiet',`Gebiete zusammengeführt: ${keepG.name} + ${mergeG.name}`,keepId,keepG.name);
+  toast(`✅ „${mergeG.name}" in „${keepG.name}" zusammengeführt`);
 }
 
 // Gebiet aus Hierarchie-Baum löschen (Wrapper für deleteGebiet + Tree-Refresh)
