@@ -857,7 +857,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v279 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v282 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -9877,9 +9877,7 @@ async function estimateHouseholdsForPolygon(coords){
   // Overpass: Wohngebäude in BBox zählen
   // Nur Gebäude MIT Hausnummer zählen (filtert Garagen, Schuppen etc.)
   const query=`[out:json][timeout:20];(way["building"]["addr:housenumber"](${bbox});relation["building"]["addr:housenumber"](${bbox}););out center;`;
-  const resp=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:'data='+encodeURIComponent(query)});
-  if(!resp.ok) throw new Error('Overpass-Fehler: '+resp.status);
-  const data=await resp.json();
+  const data=await overpassFetch(query);
   // Gebäude-Mittelpunkte im Polygon filtern
   let count=0;
   (data.elements||[]).forEach(el=>{
@@ -9930,6 +9928,32 @@ async function estimateForGebiet(gebietId){
   }catch(e){
     if(btn){btn.disabled=false;btn.textContent='💡';}
     toast('⚠️ '+e.message);
+  }
+}
+
+// ── Overpass-Fetch mit Retry ──
+async function overpassFetch(query,{method='POST',maxRetries=3,statusCb}={}){
+  for(let i=1;i<=maxRetries;i++){
+    try{
+      if(i>1&&statusCb) statusCb(`🔄 Overpass Versuch ${i}/${maxRetries}…`);
+      const resp=method==='GET'
+        ? await fetch('https://overpass-api.de/api/interpreter?data='+encodeURIComponent(query))
+        : await fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:'data='+encodeURIComponent(query)});
+      if(resp.status===429||resp.status===504||resp.status===503){
+        if(i===maxRetries) throw new Error('Overpass überlastet ('+resp.status+'). Bitte später nochmal versuchen.');
+        await new Promise(r=>setTimeout(r,i*3000));
+        continue;
+      }
+      if(!resp.ok) throw new Error('Overpass-Fehler: '+resp.status);
+      return await resp.json();
+    }catch(e){
+      if(i===maxRetries) throw e;
+      if(e.name==='TypeError'){ // Netzwerkfehler
+        await new Promise(r=>setTimeout(r,i*3000));
+        continue;
+      }
+      throw e;
+    }
   }
 }
 
@@ -10078,15 +10102,18 @@ async function suggestGebieteForRegion(regionId){
       `(way["building"]["addr:housenumber"](${bbox});relation["building"]["addr:housenumber"](${bbox}););out center;`+
       `(way["landuse"="residential"](${bbox});relation["landuse"="residential"](${bbox}););out geom;`+
       `(node["place"~"^(city|town|village|hamlet|isolated_dwelling|suburb|quarter|neighbourhood)$"](${bbox}););out body;`;
-    const resp=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:'data='+encodeURIComponent(query)});
-    if(!resp.ok) throw new Error('Overpass-Fehler: '+resp.status);
-    const data=await resp.json();
+    const data=await overpassFetch(query,{statusCb:msg=>{
+      document.getElementById('suggestGebietContent').innerHTML=`<p style="text-align:center;padding:20px">⏳ ${msg}</p>`;
+    }});
 
     const bldgs=[],placeNodes=[],resAreas=[];
     for(const el of (data.elements||[])){
       if(el.tags?.place){
+        const pt=el.tags.place;
+        // Stadt/Town überspringen — nur Dörfer automatisch
+        if(pt==='city'||pt==='town') continue;
         const lat=el.lat, lng=el.lon;
-        if(lat&&lng&&pointInPolygon(lat,lng,searchPoly)) placeNodes.push({name:el.tags.name||el.tags.place,lat,lng});
+        if(lat&&lng&&pointInPolygon(lat,lng,searchPoly)) placeNodes.push({name:el.tags.name||pt,lat,lng});
       } else if(el.tags?.landuse==='residential'&&el.geometry&&el.geometry.length>=3){
         const coords=el.geometry.filter(g=>g.lat&&g.lon).map(g=>[g.lat,g.lon]);
         if(coords.length>=3){
@@ -10103,19 +10130,6 @@ async function suggestGebieteForRegion(regionId){
 
     // ── Schritt 2: Place-Node-First — Orte als Basis für Gebiete ──
     document.getElementById('suggestGebietContent').innerHTML=`<p style="text-align:center;padding:20px">⏳ Ordne Siedlungen zu…<br><small>(${regBldgs.length} Gebäude, ${resAreas.length} Wohngebiete, ${placeNodes.length} Ortsnamen)</small></p>`;
-
-    // Konvexe Hülle (Graham-Scan)
-    function convexHull(pts){
-      if(pts.length<3) return pts.slice();
-      pts=pts.slice().sort((a,b)=>a[1]-b[1]||a[0]-b[0]);
-      const cross=(o,a,b)=>(a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]);
-      const lower=[];
-      for(const p of pts){while(lower.length>=2&&cross(lower[lower.length-2],lower[lower.length-1],p)<=0)lower.pop();lower.push(p);}
-      const upper=[];
-      for(let i=pts.length-1;i>=0;i--){const p=pts[i];while(upper.length>=2&&cross(upper[upper.length-2],upper[upper.length-1],p)<=0)upper.pop();upper.push(p);}
-      lower.pop();upper.pop();
-      return lower.concat(upper);
-    }
 
     // Fallback: Angular-Sweep (48 Sektoren, eng an Gebäuden)
     function tightPoly(bldgArr){
@@ -10149,25 +10163,8 @@ async function suggestGebieteForRegion(regionId){
     const usedNames=new Set();
     const usedResIdx=new Set();
 
-    // Helfer: kürzeste Distanz Punkt→Polygon-Kante (in Grad, ~111m pro 0.001)
-    function distToPolyEdge(lat,lng,poly){
-      let minD=Infinity;
-      for(let i=0;i<poly.length;i++){
-        const a=poly[i],b=poly[(i+1)%poly.length];
-        const dx=b[1]-a[1],dy=b[0]-a[0];
-        const lenSq=dx*dx+dy*dy;
-        if(lenSq===0){const d=Math.sqrt((lat-a[0])**2+(lng-a[1])**2);if(d<minD)minD=d;continue;}
-        let t=((lng-a[1])*dx+(lat-a[0])*dy)/lenSq;
-        t=Math.max(0,Math.min(1,t));
-        const px=a[1]+t*dx,py=a[0]+t*dy;
-        const d=Math.sqrt((lat-py)**2+(lng-px)**2);
-        if(d<minD)minD=d;
-      }
-      return minD;
-    }
-
     for(const pn of placeNodes){
-      // ALLE Wohngebiete innerhalb ~1km vom Ortsknoten sammeln
+      // ALLE Wohngebiete innerhalb ~500m vom Ortsknoten sammeln
       const matching=[];
       for(let ri=0;ri<resAreas.length;ri++){
         if(usedResIdx.has(ri)) continue;
@@ -10175,41 +10172,23 @@ async function suggestGebieteForRegion(regionId){
         const cx2=rp.coords.reduce((s,c)=>s+c[0],0)/rp.coords.length;
         const cy2=rp.coords.reduce((s,c)=>s+c[1],0)/rp.coords.length;
         const dist=Math.sqrt((pn.lat-cx2)**2+(pn.lng-cy2)**2);
-        if(dist<0.009) matching.push({ri,coords:rp.coords}); // ~1km
+        if(dist<0.005) matching.push({ri,coords:rp.coords}); // ~500m
       }
-
-      let allPolys=[];
-      if(matching.length>=1){
-        for(const m of matching) usedResIdx.add(m.ri);
-        for(const m of matching) allPolys.push(m.coords);
-
-        // Nahbereich-Erweiterung: Gebäude ≤150m (~0.0014°) von einer Polygon-Kante
-        // die NICHT bereits im Polygon liegen → als konvexe Hülle anhängen
-        const nearEdgeBldgs=regBldgs.filter(b=>{
-          if(allPolys.some(p=>pointInPolygon(b.lat,b.lng,p))) return false;
-          return allPolys.some(p=>distToPolyEdge(b.lat,b.lng,p)<0.0014);
-        });
-        if(nearEdgeBldgs.length>=3){
-          // Konvexe Hülle statt Angular-Sweep (sauberer)
-          const hull=convexHull(nearEdgeBldgs.map(b=>[b.lat,b.lng]));
-          if(hull.length>=3) allPolys.push(hull);
-        }
-      } else {
-        // Kein Wohngebiet → Gebäude im Umkreis ~500m, Angular-Sweep als Fallback
-        const nearBldgs=regBldgs.filter(b=>Math.sqrt((b.lat-pn.lat)**2+(b.lng-pn.lng)**2)<0.005);
-        if(nearBldgs.length>=2){
-          allPolys.push(tightPoly(nearBldgs));
-        } else continue;
-      }
-
-      if(allPolys.length===0) continue;
 
       let polyCoords,subPolys=null;
-      if(allPolys.length===1){
-        polyCoords=allPolys[0];
+      if(matching.length>=1){
+        for(const m of matching) usedResIdx.add(m.ri);
+        if(matching.length===1){
+          polyCoords=matching[0].coords;
+        } else {
+          subPolys=matching.map(m=>m.coords);
+          polyCoords=mergePolyBridge(subPolys);
+        }
       } else {
-        subPolys=allPolys;
-        polyCoords=mergePolyBridge(allPolys);
+        // Kein Wohngebiet → Gebäude im Umkreis ~500m, Angular-Sweep
+        const nearBldgs=regBldgs.filter(b=>Math.sqrt((b.lat-pn.lat)**2+(b.lng-pn.lng)**2)<0.005);
+        if(nearBldgs.length>=2) polyCoords=tightPoly(nearBldgs);
+        else continue;
       }
 
       let name=pn.name;
