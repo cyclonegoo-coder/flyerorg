@@ -857,7 +857,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v273 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v274 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -9940,49 +9940,13 @@ async function suggestGebieteForRegion(regionId){
     }
     const regBldgs=bldgs.filter(b=>pointInPolygon(b.lat,b.lng,searchPoly));
 
-    // ── Schritt 2: Gebäude räumlich clustern (Siedlungen erkennen) ──
-    document.getElementById('suggestGebietContent').innerHTML=`<p style="text-align:center;padding:20px">⏳ Erkenne Siedlungen…<br><small>(${regBldgs.length} Gebäude, ${resAreas.length} Wohngebiete, ${placeNodes.length} Ortsnamen)</small></p>`;
+    // ── Schritt 2: Place-Node-First — Orte als Basis für Gebiete ──
+    document.getElementById('suggestGebietContent').innerHTML=`<p style="text-align:center;padding:20px">⏳ Ordne Siedlungen zu…<br><small>(${regBldgs.length} Gebäude, ${resAreas.length} Wohngebiete, ${placeNodes.length} Ortsnamen)</small></p>`;
 
-    // Grid-basiertes Clustering: ~200m Zellgröße
-    const gridSize=0.002;
-    const grid={};
-    for(const b of regBldgs){
-      const gx=Math.floor(b.lng/gridSize),gy=Math.floor(b.lat/gridSize);
-      const key=gx+','+gy;
-      if(!grid[key]) grid[key]={buildings:[],gx,gy};
-      grid[key].buildings.push(b);
-    }
-    const visited=new Set();
-    const clusters=[];
-    for(const key of Object.keys(grid)){
-      if(visited.has(key)) continue;
-      const clusterBldgs=[];
-      const stack=[key];
-      while(stack.length>0){
-        const k=stack.pop();
-        if(visited.has(k)) continue;
-        visited.add(k);
-        clusterBldgs.push(...grid[k].buildings);
-        const [gx,gy]=k.split(',').map(Number);
-        for(let dx=-1;dx<=1;dx++) for(let dy=-1;dy<=1;dy++){
-          if(dx===0&&dy===0) continue;
-          const nk=(gx+dx)+','+(gy+dy);
-          if(grid[nk]&&!visited.has(nk)) stack.push(nk);
-        }
-      }
-      if(clusterBldgs.length>=2) clusters.push(clusterBldgs);
-    }
+    // Polygon-Fläche berechnen (Shoelace)
+    function polyArea(c){let a=0;for(let i=0;i<c.length;i++){const j=(i+1)%c.length;a+=c[i][0]*c[j][1]-c[j][0]*c[i][1];}return Math.abs(a/2);}
 
-    // Convex Hull (Graham Scan) für Polygon-Merge
-    function convexHull(pts){
-      if(pts.length<3) return pts.slice();
-      const sorted=pts.slice().sort((a,b)=>a[1]-b[1]||a[0]-b[0]);
-      const cross=(O,A,B)=>(A[1]-O[1])*(B[0]-O[0])-(A[0]-O[0])*(B[1]-O[1]);
-      const lo=[];for(const p of sorted){while(lo.length>=2&&cross(lo[lo.length-2],lo[lo.length-1],p)<=0)lo.pop();lo.push(p);}
-      const hi=[];for(let i=sorted.length-1;i>=0;i--){const p=sorted[i];while(hi.length>=2&&cross(hi[hi.length-2],hi[hi.length-1],p)<=0)hi.pop();hi.push(p);}
-      return lo.slice(0,-1).concat(hi.slice(0,-1));
-    }
-    // Fallback: Angular-Sweep (48 Sektoren)
+    // Fallback: Angular-Sweep (48 Sektoren, eng an Gebäuden)
     function tightPoly(bldgArr){
       if(bldgArr.length<3) return bldgArr.map(b=>[b.lat,b.lng]);
       const cx=bldgArr.reduce((s,b)=>s+b.lat,0)/bldgArr.length;
@@ -10002,74 +9966,59 @@ async function suggestGebieteForRegion(regionId){
       return points.length>=3?points:bldgArr.map(b=>[b.lat,b.lng]);
     }
 
-    // Cluster benennen: nächsten Ortsnamen zuordnen
-    function nameCluster(bldgArr){
-      const cx=bldgArr.reduce((s,b)=>s+b.lat,0)/bldgArr.length;
-      const cy=bldgArr.reduce((s,b)=>s+b.lng,0)/bldgArr.length;
-      let best=null,bestD=Infinity;
-      for(const p of placeNodes){const d=Math.sqrt((p.lat-cx)**2+(p.lng-cy)**2);if(d<bestD){bestD=d;best=p;}}
-      return(best&&bestD<0.018)?best.name:null;
-    }
-    // Ortsnamen für Koordinaten-Centroid
-    function nameForCoords(coords){
-      const cx=coords.reduce((s,c)=>s+c[0],0)/coords.length;
-      const cy=coords.reduce((s,c)=>s+c[1],0)/coords.length;
-      let best=null,bestD=Infinity;
-      for(const p of placeNodes){const d=Math.sqrt((p.lat-cx)**2+(p.lng-cy)**2);if(d<bestD){bestD=d;best=p;}}
-      return(best&&bestD<0.018)?best.name:null;
-    }
-
-    // ── Kandidaten aus Clustern + Wohngebieten bauen ──
+    // ── Place-Node-First: Jeder Ort bekommt sein eigenes Polygon ──
     let candidates=[];
     const usedNames=new Set();
-    const usedResIdx=new Set(); // welche resAreas wurden zugeordnet
+    const usedResIdx=new Set();
 
-    // Residential-Polygone den Clustern zuordnen (ALLE die ≥1 Gebäude enthalten)
-    clusters.sort((a,b)=>b.length-a.length);
-    for(const cl of clusters){
-      let name=nameCluster(cl);
-      if(!name||usedNames.has(name)){
-        let n=1;while(usedNames.has('Siedlung '+n))n++;
-        name=name&&usedNames.has(name)?name+' '+n:'Siedlung '+n;
-      }
-      usedNames.add(name);
-
-      // Alle Wohngebietsflächen finden die Gebäude dieses Clusters enthalten
-      const matching=[];
+    for(const pn of placeNodes){
+      // Größtes Wohngebiet (residential) innerhalb ~500m vom Ortsknoten finden
+      let bestRes=null,bestArea=0,bestIdx=-1;
       for(let ri=0;ri<resAreas.length;ri++){
         const rp=resAreas[ri];
-        let cnt=0;
-        for(const b of cl) if(pointInPolygon(b.lat,b.lng,rp.coords)) cnt++;
-        if(cnt>=1){matching.push(rp);usedResIdx.add(ri);}
+        const cx2=rp.coords.reduce((s,c)=>s+c[0],0)/rp.coords.length;
+        const cy2=rp.coords.reduce((s,c)=>s+c[1],0)/rp.coords.length;
+        const dist=Math.sqrt((pn.lat-cx2)**2+(pn.lng-cy2)**2);
+        if(dist<0.005){ // ~500m
+          const area=polyArea(rp.coords);
+          if(area>bestArea){bestArea=area;bestRes=rp;bestIdx=ri;}
+        }
       }
 
       let polyCoords;
-      if(matching.length===1){
-        // Genau 1 Wohngebiet → direkt nutzen (schön glatt)
-        polyCoords=matching[0].coords;
-      } else if(matching.length>1){
-        // Mehrere Wohngebiete → Convex Hull aller Punkte (deckt alles ab)
-        const allPts=matching.flatMap(m=>m.coords);
-        polyCoords=convexHull(allPts);
+      if(bestRes){
+        polyCoords=bestRes.coords;
+        usedResIdx.add(bestIdx);
       } else {
-        // Kein Wohngebiet → Angular-Sweep Fallback
-        polyCoords=tightPoly(cl);
+        // Kein Wohngebiet → Gebäude im Umkreis ~500m suchen, Angular-Sweep
+        const nearBldgs=regBldgs.filter(b=>Math.sqrt((b.lat-pn.lat)**2+(b.lng-pn.lng)**2)<0.005);
+        if(nearBldgs.length>=2){
+          polyCoords=tightPoly(nearBldgs);
+        } else continue; // Ort ohne Gebäude/Wohngebiet überspringen
       }
-      candidates.push({name,coords:polyCoords,_bldgs:cl});
+
+      let name=pn.name;
+      if(usedNames.has(name)){let n=2;while(usedNames.has(name+' '+n))n++;name=name+' '+n;}
+      usedNames.add(name);
+
+      // Gebäude innerhalb des Polygons zählen
+      const insideBldgs=regBldgs.filter(b=>pointInPolygon(b.lat,b.lng,polyCoords));
+      candidates.push({name,coords:polyCoords,_bldgs:insideBldgs});
     }
 
-    // Verwaiste Wohngebiete (ohne Cluster) als eigene Gebiete hinzufügen
+    // Verwaiste Wohngebiete (keinem Ort zugeordnet) als eigene Gebiete
     for(let ri=0;ri<resAreas.length;ri++){
       if(usedResIdx.has(ri)) continue;
       const rp=resAreas[ri];
-      // Gebäude innerhalb zählen
       const insideBldgs=regBldgs.filter(b=>pointInPolygon(b.lat,b.lng,rp.coords));
-      let name=rp.name||nameForCoords(rp.coords);
+      // Nächsten Ortsnamen suchen
+      const cx2=rp.coords.reduce((s,c)=>s+c[0],0)/rp.coords.length;
+      const cy2=rp.coords.reduce((s,c)=>s+c[1],0)/rp.coords.length;
+      let closestPN=null,closestD=Infinity;
+      for(const p of placeNodes){const d=Math.sqrt((p.lat-cx2)**2+(p.lng-cy2)**2);if(d<closestD){closestD=d;closestPN=p;}}
+      let name=rp.name||(closestPN&&closestD<0.018?closestPN.name:null);
       if(!name){let n=1;while(usedNames.has('Siedlung '+n))n++;name='Siedlung '+n;}
-      if(usedNames.has(name)){
-        let n=2;while(usedNames.has(name+' '+n))n++;
-        name=name+' '+n;
-      }
+      if(usedNames.has(name)){let n=2;while(usedNames.has(name+' '+n))n++;name=name+' '+n;}
       usedNames.add(name);
       candidates.push({name,coords:rp.coords,_bldgs:insideBldgs});
     }
