@@ -857,7 +857,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v278 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v279 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -10104,6 +10104,19 @@ async function suggestGebieteForRegion(regionId){
     // ── Schritt 2: Place-Node-First — Orte als Basis für Gebiete ──
     document.getElementById('suggestGebietContent').innerHTML=`<p style="text-align:center;padding:20px">⏳ Ordne Siedlungen zu…<br><small>(${regBldgs.length} Gebäude, ${resAreas.length} Wohngebiete, ${placeNodes.length} Ortsnamen)</small></p>`;
 
+    // Konvexe Hülle (Graham-Scan)
+    function convexHull(pts){
+      if(pts.length<3) return pts.slice();
+      pts=pts.slice().sort((a,b)=>a[1]-b[1]||a[0]-b[0]);
+      const cross=(o,a,b)=>(a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]);
+      const lower=[];
+      for(const p of pts){while(lower.length>=2&&cross(lower[lower.length-2],lower[lower.length-1],p)<=0)lower.pop();lower.push(p);}
+      const upper=[];
+      for(let i=pts.length-1;i>=0;i--){const p=pts[i];while(upper.length>=2&&cross(upper[upper.length-2],upper[upper.length-1],p)<=0)upper.pop();upper.push(p);}
+      lower.pop();upper.pop();
+      return lower.concat(upper);
+    }
+
     // Fallback: Angular-Sweep (48 Sektoren, eng an Gebäuden)
     function tightPoly(bldgArr){
       if(bldgArr.length<3) return bldgArr.map(b=>[b.lat,b.lng]);
@@ -10136,6 +10149,23 @@ async function suggestGebieteForRegion(regionId){
     const usedNames=new Set();
     const usedResIdx=new Set();
 
+    // Helfer: kürzeste Distanz Punkt→Polygon-Kante (in Grad, ~111m pro 0.001)
+    function distToPolyEdge(lat,lng,poly){
+      let minD=Infinity;
+      for(let i=0;i<poly.length;i++){
+        const a=poly[i],b=poly[(i+1)%poly.length];
+        const dx=b[1]-a[1],dy=b[0]-a[0];
+        const lenSq=dx*dx+dy*dy;
+        if(lenSq===0){const d=Math.sqrt((lat-a[0])**2+(lng-a[1])**2);if(d<minD)minD=d;continue;}
+        let t=((lng-a[1])*dx+(lat-a[0])*dy)/lenSq;
+        t=Math.max(0,Math.min(1,t));
+        const px=a[1]+t*dx,py=a[0]+t*dy;
+        const d=Math.sqrt((lat-py)**2+(lng-px)**2);
+        if(d<minD)minD=d;
+      }
+      return minD;
+    }
+
     for(const pn of placeNodes){
       // ALLE Wohngebiete innerhalb ~1km vom Ortsknoten sammeln
       const matching=[];
@@ -10148,22 +10178,28 @@ async function suggestGebieteForRegion(regionId){
         if(dist<0.009) matching.push({ri,coords:rp.coords}); // ~1km
       }
 
-      let allPolys=[]; // Sammle alle Teil-Polygone
+      let allPolys=[];
       if(matching.length>=1){
         for(const m of matching) usedResIdx.add(m.ri);
         for(const m of matching) allPolys.push(m.coords);
-      }
 
-      // Gebäude-Auffang: Gebäude im Umkreis ~1km die NICHT in den residential-Polygonen liegen
-      const nearBldgs=regBldgs.filter(b=>Math.sqrt((b.lat-pn.lat)**2+(b.lng-pn.lng)**2)<0.009);
-      const uncoveredBldgs=allPolys.length>0
-        ? nearBldgs.filter(b=>!allPolys.some(p=>pointInPolygon(b.lat,b.lng,p)))
-        : nearBldgs;
-
-      // Wenn genug unabgedeckte Gebäude → Angular-Sweep als zusätzliches Polygon
-      if(uncoveredBldgs.length>=3){
-        const sweepPoly=tightPoly(uncoveredBldgs);
-        if(sweepPoly.length>=3) allPolys.push(sweepPoly);
+        // Nahbereich-Erweiterung: Gebäude ≤150m (~0.0014°) von einer Polygon-Kante
+        // die NICHT bereits im Polygon liegen → als konvexe Hülle anhängen
+        const nearEdgeBldgs=regBldgs.filter(b=>{
+          if(allPolys.some(p=>pointInPolygon(b.lat,b.lng,p))) return false;
+          return allPolys.some(p=>distToPolyEdge(b.lat,b.lng,p)<0.0014);
+        });
+        if(nearEdgeBldgs.length>=3){
+          // Konvexe Hülle statt Angular-Sweep (sauberer)
+          const hull=convexHull(nearEdgeBldgs.map(b=>[b.lat,b.lng]));
+          if(hull.length>=3) allPolys.push(hull);
+        }
+      } else {
+        // Kein Wohngebiet → Gebäude im Umkreis ~500m, Angular-Sweep als Fallback
+        const nearBldgs=regBldgs.filter(b=>Math.sqrt((b.lat-pn.lat)**2+(b.lng-pn.lng)**2)<0.005);
+        if(nearBldgs.length>=2){
+          allPolys.push(tightPoly(nearBldgs));
+        } else continue;
       }
 
       if(allPolys.length===0) continue;
