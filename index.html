@@ -857,7 +857,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v277 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v278 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -10137,7 +10137,7 @@ async function suggestGebieteForRegion(regionId){
     const usedResIdx=new Set();
 
     for(const pn of placeNodes){
-      // ALLE Wohngebiete innerhalb ~500m vom Ortsknoten sammeln
+      // ALLE Wohngebiete innerhalb ~1km vom Ortsknoten sammeln
       const matching=[];
       for(let ri=0;ri<resAreas.length;ri++){
         if(usedResIdx.has(ri)) continue;
@@ -10145,26 +10145,35 @@ async function suggestGebieteForRegion(regionId){
         const cx2=rp.coords.reduce((s,c)=>s+c[0],0)/rp.coords.length;
         const cy2=rp.coords.reduce((s,c)=>s+c[1],0)/rp.coords.length;
         const dist=Math.sqrt((pn.lat-cx2)**2+(pn.lng-cy2)**2);
-        if(dist<0.005) matching.push({ri,coords:rp.coords}); // ~500m
+        if(dist<0.009) matching.push({ri,coords:rp.coords}); // ~1km
       }
 
-      let polyCoords,subPolys=null;
+      let allPolys=[]; // Sammle alle Teil-Polygone
       if(matching.length>=1){
-        // Alle zuordnen
         for(const m of matching) usedResIdx.add(m.ri);
-        if(matching.length===1){
-          polyCoords=matching[0].coords;
-        } else {
-          // Mehrere → per Brücke verbinden
-          subPolys=matching.map(m=>m.coords);
-          polyCoords=mergePolyBridge(subPolys);
-        }
+        for(const m of matching) allPolys.push(m.coords);
+      }
+
+      // Gebäude-Auffang: Gebäude im Umkreis ~1km die NICHT in den residential-Polygonen liegen
+      const nearBldgs=regBldgs.filter(b=>Math.sqrt((b.lat-pn.lat)**2+(b.lng-pn.lng)**2)<0.009);
+      const uncoveredBldgs=allPolys.length>0
+        ? nearBldgs.filter(b=>!allPolys.some(p=>pointInPolygon(b.lat,b.lng,p)))
+        : nearBldgs;
+
+      // Wenn genug unabgedeckte Gebäude → Angular-Sweep als zusätzliches Polygon
+      if(uncoveredBldgs.length>=3){
+        const sweepPoly=tightPoly(uncoveredBldgs);
+        if(sweepPoly.length>=3) allPolys.push(sweepPoly);
+      }
+
+      if(allPolys.length===0) continue;
+
+      let polyCoords,subPolys=null;
+      if(allPolys.length===1){
+        polyCoords=allPolys[0];
       } else {
-        // Kein Wohngebiet → Gebäude im Umkreis ~500m, Angular-Sweep
-        const nearBldgs=regBldgs.filter(b=>Math.sqrt((b.lat-pn.lat)**2+(b.lng-pn.lng)**2)<0.005);
-        if(nearBldgs.length>=2){
-          polyCoords=tightPoly(nearBldgs);
-        } else continue;
+        subPolys=allPolys;
+        polyCoords=mergePolyBridge(allPolys);
       }
 
       let name=pn.name;
