@@ -857,7 +857,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v270 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v271 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -9934,8 +9934,8 @@ async function suggestGebieteForRegion(regionId){
     // ── Schritt 2: Gebäude räumlich clustern (Siedlungen erkennen) ──
     document.getElementById('suggestGebietContent').innerHTML=`<p style="text-align:center;padding:20px">⏳ Erkenne Siedlungen…<br><small>(${regBldgs.length} Gebäude, ${placeNodes.length} Ortsnamen)</small></p>`;
 
-    // Grid-basiertes Clustering: ~300m Zellgröße
-    const gridSize=0.003;
+    // Grid-basiertes Clustering: ~200m Zellgröße (trennt Dörfer besser)
+    const gridSize=0.002;
     const grid={};
     for(const b of regBldgs){
       const gx=Math.floor(b.lng/gridSize),gy=Math.floor(b.lat/gridSize);
@@ -9965,30 +9965,32 @@ async function suggestGebieteForRegion(regionId){
       if(clusterBldgs.length>=2) clusters.push(clusterBldgs);
     }
 
-    // Convex Hull pro Cluster (Graham Scan)
-    function convexHull(pts){
-      if(pts.length<3) return pts.slice();
-      pts.sort((a,b)=>a[1]-b[1]||a[0]-b[0]);
-      const cross=(O,A,B)=>(A[1]-O[1])*(B[0]-O[0])-(A[0]-O[0])*(B[1]-O[1]);
-      const lo=[];
-      for(const p of pts){while(lo.length>=2&&cross(lo[lo.length-2],lo[lo.length-1],p)<=0)lo.pop();lo.push(p);}
-      const hi=[];
-      for(let i=pts.length-1;i>=0;i--){const p=pts[i];while(hi.length>=2&&cross(hi[hi.length-2],hi[hi.length-1],p)<=0)hi.pop();hi.push(p);}
-      return lo.slice(0,-1).concat(hi.slice(0,-1));
-    }
-    // Convex Hull mit ~80m Puffer
-    function hullWithBuffer(bldgArr){
-      const pts=bldgArr.map(b=>[b.lat,b.lng]);
-      const hull=convexHull(pts);
-      if(hull.length<3) return hull;
-      const cx=hull.reduce((s,p)=>s+p[0],0)/hull.length;
-      const cy=hull.reduce((s,p)=>s+p[1],0)/hull.length;
-      const buf=0.0007; // ~80m
-      return hull.map(p=>{
-        const dx=p[0]-cx,dy=p[1]-cy;
-        const len=Math.sqrt(dx*dx+dy*dy)||0.0001;
-        return[p[0]+dx/len*buf,p[1]+dy/len*buf];
-      });
+    // Enges Polygon per Angular-Sweep (48 Sektoren à 7.5° → viele Punkte, eng an Gebäuden)
+    function tightPoly(bldgArr){
+      if(bldgArr.length<3) return bldgArr.map(b=>[b.lat,b.lng]);
+      const cx=bldgArr.reduce((s,b)=>s+b.lat,0)/bldgArr.length;
+      const cy=bldgArr.reduce((s,b)=>s+b.lng,0)/bldgArr.length;
+      const nSec=48, buf=0.0004; // ~45m Puffer
+      const points=[];
+      for(let i=0;i<nSec;i++){
+        const aMin=i*360/nSec, aMax=(i+1)*360/nSec;
+        let maxD=0, far=null;
+        for(const b of bldgArr){
+          const dy=b.lat-cx, dx=b.lng-cy;
+          let a=Math.atan2(dx,dy)*180/Math.PI;
+          if(a<0) a+=360;
+          if(a>=aMin&&a<aMax){
+            const d=dy*dy+dx*dx;
+            if(d>maxD){maxD=d;far=b;}
+          }
+        }
+        if(far){
+          const dy=far.lat-cx, dx=far.lng-cy;
+          const len=Math.sqrt(dy*dy+dx*dx)||0.0001;
+          points.push([far.lat+dy/len*buf, far.lng+dx/len*buf]);
+        }
+      }
+      return points.length>=3?points:bldgArr.map(b=>[b.lat,b.lng]);
     }
 
     // Cluster benennen: nächsten Ortsnamen zuordnen
@@ -10018,7 +10020,7 @@ async function suggestGebieteForRegion(regionId){
         name=name&&usedNames.has(name)?name+' '+(n):'Siedlung '+n;
       }
       usedNames.add(name);
-      candidates.push({name,coords:hullWithBuffer(cl),_bldgs:cl});
+      candidates.push({name,coords:tightPoly(cl),_bldgs:cl});
     }
 
     if(candidates.length===0) candidates=[{name:searchName,coords:searchPoly,_bldgs:regBldgs}];
@@ -10032,7 +10034,8 @@ async function suggestGebieteForRegion(regionId){
     for(const c of candidates){
       const inP=c._bldgs||bldgs.filter(b=>pointInPolygon(b.lat,b.lng,c.coords));
       const mfh=inP.filter(b=>b.type==='apartments'||b.type==='dormitory').length;
-      const est=inP.length+mfh*3;
+      const estRaw=inP.length+mfh*3;
+      const est=Math.ceil(estRaw/10)*10; // auf nächsten 10er aufrunden
 
       if(est>targetHH){
         const N=Math.min(Math.ceil(est/targetHH),6);
@@ -10041,7 +10044,8 @@ async function suggestGebieteForRegion(regionId){
         parts.forEach((pc,i)=>{
           const pb=inP.filter(b=>pointInPolygon(b.lat,b.lng,pc));
           const pm=pb.filter(b=>b.type==='apartments'||b.type==='dormitory').length;
-          suggestedGebiete.push({name:`${c.name} ${dirs[i]}`,coords:pc,buildings:pb.length,mfh:pm,estimate:pb.length+pm*3,checked:true,split:true});
+          const subEst=Math.ceil((pb.length+pm*3)/10)*10;
+          suggestedGebiete.push({name:`${c.name} ${dirs[i]}`,coords:pc,buildings:pb.length,mfh:pm,estimate:subEst,checked:true,split:true});
         });
       } else {
         suggestedGebiete.push({name:c.name,coords:c.coords,buildings:inP.length,mfh,estimate:est,checked:est>0,split:false});
