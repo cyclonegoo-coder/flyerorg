@@ -857,7 +857,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v287 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v288 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -9238,13 +9238,21 @@ async function hTreeAssignPoly(type,id){
     } else {
       const rLkId=regionGetLkId(entity);
       const lkPoly2=rLkId&&landkreise[rLkId]?landkreise[rLkId].polygon:null;
-      rawCandidates=grenzenData.filter(g=>g.level==='7'&&g.name&&g.coords&&g.coords.length>=3)
+      const inLK2=grenzenData.filter(g=>(g.level==='7'||g.level==='8')&&g.name&&g.coords&&g.coords.length>=3)
         .filter(g=>{
           if(!lkPoly2||lkPoly2.length<3) return true;
           const cx=g.coords.reduce((s,c)=>s+c[0],0)/g.coords.length;
           const cy=g.coords.reduce((s,c)=>s+c[1],0)/g.coords.length;
           return pointInPolygon(cx,cy,lkPoly2);
-        }).sort((a,b)=>a.name.localeCompare(b.name));
+        });
+      // Level-8 rausfiltern wenn Schwerpunkt in einer Level-7-VG liegt
+      const vgPolys2=inLK2.filter(g=>g.level==='7');
+      rawCandidates=inLK2.filter(g=>{
+        if(g.level==='7') return true;
+        const cx=g.coords.reduce((s,c)=>s+c[0],0)/g.coords.length;
+        const cy=g.coords.reduce((s,c)=>s+c[1],0)/g.coords.length;
+        return !vgPolys2.some(vg=>pointInPolygon(cx,cy,vg.coords));
+      }).sort((a,b)=>a.name.localeCompare(b.name));
     }
     const seenAP=new Set();
     const candidates=rawCandidates.filter(g=>{const k=g.name+'_'+g.level;if(seenAP.has(k))return false;seenAP.add(k);return true;});
