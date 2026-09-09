@@ -857,7 +857,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v285 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v286 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -9030,14 +9030,22 @@ async function hTreeAddReg(){
     if(!grenzenData){toast('⏳ Verwaltungsgrenzen laden…');await toggleVerwaltungsgrenzen(true);}
     if(!grenzenData){toast('⚠️ Grenzen nicht verfügbar');return;}
     const lkPoly2=landkreise[chosenLKId]?landkreise[chosenLKId].polygon:null;
-    // Nur VG-Level (7, grün) — weniger, sinnvollere Einheiten als Gemeinden (8, blau)
-    const raw=grenzenData.filter(g=>g.level==='7'&&g.name&&g.coords&&g.coords.length>=3)
+    // VG-Level (7) + eigenständige Gemeinden (8) die keiner VG angehören
+    const inLK=grenzenData.filter(g=>(g.level==='7'||g.level==='8')&&g.name&&g.coords&&g.coords.length>=3)
       .filter(g=>{
         if(!lkPoly2||lkPoly2.length<3) return true;
         const cx2=g.coords.reduce((s,c)=>s+c[0],0)/g.coords.length;
         const cy2=g.coords.reduce((s,c)=>s+c[1],0)/g.coords.length;
         return pointInPolygon(cx2,cy2,lkPoly2);
-      })
+      });
+    // Level-8-Gemeinden rausfiltern, deren Schwerpunkt in einem Level-7-Polygon liegt (= Teil einer VG)
+    const vgPolys=inLK.filter(g=>g.level==='7');
+    const raw=inLK.filter(g=>{
+      if(g.level==='7') return true;
+      const cx2=g.coords.reduce((s,c)=>s+c[0],0)/g.coords.length;
+      const cy2=g.coords.reduce((s,c)=>s+c[1],0)/g.coords.length;
+      return !vgPolys.some(vg=>pointInPolygon(cx2,cy2,vg.coords));
+    })
       .map(g=>({name:g.name,level:g.level,coords:g.coords}))
       .sort((a,b)=>a.name.localeCompare(b.name));
     // Deduplizieren: gleicher Name+Level → nur einmal
