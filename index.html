@@ -857,7 +857,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v286 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v287 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -6050,8 +6050,10 @@ function drawPolygons(){
     visRegs.forEach(rk=>{
       const r=regionen[rk];
       if(!r||!r.polygon||r.polygon.length<3)return;
-      const rl=L.polygon(r.polygon,{color:'#e65100',fillColor:'#ff9800',fillOpacity:.06,weight:2.5,dashArray:'8,5',interactive:false}).addTo(map);
+      const rl=L.polygon(r.polygon,{color:'#e65100',fillColor:'#ff9800',fillOpacity:.06,weight:2.5,dashArray:'8,5',interactive:true,bubblingMouseEvents:false}).addTo(map);
       rl.bindTooltip(r.name||'',{sticky:true,className:'grenzen-tooltip',direction:'center',permanent:false});
+      rl.on('click',()=>{switchReg(rk);});
+      rl.setStyle({cursor:'pointer'});
       regionLayers[rk]=rl;
     });
   }
