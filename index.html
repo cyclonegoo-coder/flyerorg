@@ -857,7 +857,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v289 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v290 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -5919,9 +5919,9 @@ function buildRings(ways){
   const segments=ways.map(w=>w.geometry?w.geometry.map(p=>[p.lat,p.lon]):[]);
   const rings=[];
   const used=new Array(segments.length).fill(false);
+  const T=0.0001; // Toleranz ~11m
 
   while(true){
-    // Find unused segment to start
     let startIdx=-1;
     for(let i=0;i<segments.length;i++){if(!used[i]&&segments[i].length>0){startIdx=i;break;}}
     if(startIdx===-1)break;
@@ -5929,25 +5929,30 @@ function buildRings(ways){
     let ring=[...segments[startIdx]];
     used[startIdx]=true;
 
-    // Try to close the ring by connecting segments
     let changed=true;
     while(changed){
       changed=false;
-      const last=ring[ring.length-1];
-      const first=ring[0];
-      // Check if ring is closed
-      if(ring.length>3&&Math.abs(last[0]-first[0])<0.0001&&Math.abs(last[1]-first[1])<0.0001)break;
+      const last=ring[ring.length-1], first=ring[0];
+      if(ring.length>3&&Math.abs(last[0]-first[0])<T&&Math.abs(last[1]-first[1])<T)break;
 
       for(let i=0;i<segments.length;i++){
         if(used[i]||segments[i].length===0)continue;
         const sf=segments[i][0], sl=segments[i][segments[i].length-1];
-        // Connect end-to-start
-        if(Math.abs(last[0]-sf[0])<0.0001&&Math.abs(last[1]-sf[1])<0.0001){
+        // Ende → Anfang
+        if(Math.abs(last[0]-sf[0])<T&&Math.abs(last[1]-sf[1])<T){
           ring.push(...segments[i].slice(1));used[i]=true;changed=true;break;
         }
-        // Connect end-to-end (reverse)
-        if(Math.abs(last[0]-sl[0])<0.0001&&Math.abs(last[1]-sl[1])<0.0001){
+        // Ende → Ende (umdrehen)
+        if(Math.abs(last[0]-sl[0])<T&&Math.abs(last[1]-sl[1])<T){
           ring.push(...segments[i].slice(0,-1).reverse());used[i]=true;changed=true;break;
+        }
+        // Anfang → Ende (vorne anfügen)
+        if(Math.abs(first[0]-sl[0])<T&&Math.abs(first[1]-sl[1])<T){
+          ring.unshift(...segments[i].slice(0,-1));used[i]=true;changed=true;break;
+        }
+        // Anfang → Anfang (umdrehen, vorne anfügen)
+        if(Math.abs(first[0]-sf[0])<T&&Math.abs(first[1]-sf[1])<T){
+          ring.unshift(...segments[i].slice(1).reverse());used[i]=true;changed=true;break;
         }
       }
     }
@@ -9028,45 +9033,45 @@ async function hTreeAddReg(){
   let regionPolygon=null,regionName='',centerLat=null,centerLng=null;
 
   if(polySource==='osm'){
-    // OSM-Grenzen aus grenzenData wählen (Multi-Select)
+    // OSM-Grenzen aus grenzenData wählen (Multi-Select) mit Level-Filter
     if(!grenzenData){toast('⏳ Verwaltungsgrenzen laden…');await toggleVerwaltungsgrenzen(true);}
     if(!grenzenData){toast('⚠️ Grenzen nicht verfügbar');return;}
     const lkPoly2=landkreise[chosenLKId]?landkreise[chosenLKId].polygon:null;
-    // VG-Level (7) + eigenständige Gemeinden (8) die keiner VG angehören
-    const inLK=grenzenData.filter(g=>(g.level==='7'||g.level==='8')&&g.name&&g.coords&&g.coords.length>=3)
+    // Alle Einträge im LK sammeln (Level 7-10)
+    const allInLK=grenzenData.filter(g=>['7','8','9','10'].includes(g.level)&&g.name&&g.coords&&g.coords.length>=3)
       .filter(g=>{
         if(!lkPoly2||lkPoly2.length<3) return true;
         const cx2=g.coords.reduce((s,c)=>s+c[0],0)/g.coords.length;
         const cy2=g.coords.reduce((s,c)=>s+c[1],0)/g.coords.length;
         return pointInPolygon(cx2,cy2,lkPoly2);
       });
-    // Level-8-Gemeinden rausfiltern, deren Fläche komplett in einem Level-7-Polygon liegt (= Teil einer VG)
-    // Nur geschlossene VG-Ringe verwenden (offene Ringe geben falsche pointInPolygon-Ergebnisse)
-    const vgPolys=inLK.filter(g=>{
-      if(g.level!=='7'||g.coords.length<10) return false;
-      const f=g.coords[0],l=g.coords[g.coords.length-1];
-      return Math.abs(f[0]-l[0])<0.001&&Math.abs(f[1]-l[1])<0.001; // Ring geschlossen?
+    // Deduplizieren: gleicher Name+Level → nur einmal (größtes Polygon behalten)
+    const dedupMap={};
+    allInLK.forEach(g=>{
+      const k=g.name+'_'+g.level;
+      if(!dedupMap[k]||g.coords.length>dedupMap[k].coords.length) dedupMap[k]=g;
     });
-    const raw=inLK.filter(g=>{
-      if(g.level==='7') return true;
-      // Centroid + BBox-Ecken prüfen — nur filtern wenn ALLE Punkte in einer VG liegen
-      const c=g.coords;
-      const cx2=c.reduce((s,p)=>s+p[0],0)/c.length;
-      const cy2=c.reduce((s,p)=>s+p[1],0)/c.length;
-      let minLa=Infinity,maxLa=-Infinity,minLo=Infinity,maxLo=-Infinity;
-      c.forEach(p=>{if(p[0]<minLa)minLa=p[0];if(p[0]>maxLa)maxLa=p[0];if(p[1]<minLo)minLo=p[1];if(p[1]>maxLo)maxLo=p[1];});
-      const pts=[[cx2,cy2],[minLa,minLo],[minLa,maxLo],[maxLa,minLo],[maxLa,maxLo]];
-      return !vgPolys.some(vg=>pts.every(p=>pointInPolygon(p[0],p[1],vg.coords)));
-    })
-      .map(g=>({name:g.name,level:g.level,coords:g.coords}))
-      .sort((a,b)=>a.name.localeCompare(b.name));
-    // Deduplizieren: gleicher Name+Level → nur einmal
-    const seen=new Set();
-    const candidates=raw.filter(g=>{const k=g.name+'_'+g.level;if(seen.has(k))return false;seen.add(k);return true;});
-    if(candidates.length===0){toast('⚠️ Keine Grenzen im Landkreis gefunden');return;}
+    const allDeduped=Object.values(dedupMap).sort((a,b)=>a.name.localeCompare(b.name));
+
+    // Level-Filter wählen lassen
+    const levelLabel={'7':'VG','8':'Gem.','9':'OT','10':'OT'};
+    const availLevels=[...new Set(allDeduped.map(g=>g.level))].sort();
+    let chosenLevels=availLevels;
+    if(availLevels.length>1){
+      const lvlOpts=availLevels.map(lv=>({
+        label:`${levelLabel[lv]||lv} (${lv}) — ${allDeduped.filter(g=>g.level===lv).length} Einträge`,
+        value:lv,style:'background:var(--blue);color:#fff'
+      }));
+      lvlOpts.unshift({label:'Alle Level anzeigen',value:'_all',style:'background:var(--green);color:#fff'});
+      const lvlPick=await appChoice('🗺 OSM-Level Filter','Welche Verwaltungsebene(n) anzeigen?',lvlOpts);
+      if(!lvlPick) return;
+      chosenLevels=lvlPick==='_all'?availLevels:[lvlPick];
+    }
+
+    const candidates=allDeduped.filter(g=>chosenLevels.includes(g.level));
+    if(candidates.length===0){toast('⚠️ Keine Grenzen gefunden');return;}
     // Bereits vorhandene Regionen markieren
     const existingNames=new Set(Object.values(regionen).filter(r=>gvId?r.gebietsverband_id===gvId:r.landkreis_id===chosenLKId&&!r.gebietsverband_id).map(r=>r.name));
-    const levelLabel={'7':'VG','8':'Gem.','9':'OT','10':'OT'};
     const items=candidates.map((c,i)=>({id:''+i,label:`${c.name} (${levelLabel[c.level]||c.level})${existingNames.has(c.name)?' ✓':''}`}));
     const picked=await hTreePickMulti('OSM-Regionen wählen (Mehrfachauswahl)',items);
     if(!picked) return;
@@ -9248,38 +9253,36 @@ async function hTreeAssignPoly(type,id){
     } else {
       const rLkId=regionGetLkId(entity);
       const lkPoly2=rLkId&&landkreise[rLkId]?landkreise[rLkId].polygon:null;
-      const inLK2=grenzenData.filter(g=>(g.level==='7'||g.level==='8')&&g.name&&g.coords&&g.coords.length>=3)
+      // Alle Level im LK sammeln, deduplizieren (größtes Polygon behalten)
+      const allAP=grenzenData.filter(g=>['7','8','9','10'].includes(g.level)&&g.name&&g.coords&&g.coords.length>=3)
         .filter(g=>{
           if(!lkPoly2||lkPoly2.length<3) return true;
           const cx=g.coords.reduce((s,c)=>s+c[0],0)/g.coords.length;
           const cy=g.coords.reduce((s,c)=>s+c[1],0)/g.coords.length;
           return pointInPolygon(cx,cy,lkPoly2);
         });
-      // Level-8 rausfiltern wenn Fläche komplett in einer VG liegt (nur geschlossene Ringe)
-      const vgPolys2=inLK2.filter(g=>{
-        if(g.level!=='7'||g.coords.length<10) return false;
-        const f=g.coords[0],l=g.coords[g.coords.length-1];
-        return Math.abs(f[0]-l[0])<0.001&&Math.abs(f[1]-l[1])<0.001;
-      });
-      rawCandidates=inLK2.filter(g=>{
-        if(g.level==='7') return true;
-        const c=g.coords;
-        const cx=c.reduce((s,p)=>s+p[0],0)/c.length;
-        const cy=c.reduce((s,p)=>s+p[1],0)/c.length;
-        let minLa=Infinity,maxLa=-Infinity,minLo=Infinity,maxLo=-Infinity;
-        c.forEach(p=>{if(p[0]<minLa)minLa=p[0];if(p[0]>maxLa)maxLa=p[0];if(p[1]<minLo)minLo=p[1];if(p[1]>maxLo)maxLo=p[1];});
-        const pts=[[cx,cy],[minLa,minLo],[minLa,maxLo],[maxLa,minLo],[maxLa,maxLo]];
-        return !vgPolys2.some(vg=>pts.every(p=>pointInPolygon(p[0],p[1],vg.coords)));
-      }).sort((a,b)=>a.name.localeCompare(b.name));
+      const dMap={};
+      allAP.forEach(g=>{const k=g.name+'_'+g.level;if(!dMap[k]||g.coords.length>dMap[k].coords.length)dMap[k]=g;});
+      const allD=Object.values(dMap).sort((a,b)=>a.name.localeCompare(b.name));
+      // Level-Filter
+      const lvlLabel={'7':'VG','8':'Gem.','9':'OT','10':'OT'};
+      const avLvls=[...new Set(allD.map(g=>g.level))].sort();
+      let chLvls=avLvls;
+      if(avLvls.length>1){
+        const lo=avLvls.map(lv=>({label:`${lvlLabel[lv]||lv} (${lv}) — ${allD.filter(g=>g.level===lv).length}`,value:lv,style:'background:var(--blue);color:#fff'}));
+        lo.unshift({label:'Alle Level',value:'_all',style:'background:var(--green);color:#fff'});
+        const lp=await appChoice('🗺 Level Filter','Welche Ebene?',lo);
+        if(!lp) return;
+        chLvls=lp==='_all'?avLvls:[lp];
+      }
+      rawCandidates=allD.filter(g=>chLvls.includes(g.level));
     }
-    const seenAP=new Set();
-    const candidates=rawCandidates.filter(g=>{const k=g.name+'_'+g.level;if(seenAP.has(k))return false;seenAP.add(k);return true;});
-    if(candidates.length===0){toast('⚠️ Keine passenden Grenzen gefunden');return;}
+    if(rawCandidates.length===0){toast('⚠️ Keine passenden Grenzen gefunden');return;}
     const levelLabel={'6':'LK','7':'VG','8':'Gem.','9':'OT','10':'OT'};
-    const items=candidates.map((c,i)=>({id:''+i,label:`${c.name} (${levelLabel[c.level]||c.level})`}));
+    const items=rawCandidates.map((c,i)=>({id:''+i,label:`${c.name} (${levelLabel[c.level]||c.level})`}));
     const picked=await hTreePickFromList('Grenze wählen',items);
     if(picked===null||picked==='') return;
-    const sel=candidates[parseInt(picked)];
+    const sel=rawCandidates[parseInt(picked)];
     const poly=sel.coords;
     const cx=poly.reduce((s,c)=>s+c[0],0)/poly.length;
     const cy=poly.reduce((s,c)=>s+c[1],0)/poly.length;
