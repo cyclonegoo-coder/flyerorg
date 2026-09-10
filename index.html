@@ -857,7 +857,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v293 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v294 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -9040,11 +9040,12 @@ async function hTreeAddReg(){
     // OSM-Grenzen aus grenzenData wählen (Multi-Select) mit Level-Filter
     if(!grenzenData){toast('⏳ Verwaltungsgrenzen laden…');await toggleVerwaltungsgrenzen(true);}
     if(!grenzenData){toast('⚠️ Grenzen nicht verfügbar');return;}
-    // LK-Polygon: frisch aus grenzenData (Level 6) bevorzugen, da DB-Polygon evtl. veraltet
+    // LK-Polygon: frisch aus grenzenData (Level 6, größter Ring) bevorzugen
     let lkPoly2=landkreise[chosenLKId]?landkreise[chosenLKId].polygon:null;
     if(grenzenData&&landkreise[chosenLKId]){
       const lkN=(landkreise[chosenLKId].name||'').replace(/^(Kreisfreie Stadt |Stadt |Landkreis |Kreis )/i,'').trim();
-      const lkG=grenzenData.find(g=>g.level==='6'&&g.name===lkN&&g.coords&&g.coords.length>=3);
+      const lkAll=grenzenData.filter(g=>g.level==='6'&&g.name===lkN&&g.coords&&g.coords.length>=3);
+      const lkG=lkAll.sort((a,b)=>b.coords.length-a.coords.length)[0];
       if(lkG&&(!lkPoly2||lkPoly2.length<lkG.coords.length)) lkPoly2=lkG.coords;
     }
     // Alle Einträge im LK sammeln (Level 7-10)
@@ -9249,7 +9250,8 @@ async function hTreeAssignPoly(type,id){
       let lkPoly2=rLkId&&landkreise[rLkId]?landkreise[rLkId].polygon:null;
       if(grenzenData&&rLkId&&landkreise[rLkId]){
         const lkN=(landkreise[rLkId].name||'').replace(/^(Kreisfreie Stadt |Stadt |Landkreis |Kreis )/i,'').trim();
-        const lkG=grenzenData.find(g=>g.level==='6'&&g.name===lkN&&g.coords&&g.coords.length>=3);
+        const lkAll=grenzenData.filter(g=>g.level==='6'&&g.name===lkN&&g.coords&&g.coords.length>=3);
+        const lkG=lkAll.sort((a,b)=>b.coords.length-a.coords.length)[0];
         if(lkG&&(!lkPoly2||lkPoly2.length<lkG.coords.length)) lkPoly2=lkG.coords;
       }
       // Alle Level im LK sammeln, deduplizieren (größtes Polygon behalten)
