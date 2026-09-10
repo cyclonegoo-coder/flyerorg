@@ -857,7 +857,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v290 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v291 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -9053,33 +9053,17 @@ async function hTreeAddReg(){
     });
     const allDeduped=Object.values(dedupMap).sort((a,b)=>a.name.localeCompare(b.name));
 
-    // Level-Filter wählen lassen
+    if(allDeduped.length===0){toast('⚠️ Keine Grenzen gefunden');return;}
     const levelLabel={'7':'VG','8':'Gem.','9':'OT','10':'OT'};
-    const availLevels=[...new Set(allDeduped.map(g=>g.level))].sort();
-    let chosenLevels=availLevels;
-    if(availLevels.length>1){
-      const lvlOpts=availLevels.map(lv=>({
-        label:`${levelLabel[lv]||lv} (${lv}) — ${allDeduped.filter(g=>g.level===lv).length} Einträge`,
-        value:lv,style:'background:var(--blue);color:#fff'
-      }));
-      lvlOpts.unshift({label:'Alle Level anzeigen',value:'_all',style:'background:var(--green);color:#fff'});
-      const lvlPick=await appChoice('🗺 OSM-Level Filter','Welche Verwaltungsebene(n) anzeigen?',lvlOpts);
-      if(!lvlPick) return;
-      chosenLevels=lvlPick==='_all'?availLevels:[lvlPick];
-    }
-
-    const candidates=allDeduped.filter(g=>chosenLevels.includes(g.level));
-    if(candidates.length===0){toast('⚠️ Keine Grenzen gefunden');return;}
-    // Bereits vorhandene Regionen markieren
     const existingNames=new Set(Object.values(regionen).filter(r=>gvId?r.gebietsverband_id===gvId:r.landkreis_id===chosenLKId&&!r.gebietsverband_id).map(r=>r.name));
-    const items=candidates.map((c,i)=>({id:''+i,label:`${c.name} (${levelLabel[c.level]||c.level})${existingNames.has(c.name)?' ✓':''}`}));
+    const items=allDeduped.map((c,i)=>({id:''+i,label:`${c.name} (${levelLabel[c.level]||c.level})${existingNames.has(c.name)?' ✓':''}`,level:c.level}));
     const picked=await hTreePickMulti('OSM-Regionen wählen (Mehrfachauswahl)',items);
     if(!picked) return;
     // Batch-Erstellung
     const gv=gebietsverbaende[gvId];
     let created=0,failed=0;
     for(const idx of picked){
-      const sel=candidates[parseInt(idx)];
+      const sel=allDeduped[parseInt(idx)];
       const cx3=sel.coords.reduce((s,c)=>s+c[0],0)/sel.coords.length;
       const cy3=sel.coords.reduce((s,c)=>s+c[1],0)/sel.coords.length;
       const insObj={name:sel.name,short:sel.name,gebietsverband_id:gvId||null,landkreis_id:gvId?null:chosenLKId,
@@ -9264,22 +9248,11 @@ async function hTreeAssignPoly(type,id){
       const dMap={};
       allAP.forEach(g=>{const k=g.name+'_'+g.level;if(!dMap[k]||g.coords.length>dMap[k].coords.length)dMap[k]=g;});
       const allD=Object.values(dMap).sort((a,b)=>a.name.localeCompare(b.name));
-      // Level-Filter
-      const lvlLabel={'7':'VG','8':'Gem.','9':'OT','10':'OT'};
-      const avLvls=[...new Set(allD.map(g=>g.level))].sort();
-      let chLvls=avLvls;
-      if(avLvls.length>1){
-        const lo=avLvls.map(lv=>({label:`${lvlLabel[lv]||lv} (${lv}) — ${allD.filter(g=>g.level===lv).length}`,value:lv,style:'background:var(--blue);color:#fff'}));
-        lo.unshift({label:'Alle Level',value:'_all',style:'background:var(--green);color:#fff'});
-        const lp=await appChoice('🗺 Level Filter','Welche Ebene?',lo);
-        if(!lp) return;
-        chLvls=lp==='_all'?avLvls:[lp];
-      }
-      rawCandidates=allD.filter(g=>chLvls.includes(g.level));
+      rawCandidates=allD;
     }
     if(rawCandidates.length===0){toast('⚠️ Keine passenden Grenzen gefunden');return;}
     const levelLabel={'6':'LK','7':'VG','8':'Gem.','9':'OT','10':'OT'};
-    const items=rawCandidates.map((c,i)=>({id:''+i,label:`${c.name} (${levelLabel[c.level]||c.level})`}));
+    const items=rawCandidates.map((c,i)=>({id:''+i,label:`${c.name} (${levelLabel[c.level]||c.level})`,level:c.level}));
     const picked=await hTreePickFromList('Grenze wählen',items);
     if(picked===null||picked==='') return;
     const sel=rawCandidates[parseInt(picked)];
@@ -9317,52 +9290,88 @@ function hTreePickFromList(title,items){
   return new Promise(resolve=>{
     const c=document.getElementById('hTreeContainer');
     const old=c.innerHTML;
-    let h=`<div style="padding:12px"><div style="font-weight:600;margin-bottom:8px;font-size:.82rem">${title}</div>`;
-    items.forEach(it=>{
-      h+=`<button class="pill" style="display:block;width:100%;text-align:left;margin-bottom:4px;padding:6px 10px;font-size:.78rem" data-pick-id="${it.id}">${it.label}</button>`;
-    });
-    h+=`<button class="pill" style="margin-top:8px;font-size:.72rem;color:var(--text4)" data-pick-id="">Abbrechen</button></div>`;
-    c.innerHTML=h;
-    c.querySelectorAll('[data-pick-id]').forEach(btn=>{
-      btn.addEventListener('click',()=>{
-        c.innerHTML=old;
-        resolve(btn.dataset.pickId||null);
-      });
-    });
+    const hasLvl=items.some(it=>it.level);
+    const levels=hasLvl?[...new Set(items.map(it=>it.level).filter(Boolean))].sort():[];
+    const ll={'6':'LK','7':'VG','8':'Gem.','9':'OT','10':'OT'};
+    let cL='_all',sT='';
+    function ren(){
+      let vis=items;
+      if(cL!=='_all')vis=vis.filter(it=>it.level===cL);
+      if(sT)vis=vis.filter(it=>it.label.toLowerCase().includes(sT.toLowerCase()));
+      let h=`<div style="padding:12px"><div style="font-weight:600;margin-bottom:8px;font-size:.82rem">${title}</div>`;
+      if(items.length>8)h+=`<input type="text" id="hPickSrch" placeholder="🔍 Suchen…" value="${sT.replace(/"/g,'&quot;')}" style="width:100%;padding:6px 8px;font-size:.78rem;border:1px solid var(--border);border-radius:6px;margin-bottom:6px;box-sizing:border-box">`;
+      if(levels.length>1){
+        h+=`<div style="margin-bottom:6px;display:flex;gap:4px;flex-wrap:wrap">`;
+        h+=`<button class="pill hLB" data-lvl="_all" style="font-size:.6rem;padding:2px 8px;${cL==='_all'?'background:var(--green);color:#fff':''}">Alle (${items.length})</button>`;
+        levels.forEach(lv=>{h+=`<button class="pill hLB" data-lvl="${lv}" style="font-size:.6rem;padding:2px 8px;${cL===lv?'background:var(--blue);color:#fff':''}">${ll[lv]||lv} (${items.filter(it=>it.level===lv).length})</button>`;});
+        h+=`</div>`;
+      }
+      h+=`<div style="max-height:55vh;overflow-y:auto">`;
+      if(vis.length===0)h+=`<div style="padding:12px;color:var(--text4);font-size:.75rem">Keine Treffer</div>`;
+      vis.forEach(it=>{h+=`<button class="pill" style="display:block;width:100%;text-align:left;margin-bottom:4px;padding:6px 10px;font-size:.78rem" data-pick-id="${it.id}">${it.label}</button>`;});
+      h+=`</div>`;
+      h+=`<button class="pill" style="margin-top:8px;font-size:.72rem;color:var(--text4)" data-pick-id="">Abbrechen</button></div>`;
+      c.innerHTML=h;
+      c.querySelectorAll('[data-pick-id]').forEach(btn=>{btn.addEventListener('click',()=>{c.innerHTML=old;resolve(btn.dataset.pickId||null);});});
+      c.querySelectorAll('.hLB').forEach(btn=>{btn.onclick=()=>{cL=btn.dataset.lvl;ren();};});
+      const si=document.getElementById('hPickSrch');
+      if(si){si.focus();si.selectionStart=si.selectionEnd=si.value.length;si.oninput=()=>{sT=si.value;ren();};}
+    }
+    ren();
   });
 }
 
-// Multi-Select Picker: Checkboxen + "Alle" Toggle
+// Multi-Select Picker: Checkboxen + Suche + Level-Filter
 function hTreePickMulti(title,items){
   return new Promise(resolve=>{
     const c=document.getElementById('hTreeContainer');
     const old=c.innerHTML;
-    let h=`<div style="padding:12px"><div style="font-weight:600;margin-bottom:4px;font-size:.82rem">${title}</div>`;
-    h+=`<div style="margin-bottom:6px;display:flex;gap:6px">`;
-    h+=`<button class="pill" id="hMultiAll" style="font-size:.65rem;padding:2px 8px">Alle wählen</button>`;
-    h+=`<button class="pill" id="hMultiNone" style="font-size:.65rem;padding:2px 8px">Keine</button>`;
-    h+=`</div>`;
-    h+=`<div style="max-height:55vh;overflow-y:auto">`;
-    items.forEach(it=>{
-      h+=`<label style="display:flex;align-items:center;gap:6px;padding:4px 6px;font-size:.78rem;cursor:pointer;border-radius:6px" class="hm-item">
-        <input type="checkbox" data-mid="${it.id}" style="margin:0"> ${it.label}
-      </label>`;
-    });
-    h+=`</div>`;
-    h+=`<div style="display:flex;gap:8px;margin-top:10px">`;
-    h+=`<button class="btn btn-g" id="hMultiCancel" style="flex:1;font-size:.78rem">Abbrechen</button>`;
-    h+=`<button class="btn btn-b" id="hMultiOk" style="flex:1;font-size:.78rem">Übernehmen</button>`;
-    h+=`</div></div>`;
-    c.innerHTML=h;
-    const boxes=c.querySelectorAll('[data-mid]');
-    document.getElementById('hMultiAll').onclick=()=>boxes.forEach(b=>b.checked=true);
-    document.getElementById('hMultiNone').onclick=()=>boxes.forEach(b=>b.checked=false);
-    document.getElementById('hMultiCancel').onclick=()=>{c.innerHTML=old;resolve(null);};
-    document.getElementById('hMultiOk').onclick=()=>{
-      const sel=[];boxes.forEach(b=>{if(b.checked)sel.push(b.dataset.mid);});
-      c.innerHTML=old;
-      resolve(sel.length>0?sel:null);
-    };
+    const hasLvl=items.some(it=>it.level);
+    const levels=hasLvl?[...new Set(items.map(it=>it.level).filter(Boolean))].sort():[];
+    const ll={'6':'LK','7':'VG','8':'Gem.','9':'OT','10':'OT'};
+    let cL='_all',sT='';
+    const ckd=new Set();
+    function ren(){
+      let vis=items;
+      if(cL!=='_all')vis=vis.filter(it=>it.level===cL);
+      if(sT)vis=vis.filter(it=>it.label.toLowerCase().includes(sT.toLowerCase()));
+      let h=`<div style="padding:12px"><div style="font-weight:600;margin-bottom:4px;font-size:.82rem">${title}</div>`;
+      if(items.length>8)h+=`<input type="text" id="hMultiSrch" placeholder="🔍 Suchen…" value="${sT.replace(/"/g,'&quot;')}" style="width:100%;padding:6px 8px;font-size:.78rem;border:1px solid var(--border);border-radius:6px;margin-bottom:6px;box-sizing:border-box">`;
+      if(levels.length>1){
+        h+=`<div style="margin-bottom:6px;display:flex;gap:4px;flex-wrap:wrap">`;
+        h+=`<button class="pill hLB" data-lvl="_all" style="font-size:.6rem;padding:2px 8px;${cL==='_all'?'background:var(--green);color:#fff':''}">Alle (${items.length})</button>`;
+        levels.forEach(lv=>{h+=`<button class="pill hLB" data-lvl="${lv}" style="font-size:.6rem;padding:2px 8px;${cL===lv?'background:var(--blue);color:#fff':''}">${ll[lv]||lv} (${items.filter(it=>it.level===lv).length})</button>`;});
+        h+=`</div>`;
+      }
+      h+=`<div style="margin-bottom:4px;display:flex;gap:6px">`;
+      h+=`<button class="pill" id="hMultiAll" style="font-size:.65rem;padding:2px 8px">Alle wählen</button>`;
+      h+=`<button class="pill" id="hMultiNone" style="font-size:.65rem;padding:2px 8px">Keine</button>`;
+      h+=`</div>`;
+      h+=`<div style="max-height:50vh;overflow-y:auto">`;
+      if(vis.length===0)h+=`<div style="padding:12px;color:var(--text4);font-size:.75rem">Keine Treffer</div>`;
+      vis.forEach(it=>{
+        h+=`<label style="display:flex;align-items:center;gap:6px;padding:4px 6px;font-size:.78rem;cursor:pointer;border-radius:6px" class="hm-item">
+          <input type="checkbox" data-mid="${it.id}" ${ckd.has(it.id)?'checked':''} style="margin:0"> ${it.label}
+        </label>`;
+      });
+      h+=`</div>`;
+      h+=`<div id="hMultiCnt" style="font-size:.65rem;color:var(--text4);margin-top:2px">${ckd.size>0?ckd.size+' ausgewählt':''}</div>`;
+      h+=`<div style="display:flex;gap:8px;margin-top:6px">`;
+      h+=`<button class="btn btn-g" id="hMultiCancel" style="flex:1;font-size:.78rem">Abbrechen</button>`;
+      h+=`<button class="btn btn-b" id="hMultiOk" style="flex:1;font-size:.78rem">Übernehmen</button>`;
+      h+=`</div></div>`;
+      c.innerHTML=h;
+      c.querySelectorAll('[data-mid]').forEach(b=>{b.onchange=()=>{if(b.checked)ckd.add(b.dataset.mid);else ckd.delete(b.dataset.mid);
+        const cnt=document.getElementById('hMultiCnt');if(cnt)cnt.textContent=ckd.size>0?ckd.size+' ausgewählt':'';};});
+      document.getElementById('hMultiAll').onclick=()=>{vis.forEach(it=>ckd.add(it.id));ren();};
+      document.getElementById('hMultiNone').onclick=()=>{vis.forEach(it=>ckd.delete(it.id));ren();};
+      document.getElementById('hMultiCancel').onclick=()=>{c.innerHTML=old;resolve(null);};
+      document.getElementById('hMultiOk').onclick=()=>{c.innerHTML=old;resolve(ckd.size>0?[...ckd]:null);};
+      c.querySelectorAll('.hLB').forEach(btn=>{btn.onclick=()=>{cL=btn.dataset.lvl;ren();};});
+      const si=document.getElementById('hMultiSrch');
+      if(si){si.focus();si.selectionStart=si.selectionEnd=si.value.length;si.oninput=()=>{sT=si.value;ren();};}
+    }
+    ren();
   });
 }
 
