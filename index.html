@@ -857,7 +857,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v294 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v295 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -9048,14 +9048,23 @@ async function hTreeAddReg(){
       const lkG=lkAll.sort((a,b)=>b.coords.length-a.coords.length)[0];
       if(lkG&&(!lkPoly2||lkPoly2.length<lkG.coords.length)) lkPoly2=lkG.coords;
     }
+    // Debug: LK-Polygon-Quelle
+    console.log('OSM-Picker LK-Poly:','dbPoly=',landkreise[chosenLKId]?.polygon?.length||0,'grenzenPoly=',lkPoly2?.length||0,'lkName=',landkreise[chosenLKId]?.name);
     // Alle Einträge im LK sammeln (Level 7-10)
-    const allInLK=grenzenData.filter(g=>['7','8','9','10'].includes(g.level)&&g.name&&g.coords&&g.coords.length>=3)
-      .filter(g=>{
+    const _before=grenzenData.filter(g=>['7','8','9','10'].includes(g.level)&&g.name&&g.coords&&g.coords.length>=3);
+    const allInLK=_before.filter(g=>{
         if(!lkPoly2||lkPoly2.length<3) return true;
         const cx2=g.coords.reduce((s,c)=>s+c[0],0)/g.coords.length;
         const cy2=g.coords.reduce((s,c)=>s+c[1],0)/g.coords.length;
         return pointInPolygon(cx2,cy2,lkPoly2);
       });
+    const _greizBefore=_before.filter(g=>g.name==='Greiz'&&g.level==='8');
+    const _greizAfter=allInLK.filter(g=>g.name==='Greiz'&&g.level==='8');
+    console.log('OSM-Picker Filter:',_before.length,'→',allInLK.length,'Greiz(8): vor=',_greizBefore.length,'nach=',_greizAfter.length);
+    if(_greizBefore.length>0&&_greizAfter.length===0&&lkPoly2){
+      const g=_greizBefore[0];const cx=g.coords.reduce((s,c)=>s+c[0],0)/g.coords.length;const cy=g.coords.reduce((s,c)=>s+c[1],0)/g.coords.length;
+      console.log('Greiz centroid:',cx,cy,'inPoly=',pointInPolygon(cx,cy,lkPoly2),'polyBBox:',Math.min(...lkPoly2.map(c=>c[0])).toFixed(3),Math.max(...lkPoly2.map(c=>c[0])).toFixed(3),Math.min(...lkPoly2.map(c=>c[1])).toFixed(3),Math.max(...lkPoly2.map(c=>c[1])).toFixed(3));
+    }
     // Deduplizieren: gleicher Name+Level → nur einmal (größtes Polygon behalten)
     const dedupMap={};
     allInLK.forEach(g=>{
