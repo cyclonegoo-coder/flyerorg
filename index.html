@@ -857,7 +857,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v292 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v293 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -5880,20 +5880,24 @@ async function toggleVerwaltungsgrenzen(show){
 
       // Convert to GeoJSON-like structure
       grenzenData=[];
+      let _dbgSkipped=[];
       json.elements.forEach(el=>{
         if(!el.members)return;
         const outerWays=el.members.filter(m=>m.type==='way'&&(m.role==='outer'||m.role===''));
         if(outerWays.length===0)return;
         const rings=buildRings(outerWays);
-        if(rings.length===0)return;
+        if(rings.length===0){_dbgSkipped.push((el.tags?.name||'?')+'(L'+( el.tags?.admin_level||'?')+','+outerWays.length+'ways)');return;}
         const name=el.tags?.name||'';
         const level=el.tags?.admin_level||'8';
         rings.forEach(ring=>{
           grenzenData.push({name,level,coords:ring});
         });
       });
+      if(_dbgSkipped.length>0) console.warn('buildRings 0 Ringe für:',_dbgSkipped);
 
       renderGrenzen();
+      const _g8=grenzenData.filter(g=>g.level==='8').map(g=>g.name);
+      console.log('Level-8 in grenzenData:',_g8.length,'davon Greiz:',_g8.includes('Greiz'),_g8.filter(n=>n.toLowerCase().includes('greiz')));
       toast('✅ '+grenzenData.length+' Verwaltungsgrenzen geladen');
       lastErr=null;
       break; // Erfolg → Schleife verlassen
