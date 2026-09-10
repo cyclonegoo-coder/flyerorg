@@ -857,7 +857,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v296 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v297 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -5880,24 +5880,19 @@ async function toggleVerwaltungsgrenzen(show){
 
       // Convert to GeoJSON-like structure
       grenzenData=[];
-      let _dbgSkipped=[];
       json.elements.forEach(el=>{
         if(!el.members)return;
         const outerWays=el.members.filter(m=>m.type==='way'&&(m.role==='outer'||m.role===''));
         if(outerWays.length===0)return;
         const rings=buildRings(outerWays);
-        if(rings.length===0){_dbgSkipped.push((el.tags?.name||'?')+'(L'+( el.tags?.admin_level||'?')+','+outerWays.length+'ways)');return;}
+        if(rings.length===0)return;
         const name=el.tags?.name||'';
         const level=el.tags?.admin_level||'8';
         rings.forEach(ring=>{
           grenzenData.push({name,level,coords:ring});
         });
       });
-      if(_dbgSkipped.length>0) console.warn('buildRings 0 Ringe für:',_dbgSkipped);
-
       renderGrenzen();
-      const _g8=grenzenData.filter(g=>g.level==='8').map(g=>g.name);
-      console.log('Level-8 in grenzenData:',_g8.length,'davon Greiz:',_g8.includes('Greiz'),_g8.filter(n=>n.toLowerCase().includes('greiz')));
       toast('✅ '+grenzenData.length+' Verwaltungsgrenzen geladen');
       lastErr=null;
       break; // Erfolg → Schleife verlassen
@@ -9049,23 +9044,19 @@ async function hTreeAddReg(){
       if(lkG) lkPoly2=lkG.coords;
     }
     if(!lkPoly2) lkPoly2=landkreise[chosenLKId]?landkreise[chosenLKId].polygon:null;
-    // Debug: LK-Polygon-Quelle
-    console.log('OSM-Picker LK-Poly:','dbPoly=',landkreise[chosenLKId]?.polygon?.length||0,'grenzenPoly=',lkPoly2?.length||0,'lkName=',landkreise[chosenLKId]?.name);
-    // Alle Einträge im LK sammeln (Level 7-10)
-    const _before=grenzenData.filter(g=>['7','8','9','10'].includes(g.level)&&g.name&&g.coords&&g.coords.length>=3);
-    const allInLK=_before.filter(g=>{
+    // LK-Filter: BBox statt pointInPolygon (robuster bei komplexen Polygonen mit Selbstschneidungen)
+    let _lkMinLat,_lkMaxLat,_lkMinLng,_lkMaxLng;
+    if(lkPoly2&&lkPoly2.length>=3){
+      _lkMinLat=Infinity;_lkMaxLat=-Infinity;_lkMinLng=Infinity;_lkMaxLng=-Infinity;
+      lkPoly2.forEach(c=>{if(c[0]<_lkMinLat)_lkMinLat=c[0];if(c[0]>_lkMaxLat)_lkMaxLat=c[0];if(c[1]<_lkMinLng)_lkMinLng=c[1];if(c[1]>_lkMaxLng)_lkMaxLng=c[1];});
+    }
+    const allInLK=grenzenData.filter(g=>['7','8','9','10'].includes(g.level)&&g.name&&g.coords&&g.coords.length>=3)
+      .filter(g=>{
         if(!lkPoly2||lkPoly2.length<3) return true;
         const cx2=g.coords.reduce((s,c)=>s+c[0],0)/g.coords.length;
         const cy2=g.coords.reduce((s,c)=>s+c[1],0)/g.coords.length;
-        return pointInPolygon(cx2,cy2,lkPoly2);
+        return cx2>=_lkMinLat&&cx2<=_lkMaxLat&&cy2>=_lkMinLng&&cy2<=_lkMaxLng;
       });
-    const _greizBefore=_before.filter(g=>g.name==='Greiz'&&g.level==='8');
-    const _greizAfter=allInLK.filter(g=>g.name==='Greiz'&&g.level==='8');
-    console.log('OSM-Picker Filter:',_before.length,'→',allInLK.length,'Greiz(8): vor=',_greizBefore.length,'nach=',_greizAfter.length);
-    if(_greizBefore.length>0&&_greizAfter.length===0&&lkPoly2){
-      const g=_greizBefore[0];const cx=g.coords.reduce((s,c)=>s+c[0],0)/g.coords.length;const cy=g.coords.reduce((s,c)=>s+c[1],0)/g.coords.length;
-      console.log('Greiz centroid:',cx,cy,'inPoly=',pointInPolygon(cx,cy,lkPoly2),'polyBBox:',Math.min(...lkPoly2.map(c=>c[0])).toFixed(3),Math.max(...lkPoly2.map(c=>c[0])).toFixed(3),Math.min(...lkPoly2.map(c=>c[1])).toFixed(3),Math.max(...lkPoly2.map(c=>c[1])).toFixed(3));
-    }
     // Deduplizieren: gleicher Name+Level → nur einmal (größtes Polygon behalten)
     const dedupMap={};
     allInLK.forEach(g=>{
@@ -9265,13 +9256,18 @@ async function hTreeAssignPoly(type,id){
         if(lkG) lkPoly2=lkG.coords;
       }
       if(!lkPoly2) lkPoly2=rLkId&&landkreise[rLkId]?landkreise[rLkId].polygon:null;
-      // Alle Level im LK sammeln, deduplizieren (größtes Polygon behalten)
+      // Alle Level im LK sammeln — BBox statt pointInPolygon (robuster bei Selbstschneidungen)
+      let _apMinLat,_apMaxLat,_apMinLng,_apMaxLng;
+      if(lkPoly2&&lkPoly2.length>=3){
+        _apMinLat=Infinity;_apMaxLat=-Infinity;_apMinLng=Infinity;_apMaxLng=-Infinity;
+        lkPoly2.forEach(c=>{if(c[0]<_apMinLat)_apMinLat=c[0];if(c[0]>_apMaxLat)_apMaxLat=c[0];if(c[1]<_apMinLng)_apMinLng=c[1];if(c[1]>_apMaxLng)_apMaxLng=c[1];});
+      }
       const allAP=grenzenData.filter(g=>['7','8','9','10'].includes(g.level)&&g.name&&g.coords&&g.coords.length>=3)
         .filter(g=>{
           if(!lkPoly2||lkPoly2.length<3) return true;
           const cx=g.coords.reduce((s,c)=>s+c[0],0)/g.coords.length;
           const cy=g.coords.reduce((s,c)=>s+c[1],0)/g.coords.length;
-          return pointInPolygon(cx,cy,lkPoly2);
+          return cx>=_apMinLat&&cx<=_apMaxLat&&cy>=_apMinLng&&cy<=_apMaxLng;
         });
       const dMap={};
       allAP.forEach(g=>{const k=g.name+'_'+g.level;if(!dMap[k]||g.coords.length>dMap[k].coords.length)dMap[k]=g;});
