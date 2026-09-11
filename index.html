@@ -158,7 +158,7 @@ header{min-height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturat
 .app-body{display:flex;flex:1;overflow:hidden;min-height:0}
 
 /* ── SIDEBAR ── */
-.sidebar{width:292px;background:var(--bg);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;border-right:1px solid var(--sep);transition:width .25s ease,margin .25s ease}
+.sidebar{width:292px;background:var(--bg);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;border-right:1px solid var(--sep);transition:width .25s ease,margin .25s ease;height:100%;max-height:100vh}
 .sidebar.collapsed{width:0;border-right:none;overflow:hidden}
 .sb-toggle{display:none;position:absolute;left:0;top:50%;transform:translateY(-50%);z-index:501;width:24px;height:48px;background:var(--bg);border:1px solid var(--sep);border-left:none;border-radius:0 10px 10px 0;cursor:pointer;align-items:center;justify-content:center;font-size:.8rem;color:var(--text2);padding:0;box-shadow:2px 0 8px rgba(0,0,0,.1)}
 .sb-toggle:hover{background:var(--surface3);color:var(--text)}
@@ -188,7 +188,7 @@ header{min-height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturat
 .prog-row{display:flex;justify-content:space-between;font-size:.7rem;color:var(--text3);font-weight:500;margin-bottom:5px}
 .prog-track{height:4px;background:var(--surface3);border-radius:2px;overflow:hidden}
 .prog-fill{height:100%;background:linear-gradient(90deg,var(--blue),var(--green));border-radius:2px;transition:width .5s ease}
-.g-list{flex:1;overflow-y:auto;padding:5px 7px;display:flex;flex-direction:column;gap:3px;min-height:0}
+.g-list{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:5px 7px;display:flex;flex-direction:column;gap:3px;min-height:0;max-height:100%}
 .g-list::-webkit-scrollbar{width:5px}
 .g-list::-webkit-scrollbar-track{background:transparent}
 .g-list::-webkit-scrollbar-thumb{background:var(--surface3);border-radius:3px}
@@ -857,7 +857,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v306 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v308 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -11416,6 +11416,10 @@ async function bulkToggleVorlage(setVorlage){
   const visible=getVisiblePlakate();
   const targets=setVorlage?visible.filter(p=>!p.ist_vorlage):visible.filter(p=>p.ist_vorlage);
   if(targets.length===0){toast('⚠️ Keine Plakate zum Ändern');return;}
+  const msg=setVorlage
+    ?`${targets.length} Plakate als Vorlage markieren?`
+    :`${targets.length} Vorlagen entfernen? Diese Aktion kann nicht rückgängig gemacht werden.`;
+  if(!await appConfirm('⚠️ Vorlagen ändern',msg,setVorlage?'Ja, markieren':'Ja, entfernen','Abbrechen')) return;
   const ids=targets.map(p=>p.id);
   const {error}=await sb.from('plakate').update({ist_vorlage:setVorlage}).in('id',ids);
   if(error){toast('⚠️ '+error.message);return;}
@@ -11435,38 +11439,60 @@ function selectPlakat(id){
 
 function renderStatsPlakate(){
   const visible=getVisiblePlakate();
-  // #3: Vorlagen (grau) NICHT mitzählen
-  const aktiv=visible.filter(p=>p.status!=='vorlage');
-  const tot=aktiv.length;
-  const haengt=aktiv.filter(p=>p.status==='haengt'||p.status==='ersetzt').length;
-  // #4: abgehängt zählt weiter als "aktiv", wird separat gezählt
-  const abgeh=aktiv.filter(p=>p.status==='abgehaengt').length;
-  const zerst=aktiv.filter(p=>p.status==='zerstoert').length;
-  // #7: Soll aus Kontingenten berechnen
-  const gs=getVisibleGebiete();
-  const sollT=gs.reduce((s,g)=>s+(g.soll_stueck||0),0);
-  const gesText=sollT>0?`${tot}/${sollT}`:`${tot}`;
-  document.getElementById('statFlyer').textContent=gesText;
-  document.getElementById('statVerteilt').textContent=haengt;
-  document.getElementById('statOffen').textContent=abgeh;
-  // #2+#6: Labels + Farben anpassen
-  const labels=document.querySelectorAll('.stat-l');
-  if(labels.length>=3){labels[0].textContent='Gesamt';labels[1].textContent='Hängen';labels[2].textContent='Abgehängt';}
-  // Farben: Gesamt=blau, Hängen=blau(hängt), Abgehängt=lila
-  document.getElementById('statFlyer').style.color='var(--blue)';
-  document.getElementById('statVerteilt').style.color='#007aff';
-  document.getElementById('statOffen').style.color='#af52de';
-  // Progress: Hängen + Abgehängt von Gesamt
-  const done=haengt+abgeh;
-  document.getElementById('progText').textContent=`${done} / ${tot} erledigt`;
-  document.getElementById('progFill').style.width=(tot?done/tot*100:0)+'%';
-  // Mobile stats
-  const mG=document.getElementById('mobStatGesamt');
-  const mV=document.getElementById('mobStatVerteilt');
-  const mO=document.getElementById('mobStatOffen');
-  if(mG){mG.textContent=gesText+' Ges.';mG.style.color='var(--blue)';}
-  if(mV){mV.textContent=haengt+' Hängen';mV.style.color='#007aff';}
-  if(mO){mO.textContent=abgeh+' Abgeh.';mO.style.color='#af52de';}
+  const isBasis=!!curKampagne?.ist_basis;
+
+  if(isBasis){
+    // Grundzuweisung: "Gesamt", "Vorlagen", "Gebiete" statt Hängen/Abgehängt
+    const tot=visible.length;
+    const vorlagen=visible.filter(p=>p.ist_vorlage).length;
+    const gs=getVisibleGebiete();
+    const gebieteMitPlakat=new Set(visible.map(p=>p.gebiet_id).filter(Boolean));
+    document.getElementById('statFlyer').textContent=tot;
+    document.getElementById('statVerteilt').textContent=vorlagen;
+    document.getElementById('statOffen').textContent=gebieteMitPlakat.size+'/'+gs.length;
+    const labels=document.querySelectorAll('.stat-l');
+    if(labels.length>=3){labels[0].textContent='Gesamt';labels[1].textContent='Vorlagen';labels[2].textContent='Gebiete';}
+    document.getElementById('statFlyer').style.color='var(--blue)';
+    document.getElementById('statVerteilt').style.color='#888';
+    document.getElementById('statOffen').style.color='var(--green)';
+    // Progress: Gebiete mit Plakaten / Gebiete gesamt
+    document.getElementById('progText').textContent=`${gebieteMitPlakat.size} / ${gs.length} Gebiete belegt`;
+    document.getElementById('progFill').style.width=(gs.length?gebieteMitPlakat.size/gs.length*100:0)+'%';
+    // Mobile
+    const mG=document.getElementById('mobStatGesamt');
+    const mV=document.getElementById('mobStatVerteilt');
+    const mO=document.getElementById('mobStatOffen');
+    if(mG){mG.textContent=tot+' Ges.';mG.style.color='var(--blue)';}
+    if(mV){mV.textContent=vorlagen+' Vorl.';mV.style.color='#888';}
+    if(mO){mO.textContent=gebieteMitPlakat.size+'/'+gs.length+' Geb.';mO.style.color='var(--green)';}
+  } else {
+    // Kampagne: "Gesamt", "Hängen", "Abgehängt"
+    const aktiv=visible.filter(p=>p.status!=='vorlage');
+    const tot=aktiv.length;
+    const haengt=aktiv.filter(p=>p.status==='haengt'||p.status==='ersetzt').length;
+    const abgeh=aktiv.filter(p=>p.status==='abgehaengt').length;
+    const gs=getVisibleGebiete();
+    const sollT=gs.reduce((s,g)=>s+(g.soll_stueck||0),0);
+    const gesText=sollT>0?`${tot}/${sollT}`:`${tot}`;
+    document.getElementById('statFlyer').textContent=gesText;
+    document.getElementById('statVerteilt').textContent=haengt;
+    document.getElementById('statOffen').textContent=abgeh;
+    const labels=document.querySelectorAll('.stat-l');
+    if(labels.length>=3){labels[0].textContent='Gesamt';labels[1].textContent='Hängen';labels[2].textContent='Abgehängt';}
+    document.getElementById('statFlyer').style.color='var(--blue)';
+    document.getElementById('statVerteilt').style.color='#007aff';
+    document.getElementById('statOffen').style.color='#af52de';
+    const done=haengt+abgeh;
+    document.getElementById('progText').textContent=`${done} / ${tot} erledigt`;
+    document.getElementById('progFill').style.width=(tot?done/tot*100:0)+'%';
+    // Mobile
+    const mG=document.getElementById('mobStatGesamt');
+    const mV=document.getElementById('mobStatVerteilt');
+    const mO=document.getElementById('mobStatOffen');
+    if(mG){mG.textContent=gesText+' Ges.';mG.style.color='var(--blue)';}
+    if(mV){mV.textContent=haengt+' Hängen';mV.style.color='#007aff';}
+    if(mO){mO.textContent=abgeh+' Abgeh.';mO.style.color='#af52de';}
+  }
   // 📌 immer ausblenden — Soll/Ist steht bereits in "Gesamt"
   const pkStat=document.getElementById('mobStatPlakat');
   if(pkStat) pkStat.style.display='none';
