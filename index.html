@@ -857,7 +857,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v300 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v301 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -10776,23 +10776,39 @@ function pointInPolygon(lat,lng,polygon){
 }
 
 function detectGebietForPoint(lat,lng){
-  // 1. Exakt im Polygon?
+  // 1. Exakt im Gebiet-Polygon?
   for(const r of Object.values(regionen)){
     for(const g of r.gebiete){
       const coords=kmlP[g.id];
       if(coords&&coords.length>=3&&pointInPolygon(lat,lng,coords)) return g.id;
     }
   }
-  // 2. Fallback: nächstgelegenes Gebiet (max 2 km)
+  // 2. Region-Polygon prüfen → nächstes Gebiet in dieser Region bevorzugen
+  for(const [rk,r] of Object.entries(regionen)){
+    if(r.polygon&&r.polygon.length>=3&&pointInPolygon(lat,lng,r.polygon)){
+      let best=null,bestDist=Infinity;
+      for(const g of r.gebiete){
+        const coords=kmlP[g.id];
+        if(!coords||coords.length<3) continue;
+        const cx=coords.reduce((s,c)=>s+c[0],0)/coords.length;
+        const cy=coords.reduce((s,c)=>s+c[1],0)/coords.length;
+        const d=Math.sqrt((lat-cx)**2+(lng-cy)**2)*111;
+        if(d<bestDist){bestDist=d;best=g.id;}
+      }
+      if(best) return best;
+      // Region hat Gebiete ohne Polygone → erstes Gebiet zuweisen
+      if(r.gebiete.length>0) return r.gebiete[0].id;
+    }
+  }
+  // 3. Fallback: nächstgelegenes Gebiet global (max 2 km)
   let best=null,bestDist=2;
   for(const r of Object.values(regionen)){
     for(const g of r.gebiete){
       const coords=kmlP[g.id];
       if(!coords||coords.length<3) continue;
-      // Abstand zum Polygon-Centroid
       const cx=coords.reduce((s,c)=>s+c[0],0)/coords.length;
       const cy=coords.reduce((s,c)=>s+c[1],0)/coords.length;
-      const d=Math.sqrt((lat-cx)**2+(lng-cy)**2)*111; // grobe km
+      const d=Math.sqrt((lat-cx)**2+(lng-cy)**2)*111;
       if(d<bestDist){bestDist=d;best=g.id;}
     }
   }
@@ -11050,10 +11066,12 @@ function clearPlakatSollLabels(){
 
 function getVisiblePlakate(){
   // Filter like gebiete: by curLK, curGV, curReg
+  const alleFilter=curLK==='alle'&&curGV==='alle'&&curReg==='alle';
   return plakate.filter(p=>{
-    if(!p.gebiet_id) return true; // Show markers outside any gebiet always
-    const g=getG(p.gebiet_id);
-    if(!g) return true;
+    if(!p.gebiet_id||!getG(p.gebiet_id)){
+      // Plakate ohne Gebiet: nur bei "Alle" anzeigen, nicht in einzelnen Regionen
+      return alleFilter;
+    }
     // Find region for this gebiet
     for(const [rk,r] of Object.entries(regionen)){
       if(r.gebiete.find(gg=>gg.id===p.gebiet_id)){
@@ -11063,7 +11081,7 @@ function getVisiblePlakate(){
         return true;
       }
     }
-    return true;
+    return alleFilter;
   });
 }
 
