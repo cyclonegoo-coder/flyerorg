@@ -857,7 +857,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v297 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v298 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -9224,8 +9224,6 @@ async function hTreeAssignPoly(type,id){
   const opts=[{label:'🗺 OSM-Verwaltungsgrenze wählen',value:'osm'}];
   if(!isLK) opts.push({label:'✏️ Manuell zeichnen',value:'draw'});
   if(hasPoly) opts.push({label:'🗑 Polygon entfernen',value:'remove'});
-  opts.push({label:'⏭ Abbrechen',value:'cancel'});
-
   const title=isLK?'🏛 Polygon — '+entity.name:'🗺 Polygon — '+entity.name;
   const src=await appChoice(title,hasPoly?'Polygon ändern oder neu zuweisen:':'Polygon zuweisen:',opts);
   if(!src||src==='cancel') return;
@@ -9583,7 +9581,7 @@ function verwalterHatGebietZugriff(gebietId) {
 
 function toggleDraw(){
   if(drawMode){drawCancel();return}
-  if(curReg==='alle'){toast('⚠️ Bitte zuerst eine Region wählen');return;}
+  if(curReg==='alle'&&!pendingRegionDraw){toast('⚠️ Bitte zuerst eine Region wählen');return;}
   if(istVerwalterOderKreisverwalter() && !verwalterHatRegionZugriff(curReg)){
     toast('⚠️ Kein Zugriff auf diese Region');return;
   }
