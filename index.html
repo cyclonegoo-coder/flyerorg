@@ -81,7 +81,7 @@ header{min-height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturat
 .mode-btn{font-size:.65rem;font-weight:600;padding:4px 10px;border-radius:6px;border:none;background:transparent;color:var(--text3);cursor:pointer;transition:all .15s;white-space:nowrap;font-family:inherit}
 .mode-btn.active{background:var(--surface);color:var(--text);box-shadow:var(--sh-sm)}
 .mode-btn.active[id="modePlakat"]{background:var(--blue);color:#fff}
-.plakat-chip{display:inline-block;padding:2px 8px;border-radius:10px;font-size:.68rem;font-weight:600}
+.plakat-chip{display:inline-block;padding:2px 8px;border-radius:10px;font-size:.68rem;font-weight:600;flex-shrink:0;white-space:nowrap}
 .plakat-chip.c-haengt{background:rgba(66,165,245,.12);color:var(--blue)}
 .plakat-chip.c-abgehaengt{background:rgba(156,39,176,.12);color:#9c27b0}
 .plakat-chip.c-zerstoert{background:rgba(255,59,48,.12);color:var(--red)}
@@ -213,13 +213,13 @@ header{min-height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturat
 .g-card.status-problem::before{background:var(--red)}
 .g-card:active{transform:scale(.98)}
 .g-card.sel{border-color:var(--blue);box-shadow:0 0 0 3px rgba(0,158,224,.15),var(--sh-sm)}
-.g-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:1px}
+.g-top{display:flex;align-items:baseline;justify-content:space-between;gap:4px;margin-bottom:1px;flex-wrap:wrap}
 .s-chip{font-size:.55rem;font-weight:600;padding:2px 6px;border-radius:10px;text-transform:uppercase;letter-spacing:.04em}
 .c-offen{background:#f2f2f7;color:var(--text3)}
 .c-zugeteilt{background:rgba(255,149,0,.12);color:var(--orange)}
 .c-fertig{background:rgba(66,165,245,.12);color:#1565c0}
 .c-problem{background:rgba(255,59,48,.12);color:var(--red)}
-.g-name{font-size:.78rem;font-weight:600;flex:1;margin-right:6px;word-break:break-word}
+.g-name{font-size:.78rem;font-weight:600;flex:1 1 0;min-width:0;margin-right:6px;word-break:break-word;overflow-wrap:break-word}
 .g-meta{display:flex;gap:8px;font-size:.65rem;color:var(--text3)}
 .wa{font-size:.55rem;font-weight:600;color:#25d366;background:rgba(37,211,102,.1);padding:1px 4px;border-radius:4px}
 
@@ -857,7 +857,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v303 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v305 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -11135,7 +11135,7 @@ function openPlakatDetailModal(plakatId){
   if(canManage){
     vorlageBtn=`<label style="display:flex;align-items:center;gap:6px;font-size:.75rem;cursor:pointer;margin-top:8px">
       <input type="checkbox" ${p.ist_vorlage?'checked':''} onchange="toggleVorlage('${p.id}',this.checked)">
-      <span>📍 Als Fixpunkt / Vorlage markieren</span>
+      <span>📍 Als Vorlage markieren</span>
     </label>`;
   }
 
@@ -11153,8 +11153,6 @@ function openPlakatDetailModal(plakatId){
   let deleteBtn='';
   if(p.ist_vorlage&&isBasis&&canManage){
     deleteBtn=`<button class="btn" style="width:100%;margin-top:8px;background:transparent;color:var(--red);border:1px solid var(--red);font-size:.75rem" onclick="deletePlakat('${p.id}')">🗑 Vorlage löschen</button>`;
-  } else if(p.ist_vorlage&&p.status!=='vorlage'&&!isBasis){
-    deleteBtn=`<button class="btn" style="width:100%;margin-top:8px;background:transparent;color:#8e8e93;border:1px solid #ccc;font-size:.75rem" onclick="updatePlakat('${p.id}','vorlage')">↩ Vorlage zurücksetzen</button>`;
   }
 
   // Navigation-Button
@@ -11288,7 +11286,7 @@ async function toggleVorlage(id,checked){
   if(!error){
     const p=plakate.find(x=>x.id===id);
     if(p) p.ist_vorlage=checked;
-    toast(checked?'📍 Als Fixpunkt markiert':'Fixpunkt entfernt');
+    toast(checked?'📍 Als Vorlage markiert':'Vorlage entfernt');
   } else { toast('⚠️ Fehler'); }
 }
 
