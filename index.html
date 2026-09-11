@@ -2175,7 +2175,7 @@ function toggleAbhaengeDeadline() {
   // Kontingent-Button nur bei bestehenden Plakat-Kampagnen zeigen
   const kBtn=document.getElementById('kampKontingentBtn');
   const editId=document.getElementById('editKampagneId')?.value;
-  if(kBtn) kBtn.style.display=(isPK&&editId)?'block':'none';
+  if(kBtn) kBtn.style.display=(isPK&&editId&&!_bereichIsBasis)?'block':'none';
   // Soll-Felder in Bereich-Zeilen aktualisieren
 }
 
@@ -2421,7 +2421,7 @@ function editKampagne(id) {
   updateBereichSummary();
   // Kontingent-Button
   const kBtn=document.getElementById('kampKontingentBtn');
-  const isPK=isBasis||k.typ==='plakate'||k.typ==='beides';
+  const isPK=!isBasis&&(k.typ==='plakate'||k.typ==='beides');
   if(kBtn) kBtn.style.display=isPK?'block':'none';
   kBtn?.setAttribute('data-kamp-id',k.id);
   document.getElementById('kampFormModalOv').classList.add('open');
@@ -11421,29 +11421,26 @@ function renderStatsPlakate(){
   const isBasis=!!curKampagne?.ist_basis;
 
   if(isBasis){
-    // Grundzuweisung: "Gesamt", "Vorlagen", "Gebiete" statt Hängen/Abgehängt
+    // Grundzuweisung: nur "Gesamt" + "Vorlagen"
     const tot=visible.length;
     const vorlagen=visible.filter(p=>p.ist_vorlage).length;
-    const gs=getVisibleGebiete();
-    const gebieteMitPlakat=new Set(visible.map(p=>p.gebiet_id).filter(Boolean));
     document.getElementById('statFlyer').textContent=tot;
     document.getElementById('statVerteilt').textContent=vorlagen;
-    document.getElementById('statOffen').textContent=gebieteMitPlakat.size+'/'+gs.length;
+    document.getElementById('statOffen').textContent='';
     const labels=document.querySelectorAll('.stat-l');
-    if(labels.length>=3){labels[0].textContent='Gesamt';labels[1].textContent='Vorlagen';labels[2].textContent='Gebiete';}
+    if(labels.length>=3){labels[0].textContent='Gesamt';labels[1].textContent='Vorlagen';labels[2].textContent='';}
     document.getElementById('statFlyer').style.color='var(--blue)';
     document.getElementById('statVerteilt').style.color='#888';
-    document.getElementById('statOffen').style.color='var(--green)';
-    // Progress: Gebiete mit Plakaten / Gebiete gesamt
-    document.getElementById('progText').textContent=`${gebieteMitPlakat.size} / ${gs.length} Gebiete belegt`;
-    document.getElementById('progFill').style.width=(gs.length?gebieteMitPlakat.size/gs.length*100:0)+'%';
+    document.getElementById('statOffen').style.color='transparent';
+    document.getElementById('progText').textContent=`${vorlagen} Vorlagen`;
+    document.getElementById('progFill').style.width=(tot?vorlagen/tot*100:0)+'%';
     // Mobile
     const mG=document.getElementById('mobStatGesamt');
     const mV=document.getElementById('mobStatVerteilt');
     const mO=document.getElementById('mobStatOffen');
     if(mG){mG.textContent=tot+' Ges.';mG.style.color='var(--blue)';}
     if(mV){mV.textContent=vorlagen+' Vorl.';mV.style.color='#888';}
-    if(mO){mO.textContent=gebieteMitPlakat.size+'/'+gs.length+' Geb.';mO.style.color='var(--green)';}
+    if(mO){mO.style.display='none';}
   } else {
     // Kampagne: "Gesamt", "Hängen", "Abgehängt"
     const aktiv=visible.filter(p=>p.status!=='vorlage');
