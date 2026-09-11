@@ -857,7 +857,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v298 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v300 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -8828,6 +8828,7 @@ function hDragOver(e){
   else if(hDragType==='gebiet'&&targetType==='gebiet'){const tReg=row.dataset.region;if(tReg!==hDragFrom){row.classList.add('drag-over');e.dataTransfer.dropEffect='move';}}
   else if(hDragType==='region'&&targetType==='gv'){row.classList.add('drag-over');e.dataTransfer.dropEffect='move';}
   else if(hDragType==='region'&&targetType==='region'){const tGv=row.dataset.gv;if(tGv!==hDragFrom){row.classList.add('drag-over');e.dataTransfer.dropEffect='move';}}
+  else if(hDragType==='region'&&targetType==='lk'){row.classList.add('drag-over');e.dataTransfer.dropEffect='move';}
   else{e.dataTransfer.dropEffect='none';}
 }
 function hDragLeave(e){const row=e.target.closest('.htree-row');if(row)row.classList.remove('drag-over');}
@@ -8861,16 +8862,26 @@ async function hDrop(e){
     renderHTree();renderList();renderStats();drawPolygons();
     toast('✅ Gebiet verschoben');
   } else if(hDragType==='region'){
-    // Drop Region auf GV
-    let newGvId=null;
-    if(targetType==='gv') newGvId=targetId;
-    else if(targetType==='region') newGvId=row.dataset.gv;
-    if(!newGvId||newGvId===hDragFrom) return;
-    const {error}=await sb.from('regionen').update({gebietsverband_id:newGvId,landkreis_id:null}).eq('id',hDragId);
-    if(error){toast('⚠️ '+error.message);return;}
-    if(regionen[hDragId]){regionen[hDragId].gebietsverband_id=newGvId;regionen[hDragId].landkreis_id=null;}
-    renderHTree();renderBreadcrumb();renderList();
-    toast('✅ Region verschoben');
+    if(targetType==='lk'){
+      // Drop Region auf LK → direkt unter LK (ohne GV)
+      const newLkId=targetId;
+      const {error}=await sb.from('regionen').update({gebietsverband_id:null,landkreis_id:newLkId}).eq('id',hDragId);
+      if(error){toast('⚠️ '+error.message);return;}
+      if(regionen[hDragId]){regionen[hDragId].gebietsverband_id=null;regionen[hDragId].landkreis_id=newLkId;}
+      renderHTree();renderBreadcrumb();renderList();
+      toast('✅ Region direkt unter LK verschoben');
+    } else {
+      // Drop Region auf GV
+      let newGvId=null;
+      if(targetType==='gv') newGvId=targetId;
+      else if(targetType==='region') newGvId=row.dataset.gv;
+      if(!newGvId||newGvId===hDragFrom) return;
+      const {error}=await sb.from('regionen').update({gebietsverband_id:newGvId,landkreis_id:null}).eq('id',hDragId);
+      if(error){toast('⚠️ '+error.message);return;}
+      if(regionen[hDragId]){regionen[hDragId].gebietsverband_id=newGvId;regionen[hDragId].landkreis_id=null;}
+      renderHTree();renderBreadcrumb();renderList();
+      toast('✅ Region verschoben');
+    }
   }
   hDragType=null;hDragId=null;hDragFrom=null;
 }
@@ -9428,7 +9439,7 @@ async function deleteRegion(id){
 }
 
 function showDrawToolbar(){
-  if(curReg==='alle'){document.getElementById('drawToolbar').classList.remove('visible');return;}
+  if(curReg==='alle'&&!pendingRegionDraw&&!drawMode){document.getElementById('drawToolbar').classList.remove('visible');return;}
   const reg=regionen[curReg];
   const hatZugriff = curRole === 'admin'
     || (istVerwalterOderKreisverwalter() && reg && verwalterHatGebietsverbandZugriff(reg.gebietsverband_id))
@@ -9582,11 +9593,12 @@ function verwalterHatGebietZugriff(gebietId) {
 function toggleDraw(){
   if(drawMode){drawCancel();return}
   if(curReg==='alle'&&!pendingRegionDraw){toast('⚠️ Bitte zuerst eine Region wählen');return;}
-  if(istVerwalterOderKreisverwalter() && !verwalterHatRegionZugriff(curReg)){
+  if(!pendingRegionDraw&&istVerwalterOderKreisverwalter() && !verwalterHatRegionZugriff(curReg)){
     toast('⚠️ Kein Zugriff auf diese Region');return;
   }
   drawMode=true;
   drawPoints=[];drawMarkers=[];
+  document.getElementById('drawToolbar').classList.add('visible');
   document.getElementById('drawStartBtn').classList.add('active');
   document.getElementById('drawCancelBtn').disabled=false;
   setDrawInfo(window.innerWidth<=768?'Tippe auf die Karte um Punkte zu setzen':'Klicke auf die Karte um Punkte zu setzen');
