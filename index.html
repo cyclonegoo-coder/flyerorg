@@ -1259,7 +1259,7 @@ textarea{min-height:68px}
         <label style="font-size:.65rem;font-weight:600;color:var(--text3)">Plakate abhängen bis</label>
         <input type="date" id="newKampAbhaengeDeadline" style="font-size:.75rem">
       </div>
-      <div style="display:flex;flex-direction:column;gap:4px">
+      <div id="kampBereicheWrap" style="display:flex;flex-direction:column;gap:4px">
         <label style="font-size:.65rem;font-weight:600;color:var(--text3)">Geltungsbereiche</label>
         <div id="kampBereicheSummary" style="font-size:.75rem;color:var(--text3);padding:2px 0">Alle Bereiche</div>
         <button type="button" onclick="openBereichModal()" style="width:100%;padding:8px;border:1px solid var(--sep);border-radius:var(--r8);background:var(--surface2);font-size:.75rem;color:var(--text2);cursor:pointer;text-align:left">🗺 Geltungsbereiche bearbeiten…</button>
@@ -2166,6 +2166,8 @@ function resetKampForm() {
   _kampVorlageQuellId=null;
   updateBereichSummary();
   toggleAbhaengeDeadline();
+  const bWrap=document.getElementById('kampBereicheWrap');
+  if(bWrap) bWrap.style.display='';
 }
 function toggleAbhaengeDeadline() {
   const typ = document.getElementById('newKampTyp').value;
@@ -2423,6 +2425,8 @@ function editKampagne(id) {
   const kBtn=document.getElementById('kampKontingentBtn');
   const isPK=!isBasis&&(k.typ==='plakate'||k.typ==='beides');
   if(kBtn) kBtn.style.display=isPK?'block':'none';
+  const bWrap=document.getElementById('kampBereicheWrap');
+  if(bWrap) bWrap.style.display=isBasis?'none':'';
   kBtn?.setAttribute('data-kamp-id',k.id);
   document.getElementById('kampFormModalOv').classList.add('open');
 }
