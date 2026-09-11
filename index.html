@@ -7295,11 +7295,7 @@ function openDetail(id){
         <div style="text-align:right;font-size:.72rem;color:var(--text3)">${g.verteilerId?(g.verteilerId===currentUser?.id?'👤 Du':'👤 '+(getVerteilerName(g)||'Zugewiesen')):'⚠️ Frei'}</div>
       </div>
       ${(()=>{const _mv=g.verteilerId?allUsers.find(u=>u.id===g.verteilerId):null;const _ui=_mv?(_mv._kampUebergabe||_mv.uebergabe_info||''):'';return _ui?`<div style="margin-top:4px;font-size:.68rem;color:var(--text3);padding:3px 8px;background:var(--surface2);border-radius:6px">📦 ${_ui}</div>`:''})()}
-      ${istPlakatKampagne()&&g.soll_stueck?`<div style="margin-top:6px;padding:8px 10px;background:rgba(30,80,170,.08);border:1px solid rgba(30,80,170,.2);border-radius:var(--r8);display:flex;align-items:center;gap:8px">
-        <span style="font-size:1.1rem">📌</span>
-        <div style="flex:1"><div style="font-size:.62rem;color:var(--text4);text-transform:uppercase">Plakat-Soll</div><strong style="font-size:1rem;color:var(--blue)">${g.soll_stueck}</strong><span style="font-size:.72rem;color:var(--text3)"> Plakate</span></div>
-        ${g.ist_stueck?`<div style="text-align:right"><div style="font-size:.62rem;color:var(--text4)">Verteilt</div><strong style="font-size:.9rem;color:${g.ist_stueck>g.soll_stueck?'var(--orange)':'var(--green)'}">${g.ist_stueck}</strong></div>`:''}
-      </div>`:''}</div>`;
+      </div>`;
 
     // 2) Status-Buttons als farbige Chips in einer Zeile
     if(darfVerteilerStatus){
@@ -7371,16 +7367,7 @@ function openDetail(id){
           <div style="font-size:.7rem;font-weight:600;color:var(--text2);margin-bottom:5px">📦 Stückzahl ändern</div>
           <div style="display:flex;gap:6px;align-items:center"><input type="number" id="inpS" value="${g.stueckzahl}" style="width:80px;min-width:80px;font-size:16px;font-weight:700;padding:10px 12px;color:#1c1c1e;text-align:center;border:1.5px solid var(--sep);border-radius:var(--r8);background:var(--surface2)"><button class="btn btn-g" onclick="saveSt2('${g.id}')" style="flex:1;padding:10px 14px;font-size:.78rem;white-space:nowrap">Ändern</button><button class="btn btn-g" onclick="estimateForGebiet('${g.id}')" style="padding:10px;font-size:.78rem" title="Haushalte per OSM schätzen">💡</button></div>
         </div>
-        ${istPlakatKampagne()?`<div style="background:var(--surface2);border-radius:var(--r8);padding:8px 10px">
-          <div style="font-size:.7rem;font-weight:600;color:var(--text2);margin-bottom:5px">📌 Plakat-Kontingent</div>
-          <div style="display:flex;gap:6px;align-items:center">
-            <div style="flex:1"><div style="font-size:.62rem;color:var(--text4)">Soll</div><input type="number" id="inpSoll" value="${g.soll_stueck||''}" min="0" placeholder="0" style="width:100%;font-size:16px;padding:8px;text-align:center;border:1.5px solid var(--sep);border-radius:var(--r8);background:var(--surface2)"></div>
-            <div style="flex:1"><div style="font-size:.62rem;color:var(--text4)">Ist</div><input type="number" id="inpIst" value="${g.ist_stueck||''}" min="0" placeholder="0" style="width:100%;font-size:16px;padding:8px;text-align:center;border:1.5px solid var(--sep);border-radius:var(--r8);background:var(--surface2)"></div>
-            <button class="btn btn-g" onclick="savePlakatKontingent('${g.id}')" style="padding:10px 14px;font-size:.78rem;white-space:nowrap;align-self:flex-end">Speichern</button>
-          </div>
-          ${g.soll_stueck&&g.ist_stueck>g.soll_stueck?`<div style="font-size:.68rem;color:var(--orange);margin-top:4px">⚠️ ${g.ist_stueck-g.soll_stueck} über Soll</div>`:''}
-        </div>
-        </div>`:''}`+``;
+        </div>`;
       // Verteiler anfragen (wenn kein Verteiler)
       if(!g.verteilerId){
         h+=`<div style="background:var(--surface2);border-radius:var(--r8);padding:8px 10px">
@@ -7491,7 +7478,6 @@ function openDetail(id){
     h+=`<div class="d-sec"><div class="info-g">
       <div><div class="ii-label">Stückzahl</div><div class="ii-val" style="color:var(--blue)">${g.stueckzahl}</div></div>
       <div><div class="ii-label">Status</div><div class="ii-val">${sl(g.status)}</div></div>
-      ${istPlakatKampagne()&&(g.soll_stueck||g.ist_stueck)?`<div><div class="ii-label">📌 Plakat-Soll</div><div class="ii-val" style="color:var(--blue);font-size:.9rem">${g.soll_stueck||0}</div></div><div><div class="ii-label">📌 Verteilt</div><div class="ii-val" style="color:${g.ist_stueck>g.soll_stueck?'var(--orange)':'var(--green)'}">${g.ist_stueck||0}</div></div>`:''}
       <div class="ii-full"><div class="ii-label">Verteiler${_vUser?.is_offline?' <span style="font-size:.6rem;color:var(--orange)">(Offline)</span>':''}</div><div class="ii-val">${getVerteilerName(g)||'⚠️ Verteiler fehlt'}</div></div>
       ${_ueInfo?`<div class="ii-full"><div class="ii-label">Übergabe</div><div class="ii-val" style="font-size:.72rem;color:var(--text3)">📦 ${_ueInfo}</div></div>`:''}
     </div></div>`;
@@ -7523,13 +7509,6 @@ function openDetail(id){
       <div class="d-sec"><div class="sec-hd">Stückzahl</div><div class="f-stack">
         <input type="number" id="inpS" value="${g.stueckzahl}"><button class="btn btn-g" onclick="saveSt2('${g.id}')">Ändern</button><button class="btn btn-g" onclick="estimateForGebiet('${g.id}')" style="padding:8px" title="Haushalte per OSM schätzen">💡</button>
       </div></div>`;
-      if(istPlakatKampagne()){
-        h+=`<div class="d-sec"><div class="sec-hd">📌 Plakat-Kontingent</div><div class="f-stack" style="flex-direction:row;gap:6px;align-items:center">
-          <div><span style="font-size:.68rem;color:var(--text4)">Soll</span><br><input type="number" id="inpSoll" value="${g.soll_stueck||''}" min="0" placeholder="0" style="width:65px;font-size:.85rem;padding:6px;text-align:center;border:1px solid var(--sep);border-radius:4px"></div>
-          <div><span style="font-size:.68rem;color:var(--text4)">Ist</span><br><input type="number" id="inpIst" value="${g.ist_stueck||''}" min="0" placeholder="0" style="width:65px;font-size:.85rem;padding:6px;text-align:center;border:1px solid var(--sep);border-radius:4px"></div>
-          <button class="btn btn-g" onclick="savePlakatKontingent('${g.id}')" style="align-self:flex-end">Speichern</button>
-        </div></div>`;
-      }
       h+=``;
       const gebietAnfragen=alleAnfragen.filter(a=>a.gebiet_id===g.id && binIchZustaendigFuerGebiet(a.gebiet_id));
       if(gebietAnfragen.length>0){
