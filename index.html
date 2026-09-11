@@ -219,7 +219,7 @@ header{min-height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturat
 .c-zugeteilt{background:rgba(255,149,0,.12);color:var(--orange)}
 .c-fertig{background:rgba(66,165,245,.12);color:#1565c0}
 .c-problem{background:rgba(255,59,48,.12);color:var(--red)}
-.g-name{font-size:.78rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;margin-right:6px}
+.g-name{font-size:.78rem;font-weight:600;flex:1;margin-right:6px;word-break:break-word}
 .g-meta{display:flex;gap:8px;font-size:.65rem;color:var(--text3)}
 .wa{font-size:.55rem;font-weight:600;color:#25d366;background:rgba(37,211,102,.1);padding:1px 4px;border-radius:4px}
 
@@ -857,7 +857,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v301 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v303 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -11387,20 +11387,44 @@ function renderListPlakate(){
     listEl.innerHTML='<div style="padding:20px;text-align:center;color:var(--text4);font-size:.8rem">Keine Plakate'+(plakate.length===0?'<br><br>Klicke auf die Karte um<br>ein Plakat zu platzieren':'')+'</div>';
     return;
   }
-  listEl.innerHTML=routeHtml+displayed.map(p=>{
+  // Bulk-Aktion: Alle als Fixpunkt/Vorlage markieren oder entfernen
+  const nichtFixpunkt=displayed.filter(p=>!p.ist_vorlage);
+  const fixpunkte=displayed.filter(p=>p.ist_vorlage);
+  let bulkHtml='';
+  if(displayed.length>1){
+    bulkHtml='<div style="display:flex;gap:4px;padding:2px 0;flex-wrap:wrap">';
+    if(nichtFixpunkt.length>0) bulkHtml+=`<button onclick="bulkToggleVorlage(true)" style="flex:1;min-width:80px;padding:3px 6px;border:1px solid var(--text4);border-radius:var(--r8);background:transparent;color:var(--text3);font-size:.62rem;cursor:pointer">📍 Alle → Vorlage (${nichtFixpunkt.length})</button>`;
+    if(fixpunkte.length>0) bulkHtml+=`<button onclick="bulkToggleVorlage(false)" style="flex:1;min-width:80px;padding:3px 6px;border:1px solid var(--orange);border-radius:var(--r8);background:transparent;color:var(--orange);font-size:.62rem;cursor:pointer">❌ Vorlage entfernen (${fixpunkte.length})</button>`;
+    bulkHtml+='</div>';
+  }
+
+  listEl.innerHTML=routeHtml+bulkHtml+displayed.map(p=>{
     const gName=p.gebiet_id?(getG(p.gebiet_id)?.name||'?'):'Außerhalb';
     const statusLabels={aufzuhaengen:'Geplant',haengt:'Hängt',abgehaengt:'Abgehängt',zerstoert:'Zerstört',ersetzt:'Ersetzt',vorlage:'Vorlage'};
-    const vorlageIcon=p.ist_vorlage?'📍 ':'';
     const displayStatus=statusLabels[p.status]||p.status;
     const borderColor=({aufzuhaengen:'#ff9500',haengt:'#42a5f5',abgehaengt:'#9c27b0',zerstoert:'#ff3b30',ersetzt:'#42a5f5',vorlage:'#aeaeb2'})[p.status]||'#ccc';
+    const vorBtn=!p.ist_vorlage?`<button onclick="event.stopPropagation();toggleVorlage('${p.id}',true);renderList()" title="Als Vorlage markieren" style="background:none;border:none;cursor:pointer;font-size:.6rem;padding:1px 3px;color:var(--text4)">☆</button>`
+      :`<button onclick="event.stopPropagation();toggleVorlage('${p.id}',false);renderList()" title="Vorlage entfernen" style="background:none;border:none;cursor:pointer;font-size:.6rem;padding:1px 3px;color:var(--orange)">📍</button>`;
     return `<div class="g-card ${selPlakatId===p.id?'sel':''}" onclick="selectPlakat('${p.id}')" style="border-left:3px solid ${borderColor}">
-      <div class="g-top"><span class="g-name">${vorlageIcon}${gName}</span><span class="plakat-chip c-${p.status}">${displayStatus}</span></div>
+      <div class="g-top"><span class="g-name">${gName}</span>${vorBtn}<span class="plakat-chip c-${p.status}">${displayStatus}</span></div>
       <div class="g-meta"><span>👤 ${p.aufhaenger_name||'?'}</span><span>${new Date(p.created_at).toLocaleDateString('de')}</span>${p.kategorie==='banner'?'<span>🏳️</span>':''}${p.ort_typ==='privat'?'<span>🏠</span>':''}${p.ersetzt_count>0?'<span>🔄'+p.ersetzt_count+'</span>':''}${p.foto_url?'<span>📷</span>':''}</div>
     </div>`;
   }).join('');
 }
 
 function setPlakatFilter(f){plakatFilter=f;renderList();}
+
+async function bulkToggleVorlage(setVorlage){
+  const visible=getVisiblePlakate();
+  const targets=setVorlage?visible.filter(p=>!p.ist_vorlage):visible.filter(p=>p.ist_vorlage);
+  if(targets.length===0){toast('⚠️ Keine Plakate zum Ändern');return;}
+  const ids=targets.map(p=>p.id);
+  const {error}=await sb.from('plakate').update({ist_vorlage:setVorlage}).in('id',ids);
+  if(error){toast('⚠️ '+error.message);return;}
+  targets.forEach(p=>{p.ist_vorlage=setVorlage;});
+  renderList();
+  toast(setVorlage?`📍 ${targets.length} Plakate als Vorlage markiert`:`${targets.length} Vorlagen entfernt`);
+}
 
 function selectPlakat(id){
   selPlakatId=id;
