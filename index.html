@@ -11015,6 +11015,7 @@ function drawPlakatSollLabels(){
   clearPlakatSollLabels();
   if(curMode!=='plakate') return;
   if(pkMapActive) return; // Kontingent-Editiermodus hat eigene Labels
+  if(curKampagne?.ist_basis) return; // Grundzuweisung: keine Kontingente
   // Aktive Plakate pro Gebiet zählen
   const istCount={};
   plakate.forEach(p=>{
