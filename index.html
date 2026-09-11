@@ -205,7 +205,7 @@ header{min-height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturat
 .g-region-hd .g-rg-cnt{font-size:.6rem;font-weight:500;color:var(--text4)}
 .g-region-group{display:flex;flex-direction:column;gap:2px}
 .g-region-group.collapsed .g-region-items{display:none}
-.g-card{background:var(--surface);border-radius:var(--r8);padding:7px 9px;cursor:pointer;transition:all .15s;box-shadow:var(--sh-sm);border:1.5px solid transparent;position:relative;overflow:hidden}
+.g-card{background:var(--surface);border-radius:var(--r8);padding:7px 9px;cursor:pointer;transition:all .15s;box-shadow:var(--sh-sm);border:1.5px solid transparent;position:relative}
 .g-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;border-radius:8px 0 0 8px}
 .g-card.status-offen::before{background:var(--text4)}
 .g-card.status-zugeteilt::before{background:var(--orange)}
@@ -857,7 +857,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v305 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v306 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
