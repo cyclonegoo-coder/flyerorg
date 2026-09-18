@@ -857,7 +857,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v308 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v309 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -5711,12 +5711,21 @@ async function sendeZuweisungAnfrage(gebietId) {
   if (istSpezialK) insertData.kampagne_id = curKampagne.id;
   const { error } = await sb.from('anfragen').insert(insertData);
   if (error) { toast('⚠️ Fehler: ' + (error.message || error.code)); return; }
-  logAction('anfrage',`Zuweisungs-Anfrage an ${zielUser?.name||'Verteiler'} gesendet`,gebietId,g.name);
+  // Bei Kampagne: auch Grundverteiler-Anfrage senden wenn Checkbox an
+  const auchGrund = istSpezialK && document.getElementById('inpAuchGrundverteiler')?.checked;
+  if(auchGrund){
+    await sb.from('anfragen').insert({
+      gebiet_id: gebietId, user_id: currentUser.id, typ: 'zuweisung_anfrage',
+      ziel_user_id: zielUserId, neue_stueckzahl: g.stueckzahl || 0,
+      grund: `Verwalter möchte dir Gebiet "${g.name}" als Grundverteiler zuweisen`
+    });
+  }
+  logAction('anfrage',`Zuweisungs-Anfrage an ${zielUser?.name||'Verteiler'} gesendet${auchGrund?' (+ Grundverteiler)':''}`,gebietId,g.name);
   // Push an den Ziel-Verteiler
   if (zielUserId !== currentUser.id) {
-    sendPushToUsers([zielUserId], '📋 Neue Zuweisung', `Dir wurde das Gebiet „${g.name}" zugewiesen.${istSpezialK?' ('+curKampagne.name+')':''}`, 'zuweisung');
+    sendPushToUsers([zielUserId], '📋 Neue Zuweisung', `Dir wurde das Gebiet „${g.name}" zugewiesen.${istSpezialK?' ('+curKampagne.name+')':''}${auchGrund?' + Grundverteiler':''}`, 'zuweisung');
   }
-  toast(`✅ Anfrage an ${zielUser?.name || 'Verteiler'} gesendet!`);
+  toast(`✅ Anfrage an ${zielUser?.name || 'Verteiler'} gesendet!${auchGrund?' (+ Grundverteiler)':''}`);
   // Prüfe ob Nutzer Push hat, wenn nicht → Kontakt-Sheet anbieten
   const hasPush = await hatUserPush(zielUserId);
   if(!hasPush && zielUser?.telefon){
@@ -7295,14 +7304,14 @@ function openDetail(id){
     h+=`<div class="d-sec" style="padding:8px 12px">
       <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
         <div><span style="font-size:.65rem;color:var(--text4);text-transform:uppercase">Stück</span> <strong style="color:var(--blue);font-size:.95rem">${g.stueckzahl}</strong></div>
-        <div style="flex:1;text-align:center"><span style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:600;${g.status==='fertig'?'background:rgba(52,199,89,.15);color:var(--green)':g.status==='zugeteilt'?'background:rgba(255,149,0,.15);color:var(--orange)':'background:var(--surface3);color:var(--text3)'}">${sl(g.status)}</span></div>
+        ${!curKampagne?.ist_basis?`<div style="flex:1;text-align:center"><span style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:.72rem;font-weight:600;${g.status==='fertig'?'background:rgba(52,199,89,.15);color:var(--green)':g.status==='zugeteilt'?'background:rgba(255,149,0,.15);color:var(--orange)':'background:var(--surface3);color:var(--text3)'}">${sl(g.status)}</span></div>`:''}
         <div style="text-align:right;font-size:.72rem;color:var(--text3)">${g.verteilerId?(g.verteilerId===currentUser?.id?'👤 Du':'👤 '+(getVerteilerName(g)||'Zugewiesen')):'⚠️ Frei'}</div>
       </div>
       ${(()=>{const _mv=g.verteilerId?allUsers.find(u=>u.id===g.verteilerId):null;const _ui=_mv?(_mv._kampUebergabe||_mv.uebergabe_info||''):'';return _ui?`<div style="margin-top:4px;font-size:.68rem;color:var(--text3);padding:3px 8px;background:var(--surface2);border-radius:6px">📦 ${_ui}</div>`:''})()}
       </div>`;
 
-    // 2) Status-Buttons als farbige Chips in einer Zeile
-    if(darfVerteilerStatus){
+    // 2) Status-Buttons als farbige Chips in einer Zeile (nicht bei Grundzuweisung)
+    if(darfVerteilerStatus&&!curKampagne?.ist_basis){
       h+=`<div class="d-sec" style="padding:4px 12px 8px"><div style="display:flex;gap:6px">
         ${darfVerteilerStatus?`<button style="flex:1;padding:8px 4px;border-radius:var(--r8);border:1.5px solid ${g.status==='offen'?'var(--text4)':'var(--sep)'};background:${g.status==='offen'?'#f2f2f7':'var(--surface2)'};font-size:.72rem;font-weight:600;color:${g.status==='offen'?'var(--text2)':'var(--text4)'};cursor:pointer" onclick="setSt('${g.id}','offen')">Offen</button>`:''}
         ${isM?`<button style="flex:1;padding:8px 4px;border-radius:var(--r8);border:1.5px solid ${g.status==='zugeteilt'?'var(--orange)':'var(--sep)'};background:${g.status==='zugeteilt'?'rgba(255,149,0,.1)':'var(--surface2)'};font-size:.72rem;font-weight:600;color:${g.status==='zugeteilt'?'var(--orange)':'var(--text4)'};cursor:pointer" onclick="setSt('${g.id}','zugeteilt')">Zugestellt</button>`:''}
@@ -7378,6 +7387,7 @@ function openDetail(id){
           <div style="font-size:.7rem;font-weight:600;color:var(--text2);margin-bottom:5px">🔍 Verteiler anfragen</div>
           <input type="hidden" id="inpAnfrageVerteiler" value="">
           <button id="vpAnfrageDisplay" onclick="openVerteilerPicker('${g.id}',{title:'Verteiler anfragen',showNone:false,callback:function(id,name){document.getElementById('inpAnfrageVerteiler').value=id;var d=document.getElementById('vpAnfrageDisplay');d.textContent=name||'— wählen —';d.style.color=name?'var(--text1)':'var(--text4)';}})" style="width:100%;font-size:.8rem;padding:9px 10px;text-align:left;border:1.5px solid var(--sep);border-radius:var(--r8);background:#fff;color:var(--text4);cursor:pointer;margin-bottom:6px">— wählen —</button>
+          ${!curKampagne?.ist_basis?`<label style="display:flex;align-items:center;gap:6px;font-size:.72rem;color:var(--text2);margin-bottom:6px;cursor:pointer"><input type="checkbox" id="inpAuchGrundverteiler" checked> Auch als Grundverteiler</label>`:''}
           <button class="btn btn-p" onclick="sendeZuweisungAnfrage('${g.id}')" style="width:100%;padding:9px 14px;font-size:.78rem">Anfragen</button>
         </div>`;
       }
@@ -7481,15 +7491,17 @@ function openDetail(id){
     const _ueInfo=_vUser?(_vUser._kampUebergabe||_vUser.uebergabe_info||''):'';
     h+=`<div class="d-sec"><div class="info-g">
       <div><div class="ii-label">Stückzahl</div><div class="ii-val" style="color:var(--blue)">${g.stueckzahl}</div></div>
-      <div><div class="ii-label">Status</div><div class="ii-val">${sl(g.status)}</div></div>
+      ${!curKampagne?.ist_basis?`<div><div class="ii-label">Status</div><div class="ii-val">${sl(g.status)}</div></div>`:''}
       <div class="ii-full"><div class="ii-label">Verteiler${_vUser?.is_offline?' <span style="font-size:.6rem;color:var(--orange)">(Offline)</span>':''}</div><div class="ii-val">${getVerteilerName(g)||'⚠️ Verteiler fehlt'}</div></div>
       ${_ueInfo?`<div class="ii-full"><div class="ii-label">Übergabe</div><div class="ii-val" style="font-size:.72rem;color:var(--text3)">📦 ${_ueInfo}</div></div>`:''}
     </div></div>`;
+    if(!curKampagne?.ist_basis){
     h+=`<div class="d-sec"><div class="sec-hd">Status</div><div class="s-grid">
       ${darfVerteilerStatus?`<button class="s-btn ${g.status==='offen'?'ao':''}" onclick="setSt('${g.id}','offen')">Nicht zugestellt</button>`:''}
       ${isM?`<button class="s-btn ${g.status==='zugeteilt'?'az':''}" onclick="setSt('${g.id}','zugeteilt')">Zugestellt</button>`:''}
       ${darfVerteilerStatus?`<button class="s-btn ${g.status==='fertig'?'af':''}" onclick="setSt('${g.id}','fertig')">Verteilt ✓</button>`:''}
     </div></div>`;
+    }
     if(kontakte.length>0){
       h+=`<div class="d-sec"><div class="sec-hd">Kontakt</div><div class="f-stack">`;
       kontakte.forEach(k=>{
@@ -7560,6 +7572,7 @@ function openDetail(id){
       h+=`<div class="d-sec"><div class="sec-hd">Verteiler anfragen</div><div class="f-stack">
         <input type="hidden" id="inpAnfrageVerteiler" value="">
         <button id="vpAnfrageDisplay" onclick="openVerteilerPicker('${g.id}',{title:'Verteiler anfragen',showNone:false,callback:function(id,name){document.getElementById('inpAnfrageVerteiler').value=id;var d=document.getElementById('vpAnfrageDisplay');d.textContent=name||'— Verteiler wählen —';d.style.color=name?'var(--text1)':'var(--text4)';}})" style="flex:1;font-size:.8rem;padding:8px 10px;text-align:left;border:1.5px solid var(--sep);border-radius:var(--r8);background:var(--surface2);color:var(--text4);cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">— Verteiler wählen —</button>
+        ${!curKampagne?.ist_basis?`<label style="display:flex;align-items:center;gap:6px;font-size:.72rem;color:var(--text2);cursor:pointer"><input type="checkbox" id="inpAuchGrundverteiler" checked> Auch als Grundverteiler</label>`:''}
         <button class="btn btn-p" onclick="sendeZuweisungAnfrage('${g.id}')">👤 Verteiler anfragen</button>
       </div></div>`;
     }
@@ -9738,11 +9751,18 @@ function editPolygon(id){
     coords.pop();
   }
 
+  // Region- und LK-Polygone ausblenden (blockieren Touch-Events auf Eckpunkten)
+  Object.values(regionLayers).forEach(l=>map.removeLayer(l));
+  Object.values(lkLayers).forEach(l=>map.removeLayer(l));
+  // Gebiet-Polygon nicht-interaktiv machen (Touch geht sonst auf Polygon statt Marker)
+  const editPoly=layers[id];
+  if(editPoly._path) editPoly._path.style.pointerEvents='none';
+
   // Zoom to polygon
-  map.fitBounds(layers[id].getBounds().pad(0.3));
+  map.fitBounds(editPoly.getBounds().pad(0.3));
 
   // Highlight polygon
-  layers[id].setStyle({color:'#009ee0',weight:3,dashArray:'6,4'});
+  editPoly.setStyle({color:'#009ee0',weight:3,dashArray:'6,4'});
 
   // Create draggable markers for each vertex
   rebuildEditMarkers();
@@ -9764,9 +9784,10 @@ function rebuildEditMarkers(){
 
   const coords=kmlP[editingGebietId];
 
-  // Vertex markers (blue, draggable)
+  // Vertex markers (blue, draggable) — größer auf Mobilgeräten
+  const _isMobEdit=window.innerWidth<=768;
   coords.forEach((c,i)=>{
-    const m=L.circleMarker(c,{radius:6,color:'#009ee0',fillColor:'#fff',fillOpacity:1,weight:2,className:'edit-vertex'}).addTo(map);
+    const m=L.circleMarker(c,{radius:_isMobEdit?10:6,color:'#009ee0',fillColor:'#fff',fillOpacity:1,weight:2,className:'edit-vertex'}).addTo(map);
     m._idx=i;
     m.options.draggable=true;
 
