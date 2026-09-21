@@ -857,7 +857,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v309 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v312 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -1780,19 +1780,29 @@ function renderKampagnenDropdown() {
 
   // Verteiler sehen keine Basis-Kampagne (Grundzuweisung)
   const sichtbar = (curRole==='verteiler') ? kampagnen.filter(k=>!k.ist_basis) : kampagnen;
-  sel.innerHTML = sichtbar.map((k, i) => {
-    return `<option value="${k.id}" ${i === 0 ? 'selected' : ''}>${k.name}</option>`;
+  // Letzte Kampagne aus localStorage wiederherstellen
+  let lastKampId=null;
+  try{lastKampId=localStorage.getItem('flyerorg_last_kampagne');}catch(e){}
+  const lastKamp=lastKampId?sichtbar.find(k=>String(k.id)===lastKampId):null;
+
+  sel.innerHTML = sichtbar.map((k) => {
+    const isSel=lastKamp?String(k.id)===lastKampId:sichtbar.indexOf(k)===0;
+    return `<option value="${k.id}" ${isSel ? 'selected' : ''}>${k.name}</option>`;
   }).join('');
   // Falls keine Kampagne sichtbar, trotzdem curKampagne auf Basis setzen
   if(sichtbar.length===0 && kampagnen.length>0){
     sel.innerHTML=`<option value="${kampagnen[0].id}" selected>${kampagnen[0].name}</option>`;
   }
 
-  // curKampagne auf die erste SICHTBARE Kampagne setzen (für Verteiler: ohne Basis)
-  if (sichtbar.length > 0 && !curKampagne) {
-    curKampagne = sichtbar[0];
-  } else if (kampagnen.length > 0 && !curKampagne) {
-    curKampagne = kampagnen[0];
+  // curKampagne: gespeicherte bevorzugen, sonst erste sichtbare
+  if (!curKampagne) {
+    if (lastKamp) {
+      curKampagne = lastKamp;
+    } else if (sichtbar.length > 0) {
+      curKampagne = sichtbar[0];
+    } else if (kampagnen.length > 0) {
+      curKampagne = kampagnen[0];
+    }
   }
 
   // Mode-Toggle aktualisieren (Flyer/Plakate) sobald curKampagne bekannt ist
@@ -1804,6 +1814,7 @@ function renderKampagnenDropdown() {
     const selected = kampagnen.find(k => String(k.id) === sel.value);
     if (selected) {
       curKampagne = selected;
+      try{localStorage.setItem('flyerorg_last_kampagne',String(selected.id));}catch(e){}
       toast(`📋 ${selected.name}`);
       updateModeForKampagne();
       await loadGebieteForKampagne(selected.id, true);
@@ -5007,6 +5018,13 @@ async function showApp() {
     await loadGebieteForKampagne(curKampagne.id);
     // Nach Kampagne-Laden nochmal rollenbasiert filtern (Verteiler braucht gebiet_status)
     setRollenbasierterFilter();
+    // Gespeicherten Modus wiederherstellen (falls zur Kampagne passend)
+    try{
+      const savedMode=localStorage.getItem('flyerorg_last_mode');
+      if(savedMode&&(savedMode==='flyer'||savedMode==='plakate')&&savedMode!==curMode){
+        switchMode(savedMode);
+      }
+    }catch(e){}
     renderBreadcrumb(); renderList(); renderStats(); drawPolygons(); showDrawToolbar();
   }
   // Auto-Migration: GVs für bestehende Nutzer ableiten (nur Admin)
@@ -10685,6 +10703,7 @@ function showImpTab(tab) {
 function switchMode(mode){
   if(curMode===mode) return;
   curMode=mode;
+  try{localStorage.setItem('flyerorg_last_mode',mode);}catch(e){}
   // Toggle-Buttons aktualisieren
   const mf=document.getElementById('modeFlyer');const mp=document.getElementById('modePlakat');
   if(mf) mf.classList.toggle('active',mode==='flyer');
@@ -11248,25 +11267,146 @@ function closePlakatDetail(){
   selPlakatId=null;
 }
 
+// Wer hat aufgehängt/abgehängt? Dialog für Verwalter/Admin
+let _lastPlakatPerson=null; // {id,name} — merkt sich letzte Auswahl
+function _askPlakatPerson(p,newStatus){
+  return new Promise(resolve=>{
+    const isAbh=newStatus==='abgehaengt';
+    const title=isAbh?'Wer hat abgehängt?':'Wer hat aufgehängt?';
+    const myName=currentProfile?.name||currentUser.email.split('@')[0];
+    const g=p.gebiet_id?getG(p.gebiet_id):null;
+    const vtId=g?.verteilerId;
+    const vtUser=vtId&&vtId!==currentUser.id?allUsers.find(u=>u.id===vtId):null;
+    const aufhId=isAbh?p.aufhaenger_id:null;
+    const aufhName=isAbh?p.aufhaenger_name:null;
+    const aufhUser=aufhId&&aufhId!==currentUser.id?allUsers.find(u=>u.id===aufhId):null;
+
+    // IDs die schon als eigene Buttons angezeigt werden → nicht doppelt
+    const shownIds=new Set([currentUser.id]);
+
+    let optHtml='';
+    // Zuletzt gewählte Person (Schnellauswahl für Serien-Abhängen)
+    if(_lastPlakatPerson&&_lastPlakatPerson.id!==currentUser.id&&(!aufhUser||_lastPlakatPerson.id!==aufhUser.id)&&(!vtUser||_lastPlakatPerson.id!==vtUser.id)){
+      optHtml+=`<button class="btn btn-p" style="width:100%;padding:10px;font-size:.82rem" data-pid="${_lastPlakatPerson.id||''}" data-pname="${_lastPlakatPerson.name}">⏱ ${_lastPlakatPerson.name} (zuletzt gewählt)</button>`;
+      if(_lastPlakatPerson.id) shownIds.add(_lastPlakatPerson.id);
+    }
+    // Aufhänger (wahrscheinlichster Kandidat beim Abhängen)
+    if(aufhUser){
+      optHtml+=`<button class="btn${!_lastPlakatPerson?' btn-p':''}" style="width:100%;padding:10px;font-size:.82rem;${_lastPlakatPerson?'background:var(--blue);color:#fff':''}" data-pid="${aufhUser.id}" data-pname="${aufhUser.name||aufhName||'?'}">📌 ${aufhUser.name||aufhName||'?'} (hat aufgehängt)</button>`;
+      shownIds.add(aufhUser.id);
+    }
+    // Gebiet-Verteiler
+    if(vtUser&&!shownIds.has(vtUser.id)){
+      optHtml+=`<button class="btn" style="width:100%;padding:10px;font-size:.82rem;background:var(--blue);color:#fff" data-pid="${vtUser.id}" data-pname="${vtUser.name||vtUser.email?.split('@')[0]||'?'}">🚶 ${vtUser.name||vtUser.email?.split('@')[0]||'Verteiler'}</button>`;
+      shownIds.add(vtUser.id);
+    }
+    // Ich selbst
+    const meHighlight=!_lastPlakatPerson&&!aufhUser;
+    optHtml+=`<button class="btn${meHighlight?' btn-p':' btn-g'}" style="width:100%;padding:10px;font-size:.82rem" data-pid="${currentUser.id}" data-pname="${myName}">👤 Ich selbst (${myName})</button>`;
+    optHtml+=`<button class="btn btn-g" style="width:100%;padding:10px;font-size:.82rem" id="_ppOther">👥 Anderer Nutzer…</button>`;
+    optHtml+=`<button class="btn" style="width:100%;padding:10px;font-size:.82rem;background:transparent;color:var(--text3)" id="_ppCancel">Abbrechen</button>`;
+
+    let ov=document.getElementById('_ppOv');if(ov)ov.remove();
+    ov=document.createElement('div');ov.id='_ppOv';ov.className='modal-ov open';
+    ov.innerHTML=`<div class="modal" style="max-width:360px;text-align:center">
+      <div class="m-handle"></div>
+      <div style="font-size:.95rem;font-weight:600;margin-bottom:12px">${title}</div>
+      <div style="display:flex;flex-direction:column;gap:8px" id="_ppBtns">${optHtml}</div>
+      <div id="_ppUserList" style="display:none;margin-top:4px">
+        <input type="text" id="_ppSearch" placeholder="Name suchen…" style="width:100%;padding:10px;border:1px solid var(--sep);border-radius:var(--r8);font-size:.82rem;margin-bottom:6px">
+        <div id="_ppResults" style="max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:4px"></div>
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <input type="text" id="_ppFreeName" placeholder="Oder Name eingeben…" style="flex:1;padding:8px;border:1px solid var(--sep);border-radius:var(--r8);font-size:.78rem">
+          <button class="btn btn-p" style="padding:8px 12px;font-size:.78rem;white-space:nowrap" id="_ppFreeOk">OK</button>
+        </div>
+        <button class="btn btn-g" style="width:100%;margin-top:6px;padding:8px;font-size:.78rem" id="_ppBack">↩ Zurück</button>
+      </div>
+    </div>`;
+    document.body.appendChild(ov);
+
+    function close(){ov.classList.remove('open');setTimeout(()=>ov.remove(),300);}
+    function pick(person){_lastPlakatPerson=person;close();resolve(person);}
+
+    // Klick auf Quick-Buttons
+    ov.querySelectorAll('[data-pid]').forEach(btn=>{
+      btn.onclick=()=>pick({id:btn.dataset.pid||null,name:btn.dataset.pname});
+    });
+
+    // Anderer → Nutzerliste zeigen
+    document.getElementById('_ppOther').onclick=()=>{
+      document.getElementById('_ppBtns').style.display='none';
+      document.getElementById('_ppUserList').style.display='block';
+      const searchEl=document.getElementById('_ppSearch');
+      searchEl.focus();
+      renderUserResults('');
+      searchEl.oninput=()=>renderUserResults(searchEl.value);
+    };
+
+    function renderUserResults(q){
+      const resEl=document.getElementById('_ppResults');
+      const ql=q.toLowerCase().trim();
+      const filtered=allUsers.filter(u=>!shownIds.has(u.id)&&!u.is_offline&&(u.name||u.email||'').toLowerCase().includes(ql)).slice(0,20);
+      resEl.innerHTML=filtered.map(u=>{
+        const nm=u.name||u.email?.split('@')[0]||'?';
+        const rolle=u.rolle==='verteiler'?'🚶':'🔧';
+        return `<button class="btn btn-g" style="width:100%;padding:8px;font-size:.78rem;text-align:left" data-uid="${u.id}" data-uname="${nm}">${rolle} ${nm}</button>`;
+      }).join('')||(ql?'<div style="padding:8px;font-size:.75rem;color:var(--text3)">Kein Nutzer gefunden</div>':'');
+      resEl.querySelectorAll('[data-uid]').forEach(btn=>{
+        btn.onclick=()=>pick({id:btn.dataset.uid,name:btn.dataset.uname});
+      });
+    }
+
+    // Freie Namenseingabe (für Offline-Nutzer ohne Account)
+    document.getElementById('_ppFreeOk').onclick=()=>{
+      const name=(document.getElementById('_ppFreeName').value||'').trim();
+      if(!name){toast('⚠️ Bitte Name eingeben');return;}
+      pick({id:null,name:name});
+    };
+    document.getElementById('_ppBack').onclick=()=>{
+      document.getElementById('_ppUserList').style.display='none';
+      document.getElementById('_ppBtns').style.display='flex';
+    };
+    document.getElementById('_ppCancel').onclick=()=>{close();resolve(null);};
+    ov.onclick=(e)=>{if(e.target===ov){close();resolve(null);}};
+  });
+}
+
 async function updatePlakat(id,newStatus){
   const p=plakate.find(x=>x.id===id);
   if(!p) return;
   const upd={status:newStatus,updated_at:new Date().toISOString()};
-  if(newStatus==='abgehaengt'){
-    upd.abhaenger_id=currentUser.id;
-    upd.abhaenger_name=currentProfile?.name||currentUser.email.split('@')[0];
-    upd.abgehaengt_am=new Date().toISOString();
+
+  // Verwalter/Admin: Auswahl wer aufgehängt/abgehängt hat
+  const canChoosePerson=curRole==='admin'||istVerwalterOderKreisverwalter();
+  if((newStatus==='abgehaengt'||newStatus==='haengt')&&canChoosePerson){
+    const person=await _askPlakatPerson(p,newStatus);
+    if(!person) return; // Abbrechen
+    if(newStatus==='abgehaengt'){
+      upd.abhaenger_id=person.id||null;
+      upd.abhaenger_name=person.name;
+      upd.abgehaengt_am=new Date().toISOString();
+    }
+    if(newStatus==='haengt'){
+      upd.aufhaenger_id=person.id||null;
+      upd.aufhaenger_name=person.name;
+      upd.aufgehaengt_am=new Date().toISOString();
+      upd.abhaenger_id=null;upd.abhaenger_name=null;upd.abgehaengt_am=null;
+    }
+  } else {
+    if(newStatus==='abgehaengt'){
+      upd.abhaenger_id=currentUser.id;
+      upd.abhaenger_name=currentProfile?.name||currentUser.email.split('@')[0];
+      upd.abgehaengt_am=new Date().toISOString();
+    }
+    if(newStatus==='haengt'){
+      upd.aufhaenger_id=currentUser.id;
+      upd.aufhaenger_name=currentProfile?.name||currentUser.email.split('@')[0];
+      upd.aufgehaengt_am=new Date().toISOString();
+      upd.abhaenger_id=null;upd.abhaenger_name=null;upd.abgehaengt_am=null;
+    }
   }
   if(newStatus==='ersetzt'){
     upd.ersetzt_count=(p.ersetzt_count||0)+1;
-    upd.abhaenger_id=null;
-    upd.abhaenger_name=null;
-    upd.abgehaengt_am=null;
-  }
-  if(newStatus==='haengt'){
-    upd.aufhaenger_id=currentUser.id;
-    upd.aufhaenger_name=currentProfile?.name||currentUser.email.split('@')[0];
-    upd.aufgehaengt_am=new Date().toISOString();
     upd.abhaenger_id=null;
     upd.abhaenger_name=null;
     upd.abgehaengt_am=null;
