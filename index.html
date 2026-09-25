@@ -88,7 +88,7 @@ header{min-height:60px;background:rgba(242,242,247,0.88);backdrop-filter:saturat
 .plakat-chip.c-ersetzt{background:rgba(66,165,245,.12);color:var(--blue)}
 .plakat-chip.c-aufzuhaengen{background:rgba(255,149,0,.12);color:var(--orange)}
 .plakat-chip.c-vorlage{background:rgba(174,174,178,.15);color:#8e8e93}
-.tour-fab{display:none;position:absolute;bottom:22px;right:10px;z-index:401;height:40px;padding:0 14px;border-radius:20px;border:none;background:var(--blue);color:#fff;font-size:.75rem;font-weight:600;cursor:pointer;box-shadow:var(--sh);align-items:center;gap:5px;font-family:inherit;white-space:nowrap}
+.tour-fab{display:none;position:absolute;bottom:calc(60px + env(safe-area-inset-bottom,0px));right:10px;z-index:401;height:40px;padding:0 14px;border-radius:20px;border:none;background:var(--blue);color:#fff;font-size:.75rem;font-weight:600;cursor:pointer;box-shadow:var(--sh);align-items:center;gap:5px;font-family:inherit;white-space:nowrap}
 .tour-fab.show{display:flex}
 
 .user-pill{display:flex;align-items:center;gap:6px;background:var(--surface3);border-radius:20px;padding:4px 10px 4px 4px;cursor:pointer;transition:background .15s}
@@ -857,7 +857,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v313 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v315 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -5013,11 +5013,9 @@ async function showApp() {
   // Rollenbasierter Filter: Breadcrumbs vorselektieren basierend auf Rolle
   setRollenbasierterFilter();
   initApp();
-  // Erste Kampagne automatisch laden
+  // Erste Kampagne automatisch laden (autoNavigate=true → vmNavigateToMyGebiete setzt curLK/curGV/curReg)
   if (curKampagne?.id && curKampagne.id !== 'default') {
-    await loadGebieteForKampagne(curKampagne.id);
-    // Nach Kampagne-Laden nochmal rollenbasiert filtern (Verteiler braucht gebiet_status)
-    setRollenbasierterFilter();
+    await loadGebieteForKampagne(curKampagne.id, true);
     // Gespeicherten Modus wiederherstellen (falls zur Kampagne passend)
     try{
       const savedMode=localStorage.getItem('flyerorg_last_mode');
@@ -5025,7 +5023,6 @@ async function showApp() {
         switchMode(savedMode);
       }
     }catch(e){}
-    renderBreadcrumb(); renderList(); renderStats(); drawPolygons(); showDrawToolbar();
   }
   // Auto-Migration: GVs für bestehende Nutzer ableiten (nur Admin)
   await migrateUserGVs();
@@ -11526,6 +11523,7 @@ function renderListPlakate(){
     const haengtCount=displayed.filter(p=>p.status==='haengt'||p.status==='ersetzt').length;
     routeHtml=`<div style="display:flex;gap:4px;padding:4px 0;flex-wrap:wrap">
       ${haengtCount>0?`<button onclick="startPlakatRoute('haengt')" style="flex:1;min-width:100px;padding:4px 8px;border:1px solid var(--green);border-radius:var(--r8);background:rgba(52,199,89,.08);color:var(--green);font-size:.68rem;font-weight:600;cursor:pointer">🧭 Route hängende (${haengtCount})</button>`:''}
+      ${haengtCount>0?`<button onclick="bulkAbhaengen()" style="flex:1;min-width:100px;padding:4px 8px;border:1px solid #9c27b0;border-radius:var(--r8);background:rgba(156,39,176,.08);color:#9c27b0;font-size:.68rem;font-weight:600;cursor:pointer">✓ Alle abhängen (${haengtCount})</button>`:''}
       <button onclick="exportPlakatGPX()" style="flex:0;padding:4px 8px;border:1px solid var(--text4);border-radius:var(--r8);background:transparent;color:var(--text3);font-size:.68rem;cursor:pointer">📥 GPX</button>
     </div>`;
   }
@@ -11575,6 +11573,34 @@ async function bulkToggleVorlage(setVorlage){
   targets.forEach(p=>{p.ist_vorlage=setVorlage;});
   renderList();
   toast(setVorlage?`📍 ${targets.length} Plakate als Vorlage markiert`:`${targets.length} Vorlagen entfernt`);
+}
+
+async function bulkAbhaengen(){
+  const visible=getVisiblePlakate();
+  const targets=visible.filter(p=>p.status==='haengt'||p.status==='ersetzt');
+  if(targets.length===0){toast('⚠️ Keine hängenden Plakate');return;}
+  // Person bestimmen (Verwalter/Admin: Dialog, Verteiler: automatisch)
+  const canChoosePerson=curRole==='admin'||istVerwalterOderKreisverwalter();
+  let person=null;
+  if(canChoosePerson){
+    // Dialog einmal zeigen — erstes Plakat als Referenz für Aufhänger-Vorschlag
+    person=await _askPlakatPerson(targets[0],'abgehaengt');
+    if(!person) return; // Abbrechen
+  } else {
+    person={id:currentUser.id,name:currentProfile?.name||currentUser.email.split('@')[0]};
+  }
+  // Bestätigung
+  if(!await appConfirm('Alle abhängen',`${targets.length} Plakate als abgehängt markieren?\n\nAbgehängt von: ${person.name}`,'Ja, alle abhängen','Abbrechen')) return;
+  // Batch-Update
+  const now=new Date().toISOString();
+  const upd={status:'abgehaengt',abhaenger_id:person.id||null,abhaenger_name:person.name,abgehaengt_am:now,updated_at:now};
+  const ids=targets.map(p=>p.id);
+  const {error}=await sb.from('plakate').update(upd).in('id',ids);
+  if(error){toast('⚠️ '+error.message);return;}
+  targets.forEach(p=>Object.assign(p,upd));
+  drawPlakatMarkers();renderList();renderStats();updateTourFab();
+  if(tourActive) endTour();
+  toast(`✅ ${targets.length} Plakate abgehängt`);
 }
 
 function selectPlakat(id){
