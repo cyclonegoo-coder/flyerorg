@@ -857,7 +857,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v312 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v313 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -9453,7 +9453,11 @@ async function deleteRegion(id){
 }
 
 function showDrawToolbar(){
-  if(curReg==='alle'&&!pendingRegionDraw&&!drawMode){document.getElementById('drawToolbar').classList.remove('visible');return;}
+  const isBasis=!!curKampagne?.ist_basis;
+  // Draw-Toolbar nur in Grundzuweisung + Flyer-Modus (Gebiete zeichnen ist allgemeine Einrichtung)
+  if(curMode==='plakate'||!isBasis||(curReg==='alle'&&!pendingRegionDraw&&!drawMode)){
+    document.getElementById('drawToolbar').classList.remove('visible');return;
+  }
   const reg=regionen[curReg];
   const hatZugriff = curRole === 'admin'
     || (istVerwalterOderKreisverwalter() && reg && verwalterHatGebietsverbandZugriff(reg.gebietsverband_id))
@@ -9463,9 +9467,9 @@ function showDrawToolbar(){
   } else {
     document.getElementById('drawToolbar').classList.remove('visible');
   }
-  // 🪄 Suggest-Button nur im Flyer-Modus + wenn Region gewählt + Zugriffsrecht
+  // 🪄 Suggest-Button nur im Flyer-Modus + Grundzuweisung + Region gewählt + Zugriffsrecht
   const sugBtn=document.getElementById('suggestBtn');
-  if(sugBtn) sugBtn.style.display=(hatZugriff&&curMode==='flyer'&&curReg!=='alle')?'':'none';
+  if(sugBtn) sugBtn.style.display=(hatZugriff&&curMode==='flyer'&&isBasis&&curReg!=='alle')?'':'none';
 }
 
 // Prüft ob ein Nutzer im Landkreis des aktuellen KV aktiv ist
