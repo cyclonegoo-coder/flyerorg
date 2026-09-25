@@ -570,6 +570,7 @@ textarea{min-height:68px}
     <span class="mob-stat" id="mobStatOffen" style="color:var(--orange)">–</span>
     <span class="mob-stat" id="mobStatFehlt" style="color:var(--red);display:none" onclick="jumpToMissingVerteiler()">–</span>
     <span class="mob-stat" id="mobStatPlakat" style="color:var(--text2);display:none">–</span>
+    <button id="mobBulkAbh" onclick="bulkAbhaengen()" style="display:none;margin-left:auto;padding:2px 8px;border:1px solid #9c27b0;border-radius:12px;background:rgba(156,39,176,.1);color:#9c27b0;font-size:.62rem;font-weight:600;cursor:pointer;white-space:nowrap">✓ Alle abhängen</button>
   </div>
 </div>
 
@@ -836,7 +837,6 @@ textarea{min-height:68px}
     <div class="m-foot">
       <button class="btn btn-g" onclick="closeTourModal()">Abbrechen</button>
       <button class="btn" style="flex:1;background:var(--blue);color:#fff" onclick="startTour()">🧭 Route starten</button>
-      <button class="btn btn-g" onclick="exportTourGPX()" title="GPX-Datei herunterladen">📥</button>
     </div>
   </div>
 </div>
@@ -857,7 +857,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v315 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v317 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -7285,6 +7285,9 @@ function renderStats(){
   // 📌 im Flyer-Modus immer ausblenden (wird nur in renderStatsPlakate gezeigt)
   const pkStat=document.getElementById('mobStatPlakat');
   if(pkStat) pkStat.style.display='none';
+  // Bulk-Abhängen im Flyer-Modus ausblenden
+  const mobAbh=document.getElementById('mobBulkAbh');
+  if(mobAbh) mobAbh.style.display='none';
 }
 
 // ============================================================
@@ -11524,7 +11527,6 @@ function renderListPlakate(){
     routeHtml=`<div style="display:flex;gap:4px;padding:4px 0;flex-wrap:wrap">
       ${haengtCount>0?`<button onclick="startPlakatRoute('haengt')" style="flex:1;min-width:100px;padding:4px 8px;border:1px solid var(--green);border-radius:var(--r8);background:rgba(52,199,89,.08);color:var(--green);font-size:.68rem;font-weight:600;cursor:pointer">🧭 Route hängende (${haengtCount})</button>`:''}
       ${haengtCount>0?`<button onclick="bulkAbhaengen()" style="flex:1;min-width:100px;padding:4px 8px;border:1px solid #9c27b0;border-radius:var(--r8);background:rgba(156,39,176,.08);color:#9c27b0;font-size:.68rem;font-weight:600;cursor:pointer">✓ Alle abhängen (${haengtCount})</button>`:''}
-      <button onclick="exportPlakatGPX()" style="flex:0;padding:4px 8px;border:1px solid var(--text4);border-radius:var(--r8);background:transparent;color:var(--text3);font-size:.68rem;cursor:pointer">📥 GPX</button>
     </div>`;
   }
 
@@ -11671,9 +11673,21 @@ function renderStatsPlakate(){
   // Fehlende Verteiler ausblenden
   const mF=document.getElementById('mobStatFehlt');
   if(mF) mF.style.display='none';
+  // Mobile Bulk-Abhängen Button
+  const mobAbh=document.getElementById('mobBulkAbh');
+  if(mobAbh){
+    const aktiv=visible.filter(p=>p.status!=='vorlage');
+    const haengtN=aktiv.filter(p=>p.status==='haengt'||p.status==='ersetzt').length;
+    if(!isBasis&&haengtN>0){
+      mobAbh.textContent=`✓ Alle abhängen (${haengtN})`;
+      mobAbh.style.display='inline-block';
+    } else {
+      mobAbh.style.display='none';
+    }
+  }
 }
 
-// ── Plakat-Routen: Google Maps + GPX ──
+// ── Plakat-Routen: Google Maps ──
 async function startPlakatRoute(status){
   // Sammle sichtbare Plakate mit gewünschtem Status
   let targets=getVisiblePlakate().filter(p=>p.ort_typ!=='privat'&&(status==='alle'||(status==='haengt'?(p.status==='haengt'||p.status==='ersetzt'):p.status===status)));
@@ -11685,42 +11699,16 @@ async function startPlakatRoute(status){
     const url=`https://www.google.com/maps/dir/?api=1&destination=${dest}&waypoints=${waypoints.join('|')}&travelmode=driving`;
     window.open(url,'_blank');
   } else {
-    // Zu viele für Google Maps — GPX anbieten
-    const gpxWahl = await appConfirm('📍 Zu viele Plakate',`${targets.length} Plakate — zu viele für Google Maps (max 10).\n\nGPX-Datei herunterladen oder nur die ersten 10 navigieren?`,'GPX herunterladen','Erste 10 navigieren');
-    if(gpxWahl){
-      exportPlakatGPX(targets);
-    } else {
-      // Nur erste 10 nehmen
-      targets=targets.slice(0,10);
-      const waypoints=targets.map(p=>`${p.lat},${p.lng}`);
-      const dest=waypoints.pop();
-      const url=`https://www.google.com/maps/dir/?api=1&destination=${dest}&waypoints=${waypoints.join('|')}&travelmode=driving`;
-      window.open(url,'_blank');
-    }
+    // Zu viele für Google Maps — erste 10 navigieren
+    toast(`📍 ${targets.length} Plakate — nur die ersten 10 werden navigiert`);
+    targets=targets.slice(0,10);
+    const waypoints2=targets.map(p=>`${p.lat},${p.lng}`);
+    const dest2=waypoints2.pop();
+    const url2=`https://www.google.com/maps/dir/?api=1&destination=${dest2}&waypoints=${waypoints2.join('|')}&travelmode=driving`;
+    window.open(url2,'_blank');
   }
 }
 
-function exportPlakatGPX(targets){
-  if(!targets) targets=getVisiblePlakate().filter(p=>p.ort_typ!=='privat'&&(p.status==='haengt'||p.status==='ersetzt'));
-  if(targets.length===0){toast('⚠️ Keine Plakate');return;}
-  const kampName=(curKampagne?.name||'Plakate').replace(/[^a-zA-Z0-9äöüÄÖÜß ]/g,'');
-  let gpx=`<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="FlyerOrg" xmlns="http://www.topografix.com/GPX/1/1">
-  <metadata><name>${kampName} — Plakat-Route</name><time>${new Date().toISOString()}</time></metadata>
-`;
-  targets.forEach((p,i)=>{
-    const gName=p.gebiet_id?(getG(p.gebiet_id)?.name||'?'):'Außerhalb';
-    gpx+=`  <wpt lat="${p.lat}" lon="${p.lng}"><name>Plakat ${i+1} — ${gName}</name><desc>${p.aufhaenger_name||'?'}, ${p.status}</desc></wpt>\n`;
-  });
-  gpx+=`</gpx>`;
-  const blob=new Blob([gpx],{type:'application/gpx+xml'});
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
-  a.download=`${kampName.replace(/ /g,'_')}_Plakate.gpx`;
-  a.click();
-  URL.revokeObjectURL(a.href);
-  toast(`📥 GPX mit ${targets.length} Plakaten exportiert`);
-}
 
 // ── Tour-Planer ──
 function openTourModal(){
@@ -12202,12 +12190,6 @@ function endTour(){
   toast('Tour beendet');
 }
 
-function exportTourGPX(){
-  const targets=getTourPlakate();
-  if(targets.length===0){toast('⚠️ Keine Plakate');return;}
-  closeTourModal();
-  exportPlakatGPX(targets);
-}
 
 // Tour-FAB: ein-/ausblenden je nach Modus
 function updateTourFab(){
