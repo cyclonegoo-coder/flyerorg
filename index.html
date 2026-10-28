@@ -857,7 +857,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v317 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v318 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -4555,7 +4555,7 @@ async function sendInvite(channel) {
           <div style="font-size:.65rem;color:var(--text4);margin-top:2px">E-Mail: ${email}</div>`;
         } else {
           const subject = encodeURIComponent('Einladung zur FlyerOrg-App');
-          const body = encodeURIComponent(`Hallo ${name}!\nDu wurdest als ${rolleLabel} zur FlyerOrg-App eingeladen.\nBitte schau in deine E-Mails für den Login-Link.\n\nSo richtest du die App ein:\n1. Klicke auf den Link in der E-Mail\n2. Vergib ein eigenes Passwort\n3. Installiere die App auf deinem Handy (im Browser auf „Zum Startbildschirm hinzufügen")\n4. Aktiviere Push-Benachrichtigungen wenn du gefragt wirst\n\nDeine E-Mail: ${email}`);
+          const body = encodeURIComponent(`Hallo ${name}!\nDu wurdest als ${rolleLabel} zur FlyerOrg-App eingeladen.\nBitte schau in deine E-Mails für den Login-Link.\n\nSo richtest du die App ein:\n1. Klicke auf den Link in der E-Mail\n2. Vergib ein eigenes Passwort\n3. Installiere die App auf deinem Handy (im Browser auf „Zum Startbildschirm hinzufügen")\n4. Aktiviere Push-Benachrichtigungen wenn du gefragt wirst\n\n📖 Video-Anleitungen:\n🎬 Erste Schritte: https://youtu.be/ugrlrauinUw\n📌 Plakatverteilung: https://youtu.be/J4KO-Y6pUf4\n\nDeine E-Mail: ${email}`);
           statusEl.style.color = 'var(--orange)';
           statusEl.innerHTML = `⚠️ Automatischer Versand fehlgeschlagen: <span style="font-size:.65rem">${errMsg||'Unbekannter Fehler'}</span>
           <div style="margin-top:6px;display:flex;gap:6px">
@@ -4570,7 +4570,8 @@ async function sendInvite(channel) {
     }
 
     // ── Kanalspezifische Benachrichtigung ──
-    const setupHinweise = `\n\nSo richtest du die App ein:\n1. Klicke auf den Link in der E-Mail\n2. Vergib ein eigenes Passwort\n3. Installiere die App auf deinem Handy (im Browser auf „Zum Startbildschirm hinzufügen")\n4. Aktiviere Push-Benachrichtigungen wenn du gefragt wirst`;
+    const videoLinks = `\n\n📖 Video-Anleitungen:\n🎬 Erste Schritte: https://youtu.be/ugrlrauinUw\n📌 Plakatverteilung: https://youtu.be/J4KO-Y6pUf4`;
+    const setupHinweise = `\n\nSo richtest du die App ein:\n1. Klicke auf den Link in der E-Mail\n2. Vergib ein eigenes Passwort\n3. Installiere die App auf deinem Handy (im Browser auf „Zum Startbildschirm hinzufügen")\n4. Aktiviere Push-Benachrichtigungen wenn du gefragt wirst${videoLinks}`;
     const hinweisText = magicLinkGesendet
       ? `Hallo ${name}!\nDu wurdest als ${rolleLabel} zur FlyerOrg-App eingeladen.\n\nEin Login-Link wurde an ${email} gesendet. Bitte schau in deine E-Mails (ggf. auch Spam-Ordner) und klicke auf den Link.${setupHinweise}`
       : `Hallo ${name}!\nDu wurdest als ${rolleLabel} zur FlyerOrg-App eingeladen.\n\nDer automatische E-Mail-Versand hat leider nicht geklappt. Bitte melde dich bei deinem Verwalter.`;
