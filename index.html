@@ -468,16 +468,18 @@ textarea{min-height:68px}
     <div class="login-title">FlyerOrg</div>
     <div class="login-sub">Flyerverteilung · AfD Thüringen</div>
 
+    <form id="loginForm" onsubmit="event.preventDefault();doLogin()" autocomplete="on">
     <div class="login-field">
       <label class="login-label">E-Mail</label>
-      <input class="login-input" type="email" id="loginEmail" placeholder="deine@email.de" autocomplete="email">
+      <input class="login-input" type="email" id="loginEmail" placeholder="deine@email.de" autocomplete="username" name="email">
     </div>
     <div class="login-field">
       <label class="login-label">Passwort</label>
-      <input class="login-input" type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password">
+      <input class="login-input" type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password" name="password">
     </div>
 
-    <button class="login-btn" id="loginBtn" onclick="doLogin()">Anmelden</button>
+    <button type="submit" class="login-btn" id="loginBtn">Anmelden</button>
+    </form>
     <div class="login-error" id="loginError"></div>
 
     <div id="loginLinks" style="margin-top:12px;text-align:center">
@@ -858,7 +860,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v320 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v322 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -5204,9 +5206,7 @@ async function checkSession() {
 // Enter key on login
 document.addEventListener('DOMContentLoaded', () => {
   checkSession();
-  document.getElementById('loginPassword').addEventListener('keydown', e => {
-    if (e.key === 'Enter') doLogin();
-  });
+  // Enter-Key im Login wird jetzt vom <form> submit übernommen
   document.getElementById('newPasswordConfirm').addEventListener('keydown', e => {
     if (e.key === 'Enter') doSetPassword();
   });
@@ -10708,7 +10708,10 @@ function pwaShowBanner(platform) {
   const text = document.getElementById('pwaInstallText');
 
   if (platform === 'ios') {
-    text.innerHTML = 'Tippe auf <strong>Teilen</strong> <span style="font-size:1.1em">⬆</span> und dann <strong>„Zum Home-Bildschirm"</strong>.';
+    const isIPad = /ipad/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    text.innerHTML = isIPad
+      ? 'Tippe oben rechts auf <strong>Teilen</strong> <span style="font-size:1.1em">⬆</span> und dann auf <strong>„Zum Home-Bildschirm"</strong>.'
+      : 'Tippe unten auf <strong>Teilen</strong> <span style="font-size:1.1em">⬆</span> und dann auf <strong>„Zum Home-Bildschirm"</strong>.';
     btn.textContent = 'Verstanden';
     btn.onclick = () => pwaHideBanner();
   } else {
@@ -10734,11 +10737,14 @@ function pwaHideBanner() {
   try { localStorage.setItem('pwa_dismissed', Date.now().toString()); } catch(e){}
 }
 
-// iOS-Erkennung: kein beforeinstallprompt, also manuell prüfen
+// iOS/iPadOS-Erkennung: kein beforeinstallprompt, also manuell prüfen
+// Moderne iPads (iPadOS 13+) melden sich als "Macintosh" im UA → extra Check nötig
 window.addEventListener('load', () => {
-  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const isSafari = /safari/i.test(navigator.userAgent) && !/chrome|crios|fxios/i.test(navigator.userAgent);
-  if (isIOS && isSafari && !navigator.standalone) {
+  const isStandalone = navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+  if (isIOS && isSafari && !isStandalone) {
     // Kurz warten damit Login-Screen zuerst erscheint
     setTimeout(() => pwaShowBanner('ios'), 3000);
   }
