@@ -20,6 +20,7 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 
 <style>
 :root {
@@ -857,7 +858,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v318 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v320 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -1152,8 +1153,11 @@ textarea{min-height:68px}
       <div>
         <div style="font-size:.65rem;font-weight:600;color:var(--text3);text-transform:uppercase;margin-bottom:4px">App-Link</div>
         <input id="profilAppUrl" type="hidden" />
-        <button class="btn btn-g" onclick="copyAppUrl()" style="width:100%;font-size:.78rem;padding:8px 12px">📋 App-Link kopieren</button>
-        <div style="font-size:.65rem;color:var(--text3);margin-top:3px">Link speichern oder am PC im Browser öffnen, um die App dort zu nutzen.</div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-g" onclick="copyAppUrl()" style="flex:1;font-size:.78rem;padding:8px 12px">📋 Link kopieren</button>
+          <button class="btn btn-g" onclick="showAppQrCode()" style="font-size:.78rem;padding:8px 12px">⬛ QR-Code</button>
+        </div>
+        <div style="font-size:.65rem;color:var(--text3);margin-top:3px">Link kopieren oder QR-Code scannen, um die App auf einem anderen Gerät zu öffnen.</div>
       </div>
     </div>
     <div id="profilStatus" style="font-size:.78rem;margin-top:8px;min-height:18px"></div>
@@ -3382,6 +3386,44 @@ function copyAppUrl() {
     document.body.removeChild(tmp);
     toast('✅ App-Link kopiert!');
   });
+}
+function showAppQrCode(){
+  const url=document.getElementById('profilAppUrl')?.value||(window.location.origin+window.location.pathname);
+  if(!url)return;
+  // QR generieren
+  const qr=qrcode(0,'M');
+  qr.addData(url);
+  qr.make();
+  const moduleCount=qr.getModuleCount();
+  const cellSize=Math.max(6,Math.floor(Math.min(280,window.innerWidth-80)/moduleCount));
+  const size=moduleCount*cellSize;
+  // Overlay
+  const ov=document.createElement('div');
+  ov.id='qrOverlay';
+  ov.style.cssText='position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.85);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;animation:fadeIn .2s';
+  // QR als Canvas
+  const canvas=document.createElement('canvas');
+  canvas.width=size;canvas.height=size;
+  canvas.style.cssText='border-radius:12px;background:#fff;padding:16px;box-shadow:0 8px 32px rgba(0,0,0,.4)';
+  const ctx=canvas.getContext('2d');
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,size,size);
+  for(let r=0;r<moduleCount;r++){
+    for(let c=0;c<moduleCount;c++){
+      if(qr.isDark(r,c)){ctx.fillStyle='#000';ctx.fillRect(c*cellSize,r*cellSize,cellSize,cellSize);}
+    }
+  }
+  ov.appendChild(canvas);
+  // Hinweistext
+  const hint=document.createElement('div');
+  hint.style.cssText='color:#fff;font-size:.85rem;margin-top:16px;text-align:center;max-width:280px;line-height:1.4';
+  hint.textContent='Mit der Kamera eines anderen Geräts scannen, um die App dort zu öffnen.';
+  ov.appendChild(hint);
+  const sub=document.createElement('div');
+  sub.style.cssText='color:rgba(255,255,255,.5);font-size:.7rem;margin-top:8px';
+  sub.textContent='Tippen zum Schließen';
+  ov.appendChild(sub);
+  ov.onclick=()=>ov.remove();
+  document.body.appendChild(ov);
 }
 function closeProfilModal() {
   document.getElementById('profilModalOv').classList.remove('open');
@@ -5752,6 +5794,14 @@ async function sendeZuweisungAnfrage(gebietId) {
 }
 
 // ── HELPER: Aktueller Verteiler-Name (live aus allUsers) ──
+function getGebietHierarchie(g){
+  const rId=g.region_id||Object.entries(regionen).find(([,r])=>r.gebiete.some(x=>x.id===g.id))?.[0];
+  const reg=rId?regionen[rId]:null;
+  const gv=reg?.gebietsverband_id?gebietsverbaende[reg.gebietsverband_id]:null;
+  const lk=gv?.landkreis_id?landkreise[gv.landkreis_id]:null;
+  return [lk?.name,gv?.name,reg?.name].filter(Boolean).join(' › ');
+}
+
 function getVerteilerName(g) {
   if (!g.verteilerId) return '';
   const u = allUsers.find(u => u.id === g.verteilerId);
@@ -6231,6 +6281,8 @@ async function exportGebietPDF(gebietId){
   const usableW=pageW-margin*2, usableH=pageH-margin*2;
   pdf.setFontSize(12);pdf.setFont(undefined,'bold');
   pdf.text(g.name,margin,margin+4);
+  const _hier1=getGebietHierarchie(g);
+  if(_hier1){pdf.setFontSize(7);pdf.setFont(undefined,'normal');pdf.setTextColor(120);pdf.text(_hier1,margin,margin+7.5);pdf.setTextColor(0);}
   pdf.setFontSize(8);pdf.setFont(undefined,'normal');
   const verteilerInfo=g.verteilerId?(getVerteilerName(g)||'Zugewiesen'):'Nicht zugewiesen';
   const _pdfUser=g.verteilerId?allUsers.find(u=>u.id===g.verteilerId):null;
@@ -6238,8 +6290,8 @@ async function exportGebietPDF(gebietId){
   let metaText=`Datum: ${new Date().toLocaleDateString('de-DE')} · Stückzahl: ${g.stueckzahl||0} · Verteiler: ${verteilerInfo}`;
   if(_pdfUe) metaText+=` · Übergabe: ${_pdfUe}`;
   if(g.hinweise?.length) metaText+=` · Hinweise: ${g.hinweise.map(h=>h.text||h).join(', ')}`;
-  pdf.text(metaText,margin,margin+8,{maxWidth:usableW});
-  const imgY=margin+12;
+  pdf.text(metaText,margin,_hier1?margin+11:margin+8,{maxWidth:usableW});
+  const imgY=_hier1?margin+15:margin+12;
   const availH=usableH-10;
   let imgW=usableW, imgH=usableW/imgRatio;
   if(imgH>availH){imgH=availH;imgW=availH*imgRatio;}
@@ -6272,18 +6324,20 @@ async function bulkPrintGebiete(){
       const pageW=orient==='landscape'?297:210, pageH=orient==='landscape'?210:297;
       const margin=4;
       const usableW=pageW-margin*2, usableH=pageH-margin*2;
-      // Titel + Meta
+      // Titel + Hierarchie + Meta
       pdf.setFontSize(12);pdf.setFont(undefined,'bold');
       pdf.text(g.name,margin,margin+4);
+      const _bHier=getGebietHierarchie(g);
+      if(_bHier){pdf.setFontSize(7);pdf.setFont(undefined,'normal');pdf.setTextColor(120);pdf.text(_bHier,margin,margin+7.5);pdf.setTextColor(0);}
       pdf.setFontSize(8);pdf.setFont(undefined,'normal');
       const verteilerInfo=g.verteilerId?(getVerteilerName(g)||'Zugewiesen'):'Nicht zugewiesen';
       const _bUser=g.verteilerId?allUsers.find(u=>u.id===g.verteilerId):null;
       const _bUe=_bUser?(_bUser._kampUebergabe||_bUser.uebergabe_info||''):'';
       let metaText=`Datum: ${new Date().toLocaleDateString('de-DE')} · Stückzahl: ${g.stueckzahl||0} · Verteiler: ${verteilerInfo}`;
       if(_bUe) metaText+=` · Übergabe: ${_bUe}`;
-      pdf.text(metaText,margin,margin+8,{maxWidth:usableW});
+      pdf.text(metaText,margin,_bHier?margin+11:margin+8,{maxWidth:usableW});
       // Karte
-      const imgY=margin+12;
+      const imgY=_bHier?margin+15:margin+12;
       const availH=usableH-10;
       let imgW=usableW, imgH=usableW/imgRatio;
       if(imgH>availH){imgH=availH;imgW=availH*imgRatio;}
@@ -6761,11 +6815,13 @@ async function startBulkPdfExport(){
       const usableW=pageW-margin*2, usableH=pageH-margin*2;
       pdf.setFontSize(12);pdf.setFont(undefined,'bold');
       pdf.text(g.name,margin,margin+4);
+      const _s3H=getGebietHierarchie(g);
+      if(_s3H){pdf.setFontSize(7);pdf.setFont(undefined,'normal');pdf.setTextColor(120);pdf.text(_s3H,margin,margin+7.5);pdf.setTextColor(0);}
       pdf.setFontSize(8);pdf.setFont(undefined,'normal');
       const verteilerInfo=g.verteilerId?(getVerteilerName(g)||'Zugewiesen'):'Nicht zugewiesen';
       const metaText=`Datum: ${new Date().toLocaleDateString('de-DE')} · Stückzahl: ${g.stueckzahl||0} · Verteiler: ${verteilerInfo}`;
-      pdf.text(metaText,margin,margin+8);
-      const imgY=margin+10;
+      pdf.text(metaText,margin,_s3H?margin+11:margin+8);
+      const imgY=_s3H?margin+13:margin+10;
       const availH=usableH-10;
       let imgW=usableW, imgH=usableW/imgRatio;
       if(imgH>availH){imgH=availH;imgW=availH*imgRatio;}
@@ -7228,11 +7284,13 @@ async function msBulkPdf(){
       const usableW=pageW-margin*2, usableH=pageH-margin*2;
       pdf.setFontSize(12);pdf.setFont(undefined,'bold');
       pdf.text(g.name,margin,margin+4);
+      const _s4H=getGebietHierarchie(g);
+      if(_s4H){pdf.setFontSize(7);pdf.setFont(undefined,'normal');pdf.setTextColor(120);pdf.text(_s4H,margin,margin+7.5);pdf.setTextColor(0);}
       pdf.setFontSize(8);pdf.setFont(undefined,'normal');
       const verteilerInfo=g.verteilerId?(getVerteilerName(g)||'Zugewiesen'):'Nicht zugewiesen';
       const metaText=`Datum: ${new Date().toLocaleDateString('de-DE')} · Stückzahl: ${g.stueckzahl||0} · Verteiler: ${verteilerInfo}`;
-      pdf.text(metaText,margin,margin+8);
-      const imgY=margin+10;
+      pdf.text(metaText,margin,_s4H?margin+11:margin+8);
+      const imgY=_s4H?margin+13:margin+10;
       const availH=usableH-10;
       let imgW=usableW, imgH=usableW/imgRatio;
       if(imgH>availH){imgH=availH;imgW=availH*imgRatio;}
@@ -8245,12 +8303,14 @@ async function ksDownloadGebietPdf(gebietId){
     const usableW=pageW-margin*2, usableH=pageH-margin*2;
     pdf.setFontSize(12);pdf.setFont(undefined,'bold');
     pdf.text(g.name,margin,margin+4);
+    const _s5H=getGebietHierarchie(g);
+    if(_s5H){pdf.setFontSize(7);pdf.setFont(undefined,'normal');pdf.setTextColor(120);pdf.text(_s5H,margin,margin+7.5);pdf.setTextColor(0);}
     pdf.setFontSize(8);pdf.setFont(undefined,'normal');
     const verteilerInfo=g.verteilerId?(getVerteilerName(g)||'Zugewiesen'):'Nicht zugewiesen';
     let metaText=`Datum: ${new Date().toLocaleDateString('de-DE')} · Stückzahl: ${g.stueckzahl||0} · Verteiler: ${verteilerInfo}`;
     if(g.hinweise?.length) metaText+=` · Hinweise: ${g.hinweise.map(h=>h.text||h).join(', ')}`;
-    pdf.text(metaText,margin,margin+8,{maxWidth:usableW});
-    const imgY=margin+12;
+    pdf.text(metaText,margin,_s5H?margin+11:margin+8,{maxWidth:usableW});
+    const imgY=_s5H?margin+15:margin+12;
     const availH=usableH-10;
     let imgW=usableW, imgH=usableW/imgRatio;
     if(imgH>availH){imgH=availH;imgW=availH*imgRatio;}
