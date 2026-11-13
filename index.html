@@ -873,7 +873,7 @@ textarea{min-height:68px}
     </div>
     <div id="impContentHelp" style="display:none;font-size:.82rem;line-height:1.6;color:var(--text2)">
       <strong style="font-size:.92rem">📖 Video-Anleitungen</strong><br><br>
-      <a href="https://youtu.be/ugrlrauinUw" target="_blank" rel="noopener" style="display:block;padding:10px 12px;background:var(--surface2);border-radius:var(--r8);margin-bottom:8px;text-decoration:none;color:var(--text)">
+      <a href="https://youtu.be/65JUV3JhaLQ" target="_blank" rel="noopener" style="display:block;padding:10px 12px;background:var(--surface2);border-radius:var(--r8);margin-bottom:8px;text-decoration:none;color:var(--text)">
         <strong>🎬 Erste Schritte</strong><br>
         <span style="font-size:.75rem;color:var(--text3)">Login, Navigation & Grundbedienung — für alle Nutzer</span>
       </a>
@@ -4599,7 +4599,7 @@ async function sendInvite(channel) {
           <div style="font-size:.65rem;color:var(--text4);margin-top:2px">E-Mail: ${email}</div>`;
         } else {
           const subject = encodeURIComponent('Einladung zur FlyerOrg-App');
-          const body = encodeURIComponent(`Hallo ${name}!\nDu wurdest als ${rolleLabel} zur FlyerOrg-App eingeladen.\nBitte schau in deine E-Mails für den Login-Link.\n\nSo richtest du die App ein:\n1. Klicke auf den Link in der E-Mail\n2. Vergib ein eigenes Passwort\n3. Installiere die App auf deinem Handy (im Browser auf „Zum Startbildschirm hinzufügen")\n4. Aktiviere Push-Benachrichtigungen wenn du gefragt wirst\n\n📖 Video-Anleitungen:\n🎬 Erste Schritte: https://youtu.be/ugrlrauinUw\n📌 Plakatverteilung: https://youtu.be/J4KO-Y6pUf4\n\nDeine E-Mail: ${email}`);
+          const body = encodeURIComponent(`Hallo ${name}!\nDu wurdest als ${rolleLabel} zur FlyerOrg-App eingeladen.\nBitte schau in deine E-Mails für den Login-Link.\n\nSo richtest du die App ein:\n1. Klicke auf den Link in der E-Mail\n2. Vergib ein eigenes Passwort\n3. Installiere die App auf deinem Handy (im Browser auf „Zum Startbildschirm hinzufügen")\n4. Aktiviere Push-Benachrichtigungen wenn du gefragt wirst\n\n📖 Video-Anleitungen:\n🎬 Erste Schritte: https://youtu.be/65JUV3JhaLQ\n📌 Plakatverteilung: https://youtu.be/J4KO-Y6pUf4\n\nDeine E-Mail: ${email}`);
           statusEl.style.color = 'var(--orange)';
           statusEl.innerHTML = `⚠️ Automatischer Versand fehlgeschlagen: <span style="font-size:.65rem">${errMsg||'Unbekannter Fehler'}</span>
           <div style="margin-top:6px;display:flex;gap:6px">
@@ -4614,7 +4614,7 @@ async function sendInvite(channel) {
     }
 
     // ── Kanalspezifische Benachrichtigung ──
-    const videoLinks = `\n\n📖 Video-Anleitungen:\n🎬 Erste Schritte: https://youtu.be/ugrlrauinUw\n📌 Plakatverteilung: https://youtu.be/J4KO-Y6pUf4`;
+    const videoLinks = `\n\n📖 Video-Anleitungen:\n🎬 Erste Schritte: https://youtu.be/65JUV3JhaLQ\n📌 Plakatverteilung: https://youtu.be/J4KO-Y6pUf4`;
     const setupHinweise = `\n\nSo richtest du die App ein:\n1. Klicke auf den Link in der E-Mail\n2. Vergib ein eigenes Passwort\n3. Installiere die App auf deinem Handy (im Browser auf „Zum Startbildschirm hinzufügen")\n4. Aktiviere Push-Benachrichtigungen wenn du gefragt wirst${videoLinks}`;
     const hinweisText = magicLinkGesendet
       ? `Hallo ${name}!\nDu wurdest als ${rolleLabel} zur FlyerOrg-App eingeladen.\n\nEin Login-Link wurde an ${email} gesendet. Bitte schau in deine E-Mails (ggf. auch Spam-Ordner) und klicke auf den Link.${setupHinweise}`
