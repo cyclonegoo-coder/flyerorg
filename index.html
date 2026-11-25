@@ -884,7 +884,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v332 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v333 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -5862,7 +5862,7 @@ let plakatFilter='alle'; // alle, haengt, abgehaengt, zerstoert, ersetzt
 let selPlakatId=null;
 let tourActive=false, tourStops=[], tourIdx=0, tourRouteLine=null, tourStopMarkers=[];
 const scol={offen:{f:'#aeaeb2',s:'#8e8e93'},offen_zugewiesen:{f:'#cfd8dc',s:'#546e7a'},zugeteilt:{f:'#ff9500',s:'#c97800'},fertig:{f:'#42a5f5',s:'#1565c0'},problem:{f:'#ff3b30',s:'#c62828'}};
-function getGebietFarbe(g){if(drawMode||editingGebietId)return{f:'#e0e7ef',s:'#607d8b'};if(curMode==='plakate')return{f:'#d0d0d0',s:'#999'};if(!g.verteilerId)return scol.problem;return(g.status==='offen'&&g.verteilerId)?scol.offen_zugewiesen:(scol[g.status]||scol.offen);}
+function getGebietFarbe(g){if(drawMode||editingGebietId||mergeKeepId)return{f:'#e0e7ef',s:'#607d8b'};if(curMode==='plakate')return{f:'#d0d0d0',s:'#999'};if(!g.verteilerId)return scol.problem;return(g.status==='offen'&&g.verteilerId)?scol.offen_zugewiesen:(scol[g.status]||scol.offen);}
 
 // ── HELPER: Rollen-Prüfungen ──
 function istVerwalterOderKreisverwalter() { return curRole === 'verwalter' || curRole === 'kreisverwalter' || curRole === 'regionalverwalter'; }
@@ -6162,7 +6162,7 @@ function drawPolygons(skipZoom){
       if(!r||!r.polygon||r.polygon.length<3)return;
       const rl=L.polygon(r.polygon,{color:'#e65100',fillColor:'#ff9800',fillOpacity:.06,weight:2.5,dashArray:'8,5',interactive:true,bubblingMouseEvents:false}).addTo(map);
       rl.bindTooltip(r.name||'',{sticky:true,className:'grenzen-tooltip',direction:'center',permanent:false});
-      rl.on('click',()=>{if(drawMode||editingGebietId||splitGebietId||addAreaGebietId)return;switchReg(rk);});
+      rl.on('click',()=>{if(drawMode||editingGebietId||splitGebietId||addAreaGebietId||mergeKeepId)return;switchReg(rk);});
       rl.setStyle({cursor:'pointer'});
       regionLayers[rk]=rl;
     });
@@ -8446,56 +8446,91 @@ async function deleteGebiet(id){
 }
 
 // ── Gebiete zusammenführen ──
-async function mergeGebiete(keepId){
+let mergeKeepId=null;
+
+function mergeGebiete(keepId){
   const keepG=getG(keepId);
   if(!keepG){toast('⚠️ Gebiet nicht gefunden');return;}
   const rId=keepG.region_id;
   const reg=regionen[rId];
   if(!reg){toast('⚠️ Region nicht gefunden');return;}
-
-  // Andere Gebiete mit Polygon in gleicher Region
   const others=reg.gebiete.filter(g=>g.id!==keepId&&kmlP[g.id]&&kmlP[g.id].length>=3);
   if(others.length===0){toast('ℹ️ Keine anderen Gebiete mit Polygon in dieser Region');return;}
 
-  // Auswahl-Dialog bauen
-  const opts=others.map(g=>({label:`${g.name||g.id} (${g.stueckzahl||0} St.)`,value:g.id,style:'background:var(--blue);color:#fff'}));
-  const mergeId=await appChoice('🔗 Zusammenführen',`Welches Gebiet soll mit „${keepG.name}" verschmolzen werden?\n\nPolygone werden verbunden, Stückzahlen addiert.`,opts);
-  if(!mergeId) return;
-
-  const mergeG=getG(mergeId);
-  if(!mergeG||!kmlP[mergeId]||!kmlP[keepId]){toast('⚠️ Polygon nicht gefunden');return;}
-
-  // Polygone per Bridge-Merge verbinden
-  const merged=mergePolyBridge([kmlP[keepId].slice(),kmlP[mergeId].slice()]);
-  const newStueck=(keepG.stueckzahl||0)+(mergeG.stueckzahl||0);
-
-  // Beibehaltenes Gebiet updaten
-  try{
-    const{error}=await sb.from('gebiete').update({
-      kml_coords:JSON.stringify(merged),stueckzahl:newStueck,updated_at:new Date()
-    }).eq('id',keepId);
-    if(error){toast('⚠️ DB-Fehler: '+(error.message||error.code));return;}
-  }catch(e){toast('⚠️ Fehler beim Speichern');return;}
-
-  // Zusammengeführtes Gebiet löschen
-  try{
-    await sb.from('anfragen').delete().eq('gebiet_id',mergeId);
-    await sb.from('gebiet_status').delete().eq('gebiet_id',mergeId);
-    await sb.from('gebiete').delete().eq('id',mergeId);
-  }catch(e){console.warn('Delete merged gebiet:',e);}
-
-  // Lokal updaten
-  kmlP[keepId]=merged;
-  keepG.stueckzahl=newStueck;
-  const idx=reg.gebiete.findIndex(g=>g.id===mergeId);
-  if(idx>-1) reg.gebiete.splice(idx,1);
-  if(layers[mergeId]){map.removeLayer(layers[mergeId]);delete layers[mergeId];}
-  delete kmlP[mergeId];
-
   closeDetail();
-  renderBreadcrumb();renderList();renderStats();drawPolygons();
-  logAction('gebiet',`Gebiete zusammengeführt: ${keepG.name} + ${mergeG.name}`,keepId,keepG.name);
-  toast(`✅ „${mergeG.name}" in „${keepG.name}" zusammengeführt`);
+  mergeKeepId=keepId;
+  // Neutrale Färbung, Quell-Gebiet hervorheben
+  _drawRecolorPolygons();
+  if(layers[keepId]) layers[keepId].setStyle({color:'#1565c0',fillColor:'#90caf9',weight:3,dashArray:'6,4'});
+  // Andere Gebiete in der Region klickbar hervorheben
+  others.forEach(g=>{
+    if(layers[g.id]) layers[g.id].setStyle({fillColor:'#c8e6c9',color:'#388e3c',fillOpacity:.4,weight:2,cursor:'pointer'});
+  });
+  // Region-/LK-Layer nicht-interaktiv
+  Object.values(regionLayers).forEach(l=>{l.setStyle({interactive:false});if(l._path)l._path.style.pointerEvents='none';});
+  Object.values(lkLayers).forEach(l=>{if(l._path)l._path.style.pointerEvents='none';});
+
+  // Info-Leiste
+  const info=document.getElementById('drawInfo');
+  info.innerHTML=`<span style="font-size:.82rem">🔗 <strong>${keepG.name}</strong> – Klicke auf das Gebiet, das zusammengeführt werden soll |
+    <a href="#" onclick="mergeCancel();return false" style="color:var(--red)">❌ Abbrechen</a></span>`;
+  info.style.display='block';
+
+  // Klick auf Polygon abfangen
+  map.getContainer().style.cursor='pointer';
+  Object.entries(layers).forEach(([gId,l])=>{
+    if(gId===keepId) return;
+    l._mergeHandler=async function(){
+      if(!mergeKeepId) return;
+      const mergeId=gId;
+      const mergeG=getG(mergeId);
+      if(!mergeG||!kmlP[mergeId]||!kmlP[keepId]){toast('⚠️ Polygon nicht gefunden');mergeCancel();return;}
+
+      const ok=await appConfirm('🔗 Zusammenführen',
+        `„${mergeG.name}" (${mergeG.stueckzahl||0} St.) in „${keepG.name}" (${keepG.stueckzahl||0} St.) zusammenführen?\n\nPolygone werden verbunden, Stückzahlen addiert.`,
+        'Zusammenführen','Abbrechen');
+      if(!ok){mergeCancel();return;}
+
+      // Merge durchführen
+      const merged=mergePolyBridge([kmlP[keepId].slice(),kmlP[mergeId].slice()]);
+      const newStueck=(keepG.stueckzahl||0)+(mergeG.stueckzahl||0);
+      try{
+        const{error}=await sb.from('gebiete').update({
+          kml_coords:JSON.stringify(merged),stueckzahl:newStueck,updated_at:new Date()
+        }).eq('id',keepId);
+        if(error){toast('⚠️ DB-Fehler: '+(error.message||error.code));mergeCancel();return;}
+      }catch(e){toast('⚠️ Fehler beim Speichern');mergeCancel();return;}
+      try{
+        await sb.from('anfragen').delete().eq('gebiet_id',mergeId);
+        await sb.from('gebiet_status').delete().eq('gebiet_id',mergeId);
+        await sb.from('gebiete').delete().eq('id',mergeId);
+      }catch(e){console.warn('Delete merged gebiet:',e);}
+      kmlP[keepId]=merged;
+      keepG.stueckzahl=newStueck;
+      const idx=reg.gebiete.findIndex(g=>g.id===mergeId);
+      if(idx>-1) reg.gebiete.splice(idx,1);
+      delete kmlP[mergeId];
+
+      mergeCancel();
+      drawPolygons(true);
+      renderBreadcrumb();renderList();renderStats();
+      logAction('gebiet',`Gebiete zusammengeführt: ${keepG.name} + ${mergeG.name}`,keepId,keepG.name);
+      toast(`✅ „${mergeG.name}" in „${keepG.name}" zusammengeführt`);
+    };
+    l.on('click',l._mergeHandler);
+  });
+}
+
+function mergeCancel(){
+  mergeKeepId=null;
+  map.getContainer().style.cursor='';
+  document.getElementById('drawInfo').style.display='none';
+  document.getElementById('drawInfo').innerHTML='';
+  // Merge-Handler entfernen
+  Object.values(layers).forEach(l=>{
+    if(l._mergeHandler){l.off('click',l._mergeHandler);delete l._mergeHandler;}
+  });
+  drawPolygons(true);
 }
 
 // Gebiet aus Hierarchie-Baum löschen (Wrapper für deleteGebiet + Tree-Refresh)
@@ -10314,18 +10349,16 @@ async function estimateHouseholdsForPolygon(coords,statusCb){
   let minLat=Infinity,maxLat=-Infinity,minLng=Infinity,maxLng=-Infinity;
   coords.forEach(c=>{if(c[0]<minLat)minLat=c[0];if(c[0]>maxLat)maxLat=c[0];if(c[1]<minLng)minLng=c[1];if(c[1]>maxLng)maxLng=c[1];});
   const bbox=`${minLat},${minLng},${maxLat},${maxLng}`;
-  // Overpass: Wohngebäude in BBox zählen (alle Gebäude laden, nicht-Wohn wird in JS gefiltert)
-  const query=`[out:json][timeout:25];(way["building"](${bbox});relation["building"](${bbox}););out center;`;
+  // Overpass: Gebäude MIT Hausnummer + explizit als Wohngebäude getaggte (auch ohne Hausnummer)
+  const _resTypes='apartments|residential|house|detached|semidetached_house|terrace|farm|farmhouse|dormitory|bungalow|cabin|static_caravan';
+  const query=`[out:json][timeout:25];(way["building"]["addr:housenumber"](${bbox});relation["building"]["addr:housenumber"](${bbox});way["building"~"^(${_resTypes})$"](${bbox});relation["building"~"^(${_resTypes})$"](${bbox}););out center;`;
   const data=await overpassFetch(query,{statusCb});
-  // Nicht-Wohngebäude ausfiltern
-  const skipTypes=new Set(['garage','garages','shed','roof','industrial','commercial','retail','warehouse','church','chapel','cathedral','mosque','synagogue','temple','hospital','school','university','kindergarten','train_station','bridge','barn','greenhouse','ruins','construction','kiosk','hangar','bunker','transformer_tower','service','toilets','carport','parking']);
   let count=0, mfh=0, estimate=0;
   (data.elements||[]).forEach(el=>{
     const lat=el.center?el.center.lat:el.lat;
     const lng=el.center?el.center.lon:el.lon;
     if(!lat||!lng||!pointInPolygon(lat,lng,coords)) return;
     const bt=(el.tags?.building||'').toLowerCase();
-    if(skipTypes.has(bt)) return;
     count++;
     const isMfh=bt==='apartments'||bt==='dormitory';
     if(isMfh) mfh++;
@@ -10647,8 +10680,9 @@ async function suggestGebieteForRegion(regionId){
     searchPoly.forEach(c=>{if(c[0]<minLat)minLat=c[0];if(c[0]>maxLat)maxLat=c[0];if(c[1]<minLng)minLng=c[1];if(c[1]>maxLng)maxLng=c[1];});
     const bbox=`${minLat},${minLng},${maxLat},${maxLng}`;
     // 3 Abfragen: Gebäude (center), Wohngebiete (geom), Ortsnamen (body)
+    const _resTypes2='apartments|residential|house|detached|semidetached_house|terrace|farm|farmhouse|dormitory|bungalow|cabin|static_caravan';
     const query=`[out:json][timeout:60];`+
-      `(way["building"](${bbox});relation["building"](${bbox}););out center;`+
+      `(way["building"]["addr:housenumber"](${bbox});relation["building"]["addr:housenumber"](${bbox});way["building"~"^(${_resTypes2})$"](${bbox});relation["building"~"^(${_resTypes2})$"](${bbox}););out center;`+
       `(way["landuse"="residential"](${bbox});relation["landuse"="residential"](${bbox}););out geom;`+
       `(node["place"~"^(city|town|village|hamlet|isolated_dwelling|suburb|quarter|neighbourhood)$"](${bbox}););out body;`;
     const data=await overpassFetch(query,{statusCb:msg=>{
@@ -10656,7 +10690,6 @@ async function suggestGebieteForRegion(regionId){
     }});
 
     const bldgs=[],placeNodes=[],resAreas=[];
-    const _skipTypes2=new Set(['garage','garages','shed','roof','industrial','commercial','retail','warehouse','church','chapel','cathedral','mosque','synagogue','temple','hospital','school','university','kindergarten','train_station','bridge','barn','greenhouse','ruins','construction','kiosk','hangar','bunker','transformer_tower','service','toilets','carport','parking']);
     for(const el of (data.elements||[])){
       if(el.tags?.place){
         const pt=el.tags.place;
@@ -10673,7 +10706,6 @@ async function suggestGebieteForRegion(regionId){
         }
       } else {
         const bt=(el.tags?.building||'yes').toLowerCase();
-        if(_skipTypes2.has(bt)) continue; // Nicht-Wohngebäude filtern
         const lat=el.center?el.center.lat:el.lat, lng=el.center?el.center.lon:el.lon;
         if(lat&&lng) bldgs.push({lat,lng,type:bt,levels:parseInt(el.tags?.['building:levels'])||0});
       }
