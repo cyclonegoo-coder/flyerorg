@@ -319,6 +319,9 @@ textarea{min-height:68px}
 .leaflet-popup-tip{background:rgba(255,255,255,.96)!important}
 .popup-name{font-size:.88rem;font-weight:600;margin-bottom:3px}
 .popup-meta{font-size:.73rem;color:var(--text3)}
+.popup-tool{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:6px;background:var(--bg2);text-decoration:none;font-size:1rem;transition:background .15s}
+.popup-tool:hover{background:var(--border)}
+.popup-tool-danger:hover{background:#ffebee}
 
 /* ── TREE VIEW (Gebietsstruktur) ── */
 .htree-node{user-select:none}
@@ -881,7 +884,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v329 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v330 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -6159,7 +6162,7 @@ function drawPolygons(skipZoom){
       if(!r||!r.polygon||r.polygon.length<3)return;
       const rl=L.polygon(r.polygon,{color:'#e65100',fillColor:'#ff9800',fillOpacity:.06,weight:2.5,dashArray:'8,5',interactive:true,bubblingMouseEvents:false}).addTo(map);
       rl.bindTooltip(r.name||'',{sticky:true,className:'grenzen-tooltip',direction:'center',permanent:false});
-      rl.on('click',()=>{switchReg(rk);});
+      rl.on('click',()=>{if(drawMode||editingGebietId||splitGebietId||addAreaGebietId)return;switchReg(rk);});
       rl.setStyle({cursor:'pointer'});
       regionLayers[rk]=rl;
     });
@@ -6176,9 +6179,22 @@ function drawPolygons(skipZoom){
     const col=getGebietFarbe(g);
     const hideGeb=curMode==='plakate'&&!_gebieteVisible;
     const poly=L.polygon(c,{color:col.s,fillColor:col.f,fillOpacity:hideGeb?0:.35,opacity:hideGeb?0:1,weight:2}).addTo(map);
-    const _canRename=curRole==='admin'||istVerwalterOderKreisverwalter();
-    const _canSplit=_canRename&&kmlP[g.id];
-    poly.bindPopup(`<div class="popup-name">${g.name}${_canRename?` <a href="#" onclick="popupRenameGebiet('${g.id}');return false" style="font-size:.7em;text-decoration:none;vertical-align:middle" title="Umbenennen">✏️</a>`:''}${_canSplit?` <a href="#" onclick="map.closePopup();startSplitGebiet('${g.id}');return false" style="font-size:.7em;text-decoration:none;vertical-align:middle" title="Teilen">✂️</a>`:''}</div><div class="popup-meta">📦 ${g.stueckzahl} · ${sl(g.status)}</div>`);
+    const _canEdit=curRole==='admin'||(istVerwalterOderKreisverwalter()&&verwalterHatGebietZugriff(g.id))||(curRole==='verteiler'&&currentProfile?.kann_polygon_bearbeiten);
+    const _canAdmin=curRole==='admin'||(istVerwalterOderKreisverwalter()&&verwalterHatGebietZugriff(g.id));
+    const _hasP=!!kmlP[g.id];
+    let _popH=`<div class="popup-name">${g.name}${_canAdmin?` <a href="#" onclick="popupRenameGebiet('${g.id}');return false" style="font-size:.7em;text-decoration:none;vertical-align:middle" title="Umbenennen">✏️</a>`:''}</div>`;
+    _popH+=`<div class="popup-meta">📦 ${g.stueckzahl} · ${sl(g.status)}</div>`;
+    if(_canEdit||_canAdmin){
+      _popH+=`<div style="display:flex;gap:2px;margin-top:6px;justify-content:center;flex-wrap:wrap">`;
+      if(_hasP&&_canEdit) _popH+=`<a href="#" onclick="map.closePopup();editPolygon('${g.id}');return false" class="popup-tool" title="Polygon bearbeiten">📐</a>`;
+      if(_canAdmin) _popH+=`<a href="#" onclick="map.closePopup();redrawGebiet('${g.id}');return false" class="popup-tool" title="Polygon neu zeichnen">🔄</a>`;
+      if(_hasP&&_canAdmin) _popH+=`<a href="#" onclick="map.closePopup();addAreaToGebiet('${g.id}');return false" class="popup-tool" title="Fläche hinzufügen">➕</a>`;
+      if(_hasP&&_canAdmin) _popH+=`<a href="#" onclick="map.closePopup();startSplitGebiet('${g.id}');return false" class="popup-tool" title="Teilen">✂️</a>`;
+      if(_hasP&&_canAdmin) _popH+=`<a href="#" onclick="map.closePopup();mergeGebiete('${g.id}');return false" class="popup-tool" title="Zusammenführen">🔗</a>`;
+      if(_canAdmin) _popH+=`<a href="#" onclick="map.closePopup();deleteGebiet('${g.id}');return false" class="popup-tool popup-tool-danger" title="Löschen">🗑️</a>`;
+      _popH+=`</div>`;
+    }
+    poly.bindPopup(_popH);
     let _msPolyTimer=null,_msJustStarted=false,_msDownPos=null;
     poly.on('mousedown',(e)=>{
       if(msActive)return;
@@ -7580,14 +7596,9 @@ function openDetail(id){
       </div>`;
     }
 
-    // ===== MOBILE: Quick-Actions (immer sichtbar am Ende) =====
+    // ===== MOBILE: Quick-Actions (PDF) — Geo-Tools sind im Map-Popup =====
     h+=`<div class="d-sec" style="padding:6px 12px"><div style="display:flex;gap:6px;justify-content:center">`;
     h+=`<button class="mob-action-btn" onclick="exportGebietPDF('${g.id}')" title="PDF exportieren">📄</button>`;
-    const canEditPoly=curRole==='admin'||(istVerwalterOderKreisverwalter()&&verwalterHatGebietZugriff(g.id))||(curRole==='verteiler'&&currentProfile?.kann_polygon_bearbeiten);
-    if(hasGeo&&kmlP[g.id]&&canEditPoly) h+=`<button class="mob-action-btn" onclick="editPolygon('${g.id}')" title="Polygon bearbeiten">✏️</button>`;
-    if(hasGeo&&kmlP[g.id]&&canEditPoly) h+=`<button class="mob-action-btn" onclick="startSplitGebiet('${g.id}')" title="Gebiet teilen">✂️</button>`;
-    const canDelete=curRole==='admin'||(istVerwalterOderKreisverwalter()&&verwalterHatGebietZugriff(g.id));
-    if(hasGeo&&canDelete) h+=`<button class="mob-action-btn" onclick="deleteGebiet('${g.id}')" title="Gebiet löschen" style="color:var(--red)">🗑</button>`;
     h+=`</div></div>`;
 
   } else {
@@ -7701,29 +7712,7 @@ function openDetail(id){
       });
       h+=`</div></div>`;
     }
-    if(curRole==='admin'||(curRole==='kreisverwalter'&&verwalterHatGebietZugriff(id))){
-      h+=`<div class="d-sec"><div class="sec-hd">Admin – Geodaten</div><div class="f-stack">
-        ${kmlP[g.id]?`<button class="btn btn-g" onclick="editPolygon('${g.id}')">✏️ Polygon bearbeiten</button>`:''}
-        ${kmlP[g.id]?`<button class="btn btn-g" onclick="startSplitGebiet('${g.id}')">✂️ Gebiet teilen</button>`:''}
-        ${kmlP[g.id]?`<button class="btn btn-g" onclick="addAreaToGebiet('${g.id}')">➕ Fläche hinzufügen</button>`:''}
-        ${kmlP[g.id]?`<button class="btn btn-g" onclick="mergeGebiete('${g.id}')">🔗 Zusammenführen</button>`:''}
-        <button class="btn btn-g" onclick="redrawGebiet('${g.id}')">🔄 Polygon neu zeichnen</button>
-        <button class="btn btn-d" onclick="deleteGebiet('${g.id}')">Gebiet löschen</button>
-      </div></div>`;
-    } else if(istVerwalterOderKreisverwalter()&&verwalterHatGebietZugriff(id)){
-      h+=`<div class="d-sec"><div class="sec-hd">Geodaten</div><div class="f-stack">
-        ${kmlP[g.id]?`<button class="btn btn-g" onclick="editPolygon('${g.id}')">✏️ Polygon bearbeiten</button>`:''}
-        ${kmlP[g.id]?`<button class="btn btn-g" onclick="startSplitGebiet('${g.id}')">✂️ Gebiet teilen</button>`:''}
-        ${kmlP[g.id]?`<button class="btn btn-g" onclick="addAreaToGebiet('${g.id}')">➕ Fläche hinzufügen</button>`:''}
-        ${kmlP[g.id]?`<button class="btn btn-g" onclick="mergeGebiete('${g.id}')">🔗 Zusammenführen</button>`:''}
-        <button class="btn btn-g" onclick="redrawGebiet('${g.id}')">🔄 Polygon neu zeichnen</button>
-        <button class="btn btn-d" onclick="deleteGebiet('${g.id}')">Gebiet löschen</button>
-      </div></div>`;
-    } else if(curRole==='verteiler'&&currentProfile?.kann_polygon_bearbeiten&&kmlP[g.id]){
-      h+=`<div class="d-sec"><div class="sec-hd">Geodaten</div><div class="f-stack">
-        <button class="btn btn-g" onclick="editPolygon('${g.id}')">✏️ Polygon bearbeiten</button>
-      </div></div>`;
-    }
+    // Geo-Tools sind jetzt im Map-Popup (📐🔄➕✂️🔗🗑️)
     if(kmlP[g.id]&&kmlP[g.id].length>=3){
       const vmIsOwnerD=g.verteilerId===currentUser?.id;
       const vmLabelD=vmIsOwnerD?'🚶 Verteilen starten':'🚶 Mit verteilen';
@@ -9724,6 +9713,9 @@ function toggleDraw(){
   map.getContainer().style.cursor='crosshair';
   map.on('click',onDrawClick);
   map.on('mousemove',onDrawMouseMove);
+  // Region-/LK-Polygone nicht-interaktiv machen (sonst fangen sie Klicks ab)
+  Object.values(regionLayers).forEach(l=>{l.setStyle({interactive:false});if(l._path)l._path.style.pointerEvents='none';});
+  Object.values(lkLayers).forEach(l=>{if(l._path)l._path.style.pointerEvents='none';});
   // Polygone neutral einfärben im Bearbeitungsmodus
   _drawRecolorPolygons();
 }
@@ -10447,6 +10439,9 @@ function addAreaToGebiet(id){
   map.getContainer().style.cursor='crosshair';
   map.on('click',onDrawClick);
   map.on('mousemove',onDrawMouseMove);
+  // Region-/LK-Polygone nicht-interaktiv machen
+  Object.values(regionLayers).forEach(l=>{l.setStyle({interactive:false});if(l._path)l._path.style.pointerEvents='none';});
+  Object.values(lkLayers).forEach(l=>{if(l._path)l._path.style.pointerEvents='none';});
   _drawRecolorPolygons();
   // Zoom to existing polygon
   if(layers[id]) map.fitBounds(layers[id].getBounds().pad(0.5));
