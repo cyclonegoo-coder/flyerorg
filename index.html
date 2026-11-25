@@ -884,7 +884,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v330 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v331 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -6190,6 +6190,7 @@ function drawPolygons(skipZoom){
       if(_canAdmin) _popH+=`<a href="#" onclick="map.closePopup();redrawGebiet('${g.id}');return false" class="popup-tool" title="Polygon neu zeichnen">🔄</a>`;
       if(_hasP&&_canAdmin) _popH+=`<a href="#" onclick="map.closePopup();addAreaToGebiet('${g.id}');return false" class="popup-tool" title="Fläche hinzufügen">➕</a>`;
       if(_hasP&&_canAdmin) _popH+=`<a href="#" onclick="map.closePopup();startSplitGebiet('${g.id}');return false" class="popup-tool" title="Teilen">✂️</a>`;
+      if(_hasP&&_canAdmin&&hasBridge(g.id)) _popH+=`<a href="#" onclick="map.closePopup();unbridgeGebiet('${g.id}');return false" class="popup-tool" title="Brücke trennen">↔️</a>`;
       if(_hasP&&_canAdmin) _popH+=`<a href="#" onclick="map.closePopup();mergeGebiete('${g.id}');return false" class="popup-tool" title="Zusammenführen">🔗</a>`;
       if(_canAdmin) _popH+=`<a href="#" onclick="map.closePopup();deleteGebiet('${g.id}');return false" class="popup-tool popup-tool-danger" title="Löschen">🗑️</a>`;
       _popH+=`</div>`;
@@ -10422,6 +10423,86 @@ function mergePolyBridge(polys){
     result.splice(rIdx+1,0,...rotated,result[rIdx]);
   }
   return result;
+}
+
+// ── Brücken-Erkennung & Trennen ──
+function _findBridge(coords){
+  // Brücke erzeugt Muster: ...coords[i]=A, coords[i+1]=B, [sub-poly], B, A,...
+  // Suche Paare wo coords[i]≈coords[j] UND coords[i+1]≈coords[j-1]
+  const n=coords.length,eps=1e-7;
+  for(let i=0;i<n-3;i++){
+    for(let j=i+3;j<n;j++){
+      const d1=Math.abs(coords[i][0]-coords[j][0])+Math.abs(coords[i][1]-coords[j][1]);
+      if(d1>=eps) continue;
+      const d2=Math.abs(coords[i+1][0]-coords[j-1][0])+Math.abs(coords[i+1][1]-coords[j-1][1]);
+      if(d2<eps) return {i,j};
+    }
+  }
+  return null;
+}
+
+function hasBridge(id){
+  const c=kmlP[id];
+  return c&&c.length>=6&&!!_findBridge(c);
+}
+
+async function unbridgeGebiet(id){
+  const coords=kmlP[id];
+  if(!coords) return;
+  const br=_findBridge(coords);
+  if(!br){toast('⚠️ Keine Brücke erkannt');return;}
+  const {i,j}=br;
+  // Haupt-Polygon: coords[0..i] + coords[j+1..end]
+  const mainPoly=[...coords.slice(0,i+1),...coords.slice(j+1)];
+  // Sub-Polygon: coords[i+1..j-2] (ohne schließendes Duplikat)
+  const subPoly=coords.slice(i+1,j-1);
+  if(mainPoly.length<3||subPoly.length<3){toast('⚠️ Teile zu klein');return;}
+
+  // Flächen & proportionale Stückzahl
+  const areaMain=Math.abs(_polyArea(mainPoly));
+  const areaSub=Math.abs(_polyArea(subPoly));
+  const totalArea=areaMain+areaSub;
+  const g=getG(id);
+  const totalStueck=g?g.stueckzahl:0;
+  const stueckMain=Math.round(totalStueck*(areaMain/totalArea));
+  const stueckSub=totalStueck-stueckMain;
+
+  const ok=await appConfirm('↔️ Gebiet trennen',
+    `„${g?g.name:'Gebiet'}" wird an der Brücke in 2 separate Gebiete getrennt:\n\nTeil 1: ~${stueckMain} Flyer (${Math.round(areaMain/totalArea*100)}%)\nTeil 2: ~${stueckSub} Flyer (${Math.round(areaSub/totalArea*100)}%)\n\nFortfahren?`,
+    'Trennen','Abbrechen');
+  if(!ok) return;
+
+  try{
+    // Original-Gebiet → Haupt-Polygon
+    const {error:e1}=await sb.from('gebiete').update({
+      kml_coords:JSON.stringify(mainPoly),stueckzahl:stueckMain,updated_at:new Date()
+    }).eq('id',id);
+    if(e1){toast('⚠️ '+e1.message);return;}
+
+    // Neues Gebiet → Sub-Polygon
+    let origRegion=null;
+    for(const [rk,r] of Object.entries(regionen)){
+      if(r.gebiete.some(x=>x.id===id)){origRegion=rk;break;}
+    }
+    const newName=(g?g.name:'Gebiet')+' (2)';
+    const newId=crypto.randomUUID();
+    const {error:e2}=await sb.from('gebiete').insert({
+      id:newId,name:newName,region_id:origRegion,stueckzahl:stueckSub,kml_coords:JSON.stringify(subPoly)
+    });
+    if(e2){toast('⚠️ Neues Gebiet: '+e2.message);return;}
+
+    // Lokal aktualisieren
+    kmlP[id]=mainPoly;
+    if(origRegion&&regionen[origRegion]){
+      const origG=regionen[origRegion].gebiete.find(x=>x.id===id);
+      if(origG) origG.stueckzahl=stueckMain;
+      regionen[origRegion].gebiete.push({id:newId,name:newName,stueckzahl:stueckSub,status:'offen',verteilerId:null,verteiler:null,region_id:origRegion});
+      kmlP[newId]=subPoly;
+    }
+    drawPolygons(true);
+    logAction('polygon','Gebiet an Brücke getrennt',id,g?.name||'');
+    toast('✅ Gebiet erfolgreich getrennt');
+  }catch(e){toast('⚠️ Fehler: '+e.message);}
 }
 
 // ── Fläche zu bestehendem Gebiet hinzufügen ──
