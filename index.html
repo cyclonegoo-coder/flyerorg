@@ -431,6 +431,27 @@ textarea{min-height:68px}
   .gp-header{font-size:14pt;font-weight:700;border-bottom:2px solid #000;padding-bottom:4px;margin-bottom:8px}
   .gp-meta{font-size:9pt;color:#555;line-height:1.5}
 }
+/* ── App-Tour (geführte Anleitung) ── */
+.tour-overlay{position:fixed;inset:0;z-index:9500;pointer-events:none}
+.tour-backdrop{position:fixed;inset:0;z-index:9499;background:rgba(0,0,0,.55);transition:opacity .25s}
+.tour-highlight{position:absolute;z-index:9501;border-radius:8px;box-shadow:0 0 0 4px rgba(0,158,224,.6),0 0 0 9999px rgba(0,0,0,.55);pointer-events:none;transition:all .3s ease}
+.tour-tooltip{position:fixed;z-index:9502;background:#fff;border-radius:14px;padding:16px 18px;max-width:320px;width:calc(100vw - 40px);box-shadow:0 8px 32px rgba(0,0,0,.25);pointer-events:auto;animation:tourFadeIn .25s ease}
+.tour-tooltip::after{content:'';position:absolute;width:12px;height:12px;background:#fff;transform:rotate(45deg)}
+.tour-tooltip.arrow-top::after{top:-6px;left:24px}
+.tour-tooltip.arrow-bottom::after{bottom:-6px;left:24px}
+.tour-tooltip.arrow-left::after{left:-6px;top:20px}
+.tour-tooltip.arrow-right::after{right:-6px;top:20px}
+.tour-title{font-size:.88rem;font-weight:700;color:#1c1c1e;margin-bottom:6px}
+.tour-text{font-size:.78rem;line-height:1.5;color:#555}
+.tour-footer{display:flex;align-items:center;justify-content:space-between;margin-top:12px}
+.tour-step-info{font-size:.68rem;color:#aaa}
+.tour-btns{display:flex;gap:6px}
+.tour-btn{padding:7px 14px;border:none;border-radius:8px;font-size:.75rem;font-weight:600;cursor:pointer;transition:background .15s}
+.tour-btn-skip{background:#f2f2f7;color:#666}
+.tour-btn-next{background:#009ee0;color:#fff}
+.tour-btn-next:active{background:#0082bc}
+.tour-btn-done{background:#34c759;color:#fff}
+@keyframes tourFadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 </style>
 </head>
 <body>
@@ -860,7 +881,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v322 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v324 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -872,6 +893,7 @@ textarea{min-height:68px}
       <button id="impTabDs" onclick="showImpTab('ds')" style="flex:1;padding:6px 0;font-size:.75rem;font-weight:600;border:none;border-radius:var(--r8);cursor:pointer;background:var(--surface2);color:var(--text3)">Datenschutz</button>
     </div>
     <div id="impContentHelp" style="display:none;font-size:.82rem;line-height:1.6;color:var(--text2)">
+      <button onclick="document.getElementById('impressumModalOv').classList.remove('open');setTimeout(()=>startAppTour('erste_schritte'),400)" style="display:block;width:100%;padding:12px;margin-bottom:14px;border:2px solid var(--blue);border-radius:var(--r8);background:rgba(0,158,224,.08);color:var(--blue);font-size:.82rem;font-weight:700;cursor:pointer;text-align:center">🎓 Interaktive Tour: Erste Schritte</button>
       <strong style="font-size:.92rem">📖 Video-Anleitungen</strong><br><br>
       <a href="https://youtu.be/65JUV3JhaLQ" target="_blank" rel="noopener" style="display:block;padding:10px 12px;background:var(--surface2);border-radius:var(--r8);margin-bottom:8px;text-decoration:none;color:var(--text)">
         <strong>🎬 Erste Schritte</strong><br>
@@ -5075,6 +5097,8 @@ async function showApp() {
   updateMissingVerteilerBadge();
   // Push-Subscription synchronisieren (falls bereits erlaubt)
   syncPushSubscription();
+  // Interaktive Tour anbieten (beim ersten Login)
+  _tourMaybeOffer();
 }
 
 // Push-Subscription bei Login automatisch re-synken
@@ -5835,7 +5859,7 @@ let plakatFilter='alle'; // alle, haengt, abgehaengt, zerstoert, ersetzt
 let selPlakatId=null;
 let tourActive=false, tourStops=[], tourIdx=0, tourRouteLine=null, tourStopMarkers=[];
 const scol={offen:{f:'#aeaeb2',s:'#8e8e93'},offen_zugewiesen:{f:'#cfd8dc',s:'#546e7a'},zugeteilt:{f:'#ff9500',s:'#c97800'},fertig:{f:'#42a5f5',s:'#1565c0'},problem:{f:'#ff3b30',s:'#c62828'}};
-function getGebietFarbe(g){if(curMode==='plakate')return{f:'#d0d0d0',s:'#999'};if(!g.verteilerId)return scol.problem;return(g.status==='offen'&&g.verteilerId)?scol.offen_zugewiesen:(scol[g.status]||scol.offen);}
+function getGebietFarbe(g){if(drawMode)return{f:'#e0e7ef',s:'#607d8b'};if(curMode==='plakate')return{f:'#d0d0d0',s:'#999'};if(!g.verteilerId)return scol.problem;return(g.status==='offen'&&g.verteilerId)?scol.offen_zugewiesen:(scol[g.status]||scol.offen);}
 
 // ── HELPER: Rollen-Prüfungen ──
 function istVerwalterOderKreisverwalter() { return curRole === 'verwalter' || curRole === 'kreisverwalter' || curRole === 'regionalverwalter'; }
@@ -9684,6 +9708,8 @@ function toggleDraw(){
   map.getContainer().style.cursor='crosshair';
   map.on('click',onDrawClick);
   map.on('mousemove',onDrawMouseMove);
+  // Polygone neutral einfärben im Bearbeitungsmodus
+  _drawRecolorPolygons();
 }
 
 function onDrawClick(e){
@@ -9802,6 +9828,8 @@ function drawCancel(){
   document.getElementById('drawCancelBtn').disabled=true;
   setDrawInfo('');
   document.getElementById('newGebietModalOv').classList.remove('open');
+  // Polygone wieder mit Status-Farben einfärben
+  _drawRecolorPolygons();
 }
 
 function redrawGebiet(id){
@@ -10168,6 +10196,7 @@ function addAreaToGebiet(id){
   map.getContainer().style.cursor='crosshair';
   map.on('click',onDrawClick);
   map.on('mousemove',onDrawMouseMove);
+  _drawRecolorPolygons();
   // Zoom to existing polygon
   if(layers[id]) map.fitBounds(layers[id].getBounds().pad(0.5));
   const rg=getG(id);
@@ -10225,6 +10254,15 @@ function addAreaCancel(){
   document.getElementById('drawFinishBtn').disabled=true;
   document.getElementById('drawCancelBtn').disabled=true;
   setDrawInfo('');
+  _drawRecolorPolygons();
+}
+
+// Polygone umfärben bei Draw-Modus-Wechsel (neutral ↔ Status-Farben)
+function _drawRecolorPolygons(){
+  Object.entries(layers).forEach(([gId,l])=>{
+    const g=getG(gId);
+    if(g){const c=getGebietFarbe(g);l.setStyle({fillColor:c.f,color:c.s});}
+  });
 }
 
 // ── Auto-Gebiete per OSM vorschlagen ──
@@ -10682,6 +10720,211 @@ function appPrompt(title, placeholder='', okText='OK', cancelText='Abbrechen', d
 }
 
 // ============================================================
+// ============================================================
+// APP-TOUR (interaktive Schritt-für-Schritt-Anleitung)
+// ============================================================
+const appTours = {
+  erste_schritte: {
+    name: 'Erste Schritte',
+    steps: [
+      {
+        title: 'Willkommen bei FlyerOrg! 👋',
+        text: 'Diese kurze Tour zeigt dir die wichtigsten Funktionen. Du lernst, wie du dein Gebiet findest, den Status meldest und die Karte nutzt.',
+        target: null // kein Element — zentrierter Tooltip
+      },
+      {
+        title: 'Kampagne auswählen',
+        text: 'Hier oben siehst du die aktuelle Kampagne. Falls mehrere Kampagnen laufen, kannst du hier zwischen ihnen wechseln.',
+        target: '#kampagneSelect',
+        mobileTarget: '#kampagneSelect'
+      },
+      {
+        title: 'Flyer oder Plakate?',
+        text: 'Mit diesen Buttons wechselst du zwischen Flyer- und Plakat-Modus. Je nach Kampagne ist einer der Modi aktiv.',
+        target: '#modeFlyer',
+        mobileTarget: '#modeFlyer'
+      },
+      {
+        title: 'Deine Gebiete',
+        text: 'In der Seitenleiste findest du die Liste aller Gebiete. Dein Gebiet ist farblich hervorgehoben. Tippe darauf, um es auszuwählen.',
+        target: '#gebietList',
+        mobileOnly: false,
+        desktopOnly: true
+      },
+      {
+        title: 'Navigation',
+        text: 'Über die Navigation kannst du nach Landkreis, Gebietsverband und Region filtern, um dein Gebiet schnell zu finden.',
+        target: '.mob-nav-bc',
+        mobileOnly: true
+      },
+      {
+        title: 'Die Karte',
+        text: 'Auf der Karte siehst du die Gebiete als farbige Flächen. Grün = verteilt, Orange = offen, Grau = noch nicht zugestellt. Tippe auf ein Gebiet, um es auszuwählen.',
+        target: '#map'
+      },
+      {
+        title: 'Statistiken',
+        text: 'Hier siehst du auf einen Blick, wie viele Flyer schon verteilt sind und wie viele noch offen sind.',
+        target: '.stats',
+        mobileTarget: '.mob-nav-stats',
+      },
+      {
+        title: 'Gebiet-Details',
+        text: 'Wenn du dein Gebiet antippst, siehst du die Details: Stückzahl, Status und die Möglichkeit, deinen Verteil-Status zu melden — „Offen", „Zugestellt" oder „Verteilt".',
+        target: null
+      },
+      {
+        title: 'Status melden',
+        text: 'Wenn du deine Flyer verteilt hast, setze den Status auf „Verteilt ✓". So wissen alle, dass dein Gebiet fertig ist.',
+        target: null
+      },
+      {
+        title: 'Geschafft! 🎉',
+        text: 'Das war\'s — du kennst jetzt die Grundlagen! Diese Tour findest du jederzeit unter Hilfe im Impressum.',
+        target: null
+      }
+    ]
+  }
+};
+
+let _tourActive = false, _tourSteps = [], _tourIdx = 0;
+
+function startAppTour(tourId) {
+  const tour = appTours[tourId];
+  if (!tour) return;
+  // Sicherstellen dass App sichtbar ist
+  if (document.getElementById('appBody')?.style.display === 'none') {
+    toast('⚠️ Bitte zuerst anmelden'); return;
+  }
+  const isMob = window.innerWidth <= 768;
+  // Schritte filtern nach Mobile/Desktop
+  _tourSteps = tour.steps.filter(s => {
+    if (s.mobileOnly && !isMob) return false;
+    if (s.desktopOnly && isMob) return false;
+    return true;
+  });
+  _tourIdx = 0;
+  _tourActive = true;
+  _tourRender();
+}
+
+function _tourRender() {
+  // Altes Overlay entfernen
+  document.getElementById('tourOverlay')?.remove();
+  if (!_tourActive || _tourIdx >= _tourSteps.length) { _tourCleanup(); return; }
+
+  const step = _tourSteps[_tourIdx];
+  const isMob = window.innerWidth <= 768;
+  const totalSteps = _tourSteps.length;
+
+  // Target-Element finden
+  const targetSel = isMob && step.mobileTarget ? step.mobileTarget : step.target;
+  const targetEl = targetSel ? document.querySelector(targetSel) : null;
+
+  // Overlay-Container
+  const overlay = document.createElement('div');
+  overlay.id = 'tourOverlay';
+
+  // Backdrop (klick = schließen)
+  const backdrop = document.createElement('div');
+  backdrop.className = 'tour-backdrop';
+  backdrop.onclick = () => _tourEnd();
+  overlay.appendChild(backdrop);
+
+  // Highlight-Rahmen um Ziel-Element
+  if (targetEl) {
+    targetEl.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+    // Kurz warten bis Scroll fertig
+    setTimeout(() => {
+      const rect = targetEl.getBoundingClientRect();
+      const pad = 6;
+      const hl = document.createElement('div');
+      hl.className = 'tour-highlight';
+      hl.style.cssText = `top:${rect.top - pad}px;left:${rect.left - pad}px;width:${rect.width + pad * 2}px;height:${rect.height + pad * 2}px`;
+      overlay.appendChild(hl);
+      _tourPositionTooltip(tooltip, rect, isMob);
+    }, 150);
+  }
+
+  // Tooltip
+  const tooltip = document.createElement('div');
+  tooltip.className = 'tour-tooltip';
+  tooltip.innerHTML = `
+    <div class="tour-title">${step.title}</div>
+    <div class="tour-text">${step.text}</div>
+    <div class="tour-footer">
+      <span class="tour-step-info">${_tourIdx + 1} / ${totalSteps}</span>
+      <div class="tour-btns">
+        <button class="tour-btn tour-btn-skip" onclick="_tourEnd()">Beenden</button>
+        ${_tourIdx < totalSteps - 1
+          ? `<button class="tour-btn tour-btn-next" onclick="_tourNext()">Weiter →</button>`
+          : `<button class="tour-btn tour-btn-done" onclick="_tourEnd()">Fertig ✓</button>`}
+      </div>
+    </div>`;
+  overlay.appendChild(tooltip);
+
+  document.body.appendChild(overlay);
+
+  // Tooltip positionieren
+  if (!targetEl) {
+    // Zentriert
+    tooltip.style.cssText = 'left:50%;top:50%;transform:translate(-50%,-50%)';
+  } else {
+    // Wird in setTimeout oben positioniert
+  }
+}
+
+function _tourPositionTooltip(tooltip, rect, isMob) {
+  const pad = 14;
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const tw = Math.min(320, vw - 40);
+
+  // Bevorzugt unterhalb, falls Platz
+  if (rect.bottom + pad + 180 < vh) {
+    tooltip.className = 'tour-tooltip arrow-top';
+    tooltip.style.cssText = `top:${rect.bottom + pad}px;left:${Math.max(20, Math.min(rect.left, vw - tw - 20))}px`;
+  } else if (rect.top - pad - 180 > 0) {
+    tooltip.className = 'tour-tooltip arrow-bottom';
+    tooltip.style.cssText = `top:${rect.top - pad - 180}px;left:${Math.max(20, Math.min(rect.left, vw - tw - 20))}px`;
+  } else {
+    // Zentriert als Fallback
+    tooltip.style.cssText = 'left:50%;top:50%;transform:translate(-50%,-50%)';
+  }
+}
+
+function _tourNext() {
+  _tourIdx++;
+  _tourRender();
+}
+
+function _tourEnd() {
+  _tourActive = false;
+  _tourCleanup();
+  try { localStorage.setItem('flyerorg_tour_done', 'erste_schritte'); } catch(e) {}
+}
+
+function _tourCleanup() {
+  document.getElementById('tourOverlay')?.remove();
+  _tourActive = false;
+}
+
+// Beim ersten Login automatisch Tour anbieten
+function _tourMaybeOffer() {
+  try {
+    if (localStorage.getItem('flyerorg_tour_done')) return;
+    // Nur Admins ausnehmen — Verteiler UND Verwalter bekommen die Tour angeboten
+    if (curRole === 'admin') return;
+  } catch(e) { return; }
+  setTimeout(() => {
+    if (!_tourActive && document.getElementById('appBody')?.style.display !== 'none') {
+      appConfirm('App-Tour', 'Möchtest du eine kurze interaktive Tour durch die App machen? Du lernst die wichtigsten Funktionen in 1 Minute.', '🎓 Tour starten', 'Später').then(ok => {
+        if (ok) startAppTour('erste_schritte');
+        else try { localStorage.setItem('flyerorg_tour_done', 'skipped'); } catch(e) {}
+      });
+    }
+  }, 2000);
+}
+
 // PWA INSTALL BANNER
 // ============================================================
 let pwaInstallEvent = null;
