@@ -884,7 +884,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v331 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v332 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -10376,27 +10376,38 @@ async function estimateForGebiet(gebietId){
 }
 
 // ── Overpass-Fetch mit Retry ──
-async function overpassFetch(query,{method='POST',maxRetries=3,statusCb}={}){
+const _overpassServers=[
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://z.overpass-api.de/api/interpreter'
+];
+let _overpassServerIdx=0;
+
+async function overpassFetch(query,{method='POST',maxRetries=6,statusCb}={}){
   for(let i=1;i<=maxRetries;i++){
+    const serverUrl=_overpassServers[_overpassServerIdx % _overpassServers.length];
     try{
-      if(i>1&&statusCb) statusCb(`🔄 Overpass Versuch ${i}/${maxRetries}…`);
+      if(i>1&&statusCb) statusCb(`🔄 Versuch ${i}/${maxRetries} (Server ${(_overpassServerIdx%_overpassServers.length)+1})…`);
       const resp=method==='GET'
-        ? await fetch('https://overpass-api.de/api/interpreter?data='+encodeURIComponent(query))
-        : await fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:'data='+encodeURIComponent(query)});
-      if(resp.status===429||resp.status===504||resp.status===503){
+        ? await fetch(serverUrl+'?data='+encodeURIComponent(query))
+        : await fetch(serverUrl,{method:'POST',body:'data='+encodeURIComponent(query)});
+      if(resp.status===429||resp.status===504||resp.status===503||resp.status===502){
+        _overpassServerIdx++; // Nächsten Server versuchen
         if(i===maxRetries) throw new Error('Overpass überlastet ('+resp.status+'). Bitte später nochmal versuchen.');
-        await new Promise(r=>setTimeout(r,i*3000));
+        const wait=Math.min(i*2000,10000);
+        if(statusCb) statusCb(`⏳ Server überlastet, warte ${Math.round(wait/1000)}s…`);
+        await new Promise(r=>setTimeout(r,wait));
         continue;
       }
       if(!resp.ok) throw new Error('Overpass-Fehler: '+resp.status);
       return await resp.json();
     }catch(e){
-      if(i===maxRetries) throw e;
-      if(e.name==='TypeError'){ // Netzwerkfehler
-        await new Promise(r=>setTimeout(r,i*3000));
-        continue;
-      }
-      throw e;
+      if(e.message?.includes('Overpass')) throw e; // Bereits formatierter Fehler
+      _overpassServerIdx++; // Bei Netzwerkfehler nächsten Server
+      if(i===maxRetries) throw new Error('Overpass nicht erreichbar nach '+maxRetries+' Versuchen. Bitte Internetverbindung prüfen.');
+      const wait=Math.min(i*2000,10000);
+      if(statusCb) statusCb(`⏳ Verbindungsfehler, wechsle Server…`);
+      await new Promise(r=>setTimeout(r,wait));
     }
   }
 }
@@ -10637,7 +10648,7 @@ async function suggestGebieteForRegion(regionId){
     const bbox=`${minLat},${minLng},${maxLat},${maxLng}`;
     // 3 Abfragen: Gebäude (center), Wohngebiete (geom), Ortsnamen (body)
     const query=`[out:json][timeout:60];`+
-      `(way["building"]["addr:housenumber"](${bbox});relation["building"]["addr:housenumber"](${bbox}););out center;`+
+      `(way["building"](${bbox});relation["building"](${bbox}););out center;`+
       `(way["landuse"="residential"](${bbox});relation["landuse"="residential"](${bbox}););out geom;`+
       `(node["place"~"^(city|town|village|hamlet|isolated_dwelling|suburb|quarter|neighbourhood)$"](${bbox}););out body;`;
     const data=await overpassFetch(query,{statusCb:msg=>{
@@ -10645,6 +10656,7 @@ async function suggestGebieteForRegion(regionId){
     }});
 
     const bldgs=[],placeNodes=[],resAreas=[];
+    const _skipTypes2=new Set(['garage','garages','shed','roof','industrial','commercial','retail','warehouse','church','chapel','cathedral','mosque','synagogue','temple','hospital','school','university','kindergarten','train_station','bridge','barn','greenhouse','ruins','construction','kiosk','hangar','bunker','transformer_tower','service','toilets','carport','parking']);
     for(const el of (data.elements||[])){
       if(el.tags?.place){
         const pt=el.tags.place;
@@ -10660,8 +10672,10 @@ async function suggestGebieteForRegion(regionId){
           if(pointInPolygon(cx2,cy2,searchPoly)) resAreas.push({name:el.tags.name||'',coords});
         }
       } else {
+        const bt=(el.tags?.building||'yes').toLowerCase();
+        if(_skipTypes2.has(bt)) continue; // Nicht-Wohngebäude filtern
         const lat=el.center?el.center.lat:el.lat, lng=el.center?el.center.lon:el.lon;
-        if(lat&&lng) bldgs.push({lat,lng,type:el.tags?.building||'yes',levels:parseInt(el.tags?.['building:levels'])||0});
+        if(lat&&lng) bldgs.push({lat,lng,type:bt,levels:parseInt(el.tags?.['building:levels'])||0});
       }
     }
     const regBldgs=bldgs.filter(b=>pointInPolygon(b.lat,b.lng,searchPoly));
