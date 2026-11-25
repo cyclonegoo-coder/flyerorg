@@ -881,7 +881,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v325 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v327 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -6176,7 +6176,9 @@ function drawPolygons(){
     const col=getGebietFarbe(g);
     const hideGeb=curMode==='plakate'&&!_gebieteVisible;
     const poly=L.polygon(c,{color:col.s,fillColor:col.f,fillOpacity:hideGeb?0:.35,opacity:hideGeb?0:1,weight:2}).addTo(map);
-    poly.bindPopup(`<div class="popup-name">${g.name}</div><div class="popup-meta">📦 ${g.stueckzahl} · ${sl(g.status)}</div>`);
+    const _canRename=curRole==='admin'||istVerwalterOderKreisverwalter();
+    const _canSplit=_canRename&&kmlP[g.id];
+    poly.bindPopup(`<div class="popup-name">${g.name}${_canRename?` <a href="#" onclick="popupRenameGebiet('${g.id}');return false" style="font-size:.7em;text-decoration:none;vertical-align:middle" title="Umbenennen">✏️</a>`:''}${_canSplit?` <a href="#" onclick="map.closePopup();startSplitGebiet('${g.id}');return false" style="font-size:.7em;text-decoration:none;vertical-align:middle" title="Teilen">✂️</a>`:''}</div><div class="popup-meta">📦 ${g.stueckzahl} · ${sl(g.status)}</div>`);
     let _msPolyTimer=null,_msJustStarted=false,_msDownPos=null;
     poly.on('mousedown',(e)=>{
       if(msActive)return;
@@ -7581,6 +7583,7 @@ function openDetail(id){
     h+=`<button class="mob-action-btn" onclick="exportGebietPDF('${g.id}')" title="PDF exportieren">📄</button>`;
     const canEditPoly=curRole==='admin'||(istVerwalterOderKreisverwalter()&&verwalterHatGebietZugriff(g.id))||(curRole==='verteiler'&&currentProfile?.kann_polygon_bearbeiten);
     if(hasGeo&&kmlP[g.id]&&canEditPoly) h+=`<button class="mob-action-btn" onclick="editPolygon('${g.id}')" title="Polygon bearbeiten">✏️</button>`;
+    if(hasGeo&&kmlP[g.id]&&canEditPoly) h+=`<button class="mob-action-btn" onclick="startSplitGebiet('${g.id}')" title="Gebiet teilen">✂️</button>`;
     const canDelete=curRole==='admin'||(istVerwalterOderKreisverwalter()&&verwalterHatGebietZugriff(g.id));
     if(hasGeo&&canDelete) h+=`<button class="mob-action-btn" onclick="deleteGebiet('${g.id}')" title="Gebiet löschen" style="color:var(--red)">🗑</button>`;
     h+=`</div></div>`;
@@ -7699,6 +7702,7 @@ function openDetail(id){
     if(curRole==='admin'||(curRole==='kreisverwalter'&&verwalterHatGebietZugriff(id))){
       h+=`<div class="d-sec"><div class="sec-hd">Admin – Geodaten</div><div class="f-stack">
         ${kmlP[g.id]?`<button class="btn btn-g" onclick="editPolygon('${g.id}')">✏️ Polygon bearbeiten</button>`:''}
+        ${kmlP[g.id]?`<button class="btn btn-g" onclick="startSplitGebiet('${g.id}')">✂️ Gebiet teilen</button>`:''}
         ${kmlP[g.id]?`<button class="btn btn-g" onclick="addAreaToGebiet('${g.id}')">➕ Fläche hinzufügen</button>`:''}
         ${kmlP[g.id]?`<button class="btn btn-g" onclick="mergeGebiete('${g.id}')">🔗 Zusammenführen</button>`:''}
         <button class="btn btn-g" onclick="redrawGebiet('${g.id}')">🔄 Polygon neu zeichnen</button>
@@ -7707,6 +7711,7 @@ function openDetail(id){
     } else if(istVerwalterOderKreisverwalter()&&verwalterHatGebietZugriff(id)){
       h+=`<div class="d-sec"><div class="sec-hd">Geodaten</div><div class="f-stack">
         ${kmlP[g.id]?`<button class="btn btn-g" onclick="editPolygon('${g.id}')">✏️ Polygon bearbeiten</button>`:''}
+        ${kmlP[g.id]?`<button class="btn btn-g" onclick="startSplitGebiet('${g.id}')">✂️ Gebiet teilen</button>`:''}
         ${kmlP[g.id]?`<button class="btn btn-g" onclick="addAreaToGebiet('${g.id}')">➕ Fläche hinzufügen</button>`:''}
         ${kmlP[g.id]?`<button class="btn btn-g" onclick="mergeGebiete('${g.id}')">🔗 Zusammenführen</button>`:''}
         <button class="btn btn-g" onclick="redrawGebiet('${g.id}')">🔄 Polygon neu zeichnen</button>
@@ -8877,6 +8882,15 @@ function hTreeRenameStart(row,table,id){
   }
   input.addEventListener('blur',finish);
   input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();input.blur();}if(e.key==='Escape'){input.value=oldName;input.blur();}});
+}
+
+async function popupRenameGebiet(id){
+  const g=getG(id);if(!g)return;
+  const input=await appPrompt('Gebiet umbenennen','Neuer Name eingeben','Umbenennen','Abbrechen',g.name);
+  if(!input||input===g.name)return;
+  await hTreeRenameGebiet(id,input);
+  // Popup aktualisieren
+  if(layers[id]){map.closePopup();drawPolygons();}
 }
 
 async function hTreeRenameGebiet(id,newName){
@@ -10066,24 +10080,257 @@ function cleanupEditMode(){
 }
 
 // ── Haushalt-Schätzung via Overpass (OSM) ──
+// ============================================================
+// GEBIET TEILEN (✂️ Split-Tool)
+// ============================================================
+let splitGebietId=null, splitPoints=[], splitMarkers=[], splitPolyline=null, splitPreviewLine=null;
+
+function startSplitGebiet(id){
+  if(!kmlP[id]||!layers[id]){toast('⚠️ Kein Polygon vorhanden');return;}
+  closeDetail();
+  splitGebietId=id;
+  splitPoints=[];splitMarkers=[];
+  // Neutrale Färbung
+  _drawRecolorPolygons();
+  // Zu teilendes Polygon hervorheben
+  layers[id].setStyle({color:'#e91e63',fillColor:'#f8bbd0',weight:3,dashArray:'6,4'});
+  // Region/LK-Layer ausblenden
+  Object.values(regionLayers).forEach(l=>map.removeLayer(l));
+  Object.values(lkLayers).forEach(l=>map.removeLayer(l));
+  map.fitBounds(layers[id].getBounds().pad(0.3));
+  map.getContainer().style.cursor='crosshair';
+  map.on('click',onSplitClick);
+  map.on('mousemove',onSplitMouseMove);
+  const _sg=getG(id);
+  const info=document.getElementById('drawInfo');
+  info.innerHTML=`<span style="font-size:.82rem">✂️ <strong>${_sg?_sg.name:id}</strong> teilen – Schnittlinie zeichnen (min. 2 Punkte) |
+    <a href="#" onclick="splitFinish();return false" style="color:var(--green)">✅ Schneiden</a> |
+    <a href="#" onclick="splitUndo();return false" style="color:var(--blue)">↩️ Rückgängig</a> |
+    <a href="#" onclick="splitCancel();return false" style="color:var(--red)">❌ Abbrechen</a></span>`;
+  info.style.display='block';
+}
+
+function onSplitClick(e){
+  if(!splitGebietId)return;
+  const ll=e.latlng;
+  splitPoints.push([ll.lat,ll.lng]);
+  const m=L.circleMarker(ll,{radius:6,color:'#e91e63',fillColor:'#fff',fillOpacity:1,weight:2}).addTo(map);
+  splitMarkers.push(m);
+  if(splitPolyline)map.removeLayer(splitPolyline);
+  splitPolyline=L.polyline(splitPoints,{color:'#e91e63',weight:3,dashArray:'6,4'}).addTo(map);
+}
+
+function onSplitMouseMove(e){
+  if(!splitGebietId||splitPoints.length===0)return;
+  if(splitPreviewLine)map.removeLayer(splitPreviewLine);
+  splitPreviewLine=L.polyline([splitPoints[splitPoints.length-1],[e.latlng.lat,e.latlng.lng]],{color:'#e91e63',weight:1.5,opacity:.5}).addTo(map);
+}
+
+function splitUndo(){
+  if(splitPoints.length===0)return;
+  splitPoints.pop();
+  const m=splitMarkers.pop();if(m)map.removeLayer(m);
+  if(splitPolyline){map.removeLayer(splitPolyline);splitPolyline=null;}
+  if(splitPoints.length>0) splitPolyline=L.polyline(splitPoints,{color:'#e91e63',weight:3,dashArray:'6,4'}).addTo(map);
+}
+
+function splitCancel(){
+  splitMarkers.forEach(m=>map.removeLayer(m));
+  if(splitPolyline){map.removeLayer(splitPolyline);splitPolyline=null;}
+  if(splitPreviewLine){map.removeLayer(splitPreviewLine);splitPreviewLine=null;}
+  splitPoints=[];splitMarkers=[];splitGebietId=null;
+  map.off('click',onSplitClick);
+  map.off('mousemove',onSplitMouseMove);
+  map.getContainer().style.cursor='';
+  document.getElementById('drawInfo').style.display='none';
+  document.getElementById('drawInfo').innerHTML='';
+  drawPolygons();
+}
+
+// ── Geometrie: Liniensegment-Schnitt ──
+function _segIntersect(a1,a2,b1,b2){
+  const d1x=a2[1]-a1[1],d1y=a2[0]-a1[0];
+  const d2x=b2[1]-b1[1],d2y=b2[0]-b1[0];
+  const cross=d1x*d2y-d1y*d2x;
+  if(Math.abs(cross)<1e-12)return null;
+  const t=((b1[1]-a1[1])*d2y-(b1[0]-a1[0])*d2x)/cross;
+  const u=((b1[1]-a1[1])*d1y-(b1[0]-a1[0])*d1x)/cross;
+  if(t<-1e-9||t>1+1e-9||u<-1e-9||u>1+1e-9)return null;
+  return{pt:[a1[0]+Math.max(0,Math.min(1,t))*(a2[0]-a1[0]),a1[1]+Math.max(0,Math.min(1,t))*(a2[1]-a1[1])],tOnPoly:t,edgeIdx:0};
+}
+
+// ── Polygon-Fläche (Shoelace) ──
+function _polyArea(coords){
+  let a=0;
+  for(let i=0;i<coords.length;i++){
+    const j=(i+1)%coords.length;
+    a+=coords[i][1]*coords[j][0]-coords[j][1]*coords[i][0];
+  }
+  return Math.abs(a)/2;
+}
+
+async function splitFinish(){
+  if(splitPoints.length<2){toast('⚠️ Mindestens 2 Punkte für die Schnittlinie');return;}
+  const polyCoords=kmlP[splitGebietId];
+  if(!polyCoords||polyCoords.length<3){toast('⚠️ Kein Polygon');splitCancel();return;}
+
+  // Schließpunkt entfernen falls vorhanden
+  const coords=[...polyCoords];
+  if(coords.length>3&&Math.abs(coords[0][0]-coords[coords.length-1][0])<1e-8&&Math.abs(coords[0][1]-coords[coords.length-1][1])<1e-8){
+    coords.pop();
+  }
+  const n=coords.length;
+
+  // Alle Schnittpunkte der Schnittlinie mit den Polygon-Kanten finden
+  const intersections=[];
+  for(let si=0;si<splitPoints.length-1;si++){
+    const sp1=splitPoints[si],sp2=splitPoints[si+1];
+    for(let pi=0;pi<n;pi++){
+      const pp1=coords[pi],pp2=coords[(pi+1)%n];
+      const hit=_segIntersect(sp1,sp2,pp1,pp2);
+      if(hit){
+        // Position auf dem Polygon-Umfang: Kantenindex + Bruchteil
+        const uOnEdge=_segIntersect(pp1,pp2,sp1,sp2);
+        intersections.push({
+          pt:hit.pt,
+          polyEdge:pi,
+          polyT:uOnEdge?uOnEdge.tOnPoly:0,
+          splitSeg:si,
+          splitT:hit.tOnPoly
+        });
+      }
+    }
+  }
+  // Duplikate entfernen (selber Punkt von zwei Segmenten)
+  const unique=[];
+  intersections.forEach(ix=>{
+    if(!unique.some(u=>Math.abs(u.pt[0]-ix.pt[0])<1e-8&&Math.abs(u.pt[1]-ix.pt[1])<1e-8))unique.push(ix);
+  });
+
+  if(unique.length<2){toast('⚠️ Schnittlinie muss das Polygon an 2 Stellen kreuzen');return;}
+  if(unique.length>2){toast('⚠️ Schnittlinie kreuzt das Polygon an '+unique.length+' Stellen – bitte nur 2 Kreuzungen');return;}
+
+  // Schnittpunkte nach Position auf dem Polygon-Umfang sortieren
+  unique.sort((a,b)=>(a.polyEdge+a.polyT)-(b.polyEdge+b.polyT));
+  const ix1=unique[0], ix2=unique[1];
+
+  // Schnittlinie zwischen den beiden Eintrittspunkten extrahieren (die Teile innerhalb des Polygons)
+  // Reihenfolge der Schnittlinie: von ix1 zu ix2
+  let cutLine=_extractCutLine(splitPoints,ix1,ix2);
+  let cutLineRev=[...cutLine].reverse();
+
+  // Polygon-Umfang in zwei Bögen teilen
+  const arc1=[], arc2=[];
+  // Bogen 1: ix1 → ix2 (im Uhrzeigersinn entlang des Polygons)
+  arc1.push(ix1.pt);
+  for(let i=ix1.polyEdge+1;i<=ix2.polyEdge;i++) arc1.push(coords[i%n]);
+  if(ix2.polyT>1e-9) arc1.push(ix2.pt);
+
+  // Bogen 2: ix2 → ix1 (weiter im Uhrzeigersinn)
+  arc2.push(ix2.pt);
+  for(let i=ix2.polyEdge+1;i<n+ix1.polyEdge+1;i++) arc2.push(coords[i%n]);
+  if(ix1.polyT>1e-9) arc2.push(ix1.pt);
+
+  // Polygon A: Bogen 1 + Schnittlinie zurück
+  const polyA=[...arc1,...cutLineRev];
+  // Polygon B: Bogen 2 + Schnittlinie hin
+  const polyB=[...arc2,...cutLine];
+
+  if(polyA.length<3||polyB.length<3){toast('⚠️ Teile zu klein – Schnittlinie anpassen');return;}
+
+  // Flächen berechnen für proportionale Stückzahl
+  const areaA=_polyArea(polyA), areaB=_polyArea(polyB);
+  const totalArea=areaA+areaB;
+  const g=getG(splitGebietId);
+  const totalStueck=g?g.stueckzahl:0;
+  const stueckA=Math.round(totalStueck*(areaA/totalArea));
+  const stueckB=totalStueck-stueckA;
+
+  const ok=await appConfirm('✂️ Gebiet teilen',
+    `„${g?g.name:'Gebiet'}" wird in 2 Teile geteilt:\n\nTeil 1: ~${stueckA} Flyer (${Math.round(areaA/totalArea*100)}%)\nTeil 2: ~${stueckB} Flyer (${Math.round(areaB/totalArea*100)}%)\n\nFortfahren?`,
+    'Teilen','Abbrechen');
+  if(!ok)return;
+
+  // DB: Original-Gebiet updaten (Teil 1) + neues Gebiet erstellen (Teil 2)
+  try{
+    // Teil 1: Original aktualisieren
+    const {error:e1}=await sb.from('gebiete').update({
+      kml_coords:JSON.stringify(polyA),stueckzahl:stueckA,updated_at:new Date()
+    }).eq('id',splitGebietId);
+    if(e1){toast('⚠️ '+e1.message);return;}
+
+    // Teil 2: Neues Gebiet erstellen
+    // Region des Originals finden
+    let origRegion=null;
+    for(const [rk,r] of Object.entries(regionen)){
+      if(r.gebiete.some(x=>x.id===splitGebietId)){origRegion=rk;break;}
+    }
+    const newName=(g?g.name:'Gebiet')+' (2)';
+    const {data:newG,error:e2}=await sb.from('gebiete').insert({
+      name:newName,
+      region_id:origRegion,
+      stueckzahl:stueckB,
+      status:'offen',
+      kml_coords:JSON.stringify(polyB)
+    }).select().single();
+    if(e2){toast('⚠️ Neues Gebiet: '+e2.message);return;}
+
+    // Lokal aktualisieren
+    if(origRegion&&regionen[origRegion]){
+      const origG=regionen[origRegion].gebiete.find(x=>x.id===splitGebietId);
+      if(origG){origG.stueckzahl=stueckA;}
+      kmlP[splitGebietId]=polyA;
+      if(newG){
+        regionen[origRegion].gebiete.push({id:newG.id,name:newName,stueckzahl:stueckB,status:'offen',verteilerId:null,verteiler:null,region_id:origRegion});
+        kmlP[newG.id]=polyB;
+      }
+    }
+
+    splitCancel();
+    logAction('polygon','Gebiet geteilt',splitGebietId,g?.name||'');
+    toast('✅ Gebiet erfolgreich geteilt');
+  }catch(e){toast('⚠️ Fehler: '+e.message);}
+}
+
+// Schnittlinie-Segment zwischen zwei Polygon-Schnittpunkten extrahieren
+function _extractCutLine(line,ix1,ix2){
+  // Bestimme Richtung: ix1 auf Segment ix1.splitSeg, ix2 auf ix2.splitSeg
+  const pts=[];
+  // Sortiere nach Position auf der Schnittlinie
+  let start=ix1,end=ix2;
+  const pos1=ix1.splitSeg+ix1.splitT;
+  const pos2=ix2.splitSeg+ix2.splitT;
+  if(pos1>pos2){start=ix2;end=ix1;}
+  pts.push(start.pt);
+  // Zwischenpunkte der Schnittlinie einfügen
+  for(let i=start.splitSeg+1;i<=end.splitSeg;i++){
+    if(i<line.length) pts.push(line[i]);
+  }
+  pts.push(end.pt);
+  // Falls start=ix2 → umkehren damit Richtung ix1→ix2
+  if(pos1>pos2) pts.reverse();
+  return pts;
+}
+
 async function estimateHouseholdsForPolygon(coords,statusCb){
   if(!coords||coords.length<3) return null;
   // Bounding Box berechnen
   let minLat=Infinity,maxLat=-Infinity,minLng=Infinity,maxLng=-Infinity;
   coords.forEach(c=>{if(c[0]<minLat)minLat=c[0];if(c[0]>maxLat)maxLat=c[0];if(c[1]<minLng)minLng=c[1];if(c[1]>maxLng)maxLng=c[1];});
   const bbox=`${minLat},${minLng},${maxLat},${maxLng}`;
-  // Overpass: Wohngebäude in BBox zählen
-  // Nur Gebäude MIT Hausnummer zählen (filtert Garagen, Schuppen etc.)
-  const query=`[out:json][timeout:20];(way["building"]["addr:housenumber"](${bbox});relation["building"]["addr:housenumber"](${bbox}););out center;`;
+  // Overpass: Wohngebäude in BBox zählen (alle Gebäude laden, nicht-Wohn wird in JS gefiltert)
+  const query=`[out:json][timeout:25];(way["building"](${bbox});relation["building"](${bbox}););out center;`;
   const data=await overpassFetch(query,{statusCb});
-  // Einzelpass: Gebäude zählen + Briefkästen schätzen
+  // Nicht-Wohngebäude ausfiltern
+  const skipTypes=new Set(['garage','garages','shed','roof','industrial','commercial','retail','warehouse','church','chapel','cathedral','mosque','synagogue','temple','hospital','school','university','kindergarten','train_station','bridge','barn','greenhouse','ruins','construction','kiosk','hangar','bunker','transformer_tower','service','toilets','carport','parking']);
   let count=0, mfh=0, estimate=0;
   (data.elements||[]).forEach(el=>{
     const lat=el.center?el.center.lat:el.lat;
     const lng=el.center?el.center.lon:el.lon;
     if(!lat||!lng||!pointInPolygon(lat,lng,coords)) return;
+    const bt=(el.tags?.building||'').toLowerCase();
+    if(skipTypes.has(bt)) return;
     count++;
-    const bt=el.tags?.building||'';
     const isMfh=bt==='apartments'||bt==='dormitory';
     if(isMfh) mfh++;
     const levels=parseInt(el.tags?.['building:levels'])||0;
