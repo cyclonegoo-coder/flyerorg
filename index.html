@@ -881,7 +881,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v324 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v325 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -5859,7 +5859,7 @@ let plakatFilter='alle'; // alle, haengt, abgehaengt, zerstoert, ersetzt
 let selPlakatId=null;
 let tourActive=false, tourStops=[], tourIdx=0, tourRouteLine=null, tourStopMarkers=[];
 const scol={offen:{f:'#aeaeb2',s:'#8e8e93'},offen_zugewiesen:{f:'#cfd8dc',s:'#546e7a'},zugeteilt:{f:'#ff9500',s:'#c97800'},fertig:{f:'#42a5f5',s:'#1565c0'},problem:{f:'#ff3b30',s:'#c62828'}};
-function getGebietFarbe(g){if(drawMode)return{f:'#e0e7ef',s:'#607d8b'};if(curMode==='plakate')return{f:'#d0d0d0',s:'#999'};if(!g.verteilerId)return scol.problem;return(g.status==='offen'&&g.verteilerId)?scol.offen_zugewiesen:(scol[g.status]||scol.offen);}
+function getGebietFarbe(g){if(drawMode||editingGebietId)return{f:'#e0e7ef',s:'#607d8b'};if(curMode==='plakate')return{f:'#d0d0d0',s:'#999'};if(!g.verteilerId)return scol.problem;return(g.status==='offen'&&g.verteilerId)?scol.offen_zugewiesen:(scol[g.status]||scol.offen);}
 
 // ── HELPER: Rollen-Prüfungen ──
 function istVerwalterOderKreisverwalter() { return curRole === 'verwalter' || curRole === 'kreisverwalter' || curRole === 'regionalverwalter'; }
@@ -9872,8 +9872,9 @@ function editPolygon(id){
   // Zoom to polygon
   map.fitBounds(editPoly.getBounds().pad(0.3));
 
-  // Highlight polygon
-  editPoly.setStyle({color:'#009ee0',weight:3,dashArray:'6,4'});
+  // Alle Polygone neutral einfärben, dann das bearbeitete hervorheben
+  _drawRecolorPolygons();
+  editPoly.setStyle({color:'#009ee0',fillColor:'#90caf9',weight:3,dashArray:'6,4'});
 
   // Create draggable markers for each vertex
   rebuildEditMarkers();
