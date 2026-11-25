@@ -881,7 +881,7 @@ textarea{min-height:68px}
     </div>
   </div>
 </div>
-<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v328 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
+<div style="position:fixed;bottom:4px;left:8px;font-size:9px;color:rgba(0,0,0,.3);z-index:400">v329 · <a href="#" onclick="showImpTab('imp');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Impressum</a> · <a href="#" onclick="showImpTab('ds');document.getElementById('impressumModalOv').classList.add('open');return false" style="color:inherit;text-decoration:underline;pointer-events:auto">Datenschutz</a></div>
 
 <!-- IMPRESSUM MODAL -->
 <div class="modal-ov" id="impressumModalOv" onclick="if(event.target===this&&this._mdOnOverlay)this.classList.remove('open')">
@@ -6135,7 +6135,7 @@ function renderGrenzen(){
 }
 
 let regionLayers={},lkLayers={};
-function drawPolygons(){
+function drawPolygons(skipZoom){
   if(!map) return;
   Object.values(layers).forEach(l=>map.removeLayer(l));layers={};
   // LK-Polygone (Umriss, nur wenn >1 LK oder kein spezifischer LK gewählt)
@@ -6213,13 +6213,15 @@ function drawPolygons(){
     allBounds.push(...c);
   });
   // Fly to appropriate view — immer auf tatsächliche Polygon-Bounds fitten
-  if(allBounds.length>0){
-    map.flyToBounds(L.latLngBounds(allBounds).pad(0.1),{duration:.8});
-  } else if(curReg!=='alle'&&regionen[curReg]&&regionen[curReg].center_lat){
-    map.flyTo([regionen[curReg].center_lat,regionen[curReg].center_lng],regionen[curReg].zoom||13,{duration:.8});
-  } else if(curGV!=='alle'&&gebietsverbaende[curGV]){
-    const gv=gebietsverbaende[curGV];
-    map.flyTo([gv.center_lat,gv.center_lng],gv.zoom||11,{duration:.8});
+  if(!skipZoom){
+    if(allBounds.length>0){
+      map.flyToBounds(L.latLngBounds(allBounds).pad(0.1),{duration:.8});
+    } else if(curReg!=='alle'&&regionen[curReg]&&regionen[curReg].center_lat){
+      map.flyTo([regionen[curReg].center_lat,regionen[curReg].center_lng],regionen[curReg].zoom||13,{duration:.8});
+    } else if(curGV!=='alle'&&gebietsverbaende[curGV]){
+      const gv=gebietsverbaende[curGV];
+      map.flyTo([gv.center_lat,gv.center_lng],gv.zoom||11,{duration:.8});
+    }
   }
 }
 
@@ -8890,7 +8892,7 @@ async function popupRenameGebiet(id){
   if(!input||input===g.name)return;
   await hTreeRenameGebiet(id,input);
   // Popup aktualisieren
-  if(layers[id]){map.closePopup();drawPolygons();}
+  if(layers[id]){map.closePopup();drawPolygons(true);}
 }
 
 async function hTreeRenameGebiet(id,newName){
@@ -10054,7 +10056,7 @@ async function editPolySave(){
 
   // Cleanup edit mode
   cleanupEditMode();
-  drawPolygons();
+  drawPolygons(true);
   const _pg=getG(id);
   logAction('polygon','Polygon bearbeitet',id,_pg?.name||id);
   toast('✅ Polygon gespeichert');
@@ -10067,7 +10069,7 @@ function editPolyCancel(){
     if(layers[editingGebietId]) layers[editingGebietId].setLatLngs(editOrigCoords);
   }
   cleanupEditMode();
-  drawPolygons();
+  drawPolygons(true);
 }
 
 function cleanupEditMode(){
@@ -10144,7 +10146,7 @@ function splitCancel(){
   map.getContainer().style.cursor='';
   document.getElementById('drawInfo').style.display='none';
   document.getElementById('drawInfo').innerHTML='';
-  drawPolygons();
+  drawPolygons(true);
 }
 
 // ── Geometrie: Liniensegment-Schnitt ──
@@ -10266,7 +10268,9 @@ async function splitFinish(){
       if(r.gebiete.some(x=>x.id===splitGebietId)){origRegion=rk;break;}
     }
     const newName=(g?g.name:'Gebiet')+' (2)';
+    const newId=crypto.randomUUID();
     const {data:newG,error:e2}=await sb.from('gebiete').insert({
+      id:newId,
       name:newName,
       region_id:origRegion,
       stueckzahl:stueckB,
@@ -10480,7 +10484,7 @@ async function addAreaFinish(){
 
   // Cleanup
   addAreaCancel();
-  drawPolygons();
+  drawPolygons(true);
   const rg=getG(id);
   logAction('polygon','Fläche hinzugefügt',id,rg?.name||id);
   toast('✅ Fläche hinzugefügt & verbunden');
